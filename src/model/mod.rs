@@ -35,6 +35,12 @@ pub mod class {
     pub const FONT_FAMILY: u32 = 0x3E03;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
+    pub const STYLE_ROOT_GROUP: u32 = 0xCA8C;
+    pub const STYLE_GROUP: u32 = 0xCA8B;
+    pub const OBJECT_STYLE: u32 = 0x1B901;
+    pub const OBJECT_STYLE_ROOT_GROUP: u32 = 0x1B972;
+    pub const CELL_STYLE_ROOT_GROUP: u32 = 0x20241;
+    pub const TABLE_STYLE_ROOT_GROUP: u32 = 0x1044F;
 }
 
 /// Chunk IDs.
@@ -67,6 +73,15 @@ pub mod chunk {
     pub const STYLE_ATTRS: u32 = 0x23F;
     pub const FONT_FAMILY: u32 = 0x3E05;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
+    pub const MASTER_NAME: u32 = 0x1402;
+    pub const STYLE_ROOT_CHILDREN: u32 = 0x28DC;
+    pub const STYLE_GROUP_CHILDREN: u32 = 0x28D3;
+    pub const STYLE_GROUP_NAME: u32 = 0x28D2;
+    pub const OBJECT_STYLE_INFO: u32 = 0x1B907;
+    pub const OBJECT_STYLE_ROOT_CHILDREN: u32 = 0x1B95A;
+    pub const ITEM_OBJECT_STYLE: u32 = 0x1B916;
+    pub const ROOT_GROUP_KIND: u32 = 0x28C2;
+    pub const SECTION_INFO: u32 = 0x4C02;
     pub const GRAPHIC_BOUNDS: u32 = 0x1633;
     pub const GRAPHIC_LINK: u32 = 0x8CBC;
     pub const LINK_INFO: u32 = 0x8C9B;
@@ -165,6 +180,7 @@ pub struct PageItem {
     pub layer: Option<u32>,
     /// Local formatting (fill, stroke, corners, ...).
     pub attrs: Attrs,
+    pub object_style: Option<u32>,
     pub children: Vec<PageItem>,
 }
 
@@ -196,6 +212,8 @@ pub struct Graphic {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spread {
     pub uid: u32,
+    /// Master spreads only: name prefix (for example "A") and base name.
+    pub master_name: Option<(String, String)>,
     pub transform: Matrix,
     pub binding_location: u32,
     pub pages: Vec<Page>,
@@ -248,6 +266,46 @@ pub struct Document {
     pub swatches: BTreeMap<u32, String>,
     /// Font family name for each font family UID.
     pub fonts: BTreeMap<u32, String>,
+    /// Style groups, including the root groups (empty name).
+    pub style_groups: BTreeMap<u32, StyleGroup>,
+    pub object_styles: BTreeMap<u32, ObjectStyle>,
+    pub sections: Vec<Section>,
+}
+
+/// A style group: a root group of styles, or a named group in it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StyleGroup {
+    pub uid: u32,
+    /// Empty for root groups.
+    pub name: String,
+    /// Root groups: what they hold, from chunk 0x28C2 (see `root_kind`).
+    pub root: Option<u32>,
+    pub children: Vec<u32>,
+}
+
+/// Values of chunk 0x28C2, the kind of a root style group.
+pub mod root_kind {
+    pub const PARAGRAPH: u32 = 0xCA0C;
+    pub const CHARACTER: u32 = 0xCA0D;
+    pub const OBJECT: u32 = 0x1B924;
+    pub const TABLE: u32 = 0xB668;
+    pub const CELL: u32 = 0xB669;
+}
+
+/// Numbering of a section.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Section {
+    pub uid: u32,
+    pub continue_numbering: bool,
+    pub start: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectStyle {
+    pub uid: u32,
+    pub name: String,
+    pub builtin: bool,
+    pub based_on: Option<u32>,
 }
 
 /// Reads typed objects from a database, caching them.
@@ -332,8 +390,70 @@ impl<'a> Reader<'a> {
         let mut colors = Vec::new();
         let mut swatches = BTreeMap::new();
         let mut fonts = BTreeMap::new();
+        let mut style_groups = BTreeMap::new();
+        let mut object_styles = BTreeMap::new();
         for &(uid, cls) in self.db.classes() {
+            if self.db.object(uid)?.is_none() {
+                continue;
+            }
             match cls {
+                class::STYLE_ROOT_GROUP
+                | class::OBJECT_STYLE_ROOT_GROUP
+                | class::CELL_STYLE_ROOT_GROUP
+                | class::TABLE_STYLE_ROOT_GROUP => {
+                    let kind = match self.chunk(uid, chunk::ROOT_GROUP_KIND)? {
+                        Some(d) => Cursor::new(&d).u32()?,
+                        None => 0,
+                    };
+                    let children = self.children(uid, chunk::STYLE_ROOT_CHILDREN)?;
+                    let children = if children.is_empty() {
+                        self.children(uid, chunk::OBJECT_STYLE_ROOT_CHILDREN)?
+                    } else {
+                        children
+                    };
+                    style_groups.insert(
+                        uid,
+                        StyleGroup {
+                            uid,
+                            name: String::new(),
+                            root: Some(kind),
+                            children,
+                        },
+                    );
+                }
+                class::STYLE_GROUP => {
+                    let name = match self.chunk(uid, chunk::STYLE_GROUP_NAME)? {
+                        Some(d) if d.len() > 1 => Cursor::new(&d[1..]).string()?,
+                        _ => String::new(),
+                    };
+                    let children = self.children(uid, chunk::STYLE_GROUP_CHILDREN)?;
+                    style_groups.insert(
+                        uid,
+                        StyleGroup {
+                            uid,
+                            name,
+                            root: None,
+                            children,
+                        },
+                    );
+                }
+                class::OBJECT_STYLE => {
+                    if let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? {
+                        let mut c = Cursor::new(&d);
+                        let based_on = c.u32()?;
+                        let builtin = c.u8()? == 1;
+                        let name = c.string()?;
+                        object_styles.insert(
+                            uid,
+                            ObjectStyle {
+                                uid,
+                                name,
+                                builtin,
+                                based_on: uid_or_none(based_on),
+                            },
+                        );
+                    }
+                }
                 class::STYLE => {
                     if let Some(style) = self.style(uid)? {
                         styles.insert(uid, style);
@@ -370,7 +490,41 @@ impl<'a> Reader<'a> {
             colors,
             swatches,
             fonts,
+            style_groups,
+            object_styles,
+            sections: self
+                .uid_list(doc, chunk::DOC_SECTIONS)?
+                .into_iter()
+                .map(|uid| self.section(uid))
+                .collect::<Result<Vec<_>, _>>()?,
         })
+    }
+
+    fn section(&self, uid: u32) -> Result<Section, Error> {
+        let mut section = Section {
+            uid,
+            continue_numbering: true,
+            start: 1,
+        };
+        // u8, string, u8, string, u32, u32 start, u32, u32 continue.
+        if let Some(d) = self.chunk(uid, chunk::SECTION_INFO)? {
+            let mut c = Cursor::new(&d);
+            let parsed = (|| -> Result<(u32, u32), Error> {
+                c.u8()?;
+                c.string()?;
+                c.u8()?;
+                c.string()?;
+                c.u32()?;
+                let start = c.u32()?;
+                c.u32()?;
+                Ok((start, c.u32()?))
+            })();
+            if let Ok((start, cont)) = parsed {
+                section.start = start;
+                section.continue_numbering = cont != 0;
+            }
+        }
+        Ok(section)
     }
 
     fn layer(&self, uid: u32) -> Result<Layer, Error> {
@@ -399,6 +553,17 @@ impl<'a> Reader<'a> {
             Some(d) => Cursor::new(&d).u32()?,
             None => 0,
         };
+        let master_name = match self.chunk(uid, chunk::MASTER_NAME)? {
+            Some(d) => {
+                let mut c = Cursor::new(&d);
+                c.u8()?;
+                let prefix = c.string()?;
+                c.u8()?;
+                let base = c.string()?;
+                Some((prefix, base))
+            }
+            None => None,
+        };
         let children = self.required(uid, chunk::SPREAD_CHILDREN)?;
         let mut c = Cursor::new(&children);
         c.skip(8)?;
@@ -423,6 +588,7 @@ impl<'a> Reader<'a> {
         }
         Ok(Spread {
             uid,
+            master_name,
             transform,
             binding_location,
             pages,
@@ -542,6 +708,10 @@ impl<'a> Reader<'a> {
             Some(d) => Attrs::parse(&d).unwrap_or_default(),
             None => Attrs::default(),
         };
+        let object_style = match self.chunk(uid, chunk::ITEM_OBJECT_STYLE)? {
+            Some(d) => uid_or_none(Cursor::new(&d).u32()?),
+            None => None,
+        };
         let kind = if cls == Some(class::GROUP) {
             ItemKind::Group
         } else if let Some(column) = text_column {
@@ -557,6 +727,7 @@ impl<'a> Reader<'a> {
             paths,
             layer,
             attrs,
+            object_style,
             children,
         }))
     }

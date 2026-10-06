@@ -177,6 +177,37 @@ IDML writes a `BasedOn` of the root `[No paragraph style]` or
 `[No character style]` as a string (`$ID/[No paragraph style]`), and any
 other base as an object reference.
 
+## Style groups and object styles
+
+**Root groups** (class 0xCA8C for paragraph and character styles, 0x1B972
+object styles, 0x20241 cell styles, 0x1044F table styles) are named in
+IDML by UID (`RootParagraphStyleGroup Self="u7e"`). Chunk 0x28C2 says
+which kind: 0xCA0C paragraph, 0xCA0D character, 0x1B924 object, 0xB669
+cell, 0xB668 table (all 75 pairs). Children: chunk 0x28DC (text styles)
+or 0x1B95A (object styles), each u32, u32, UID list. A built-in root style
+such as `[No character style]` need not be listed.
+
+**Groups** (class 0xCA8B): chunk 0x28D3 is parent, root, UID list of
+children; chunk 0x28D2 a flag byte and the name. IDML names every group
+`$ID/<name>` (20 of 21 groups), and a style inside groups is referenced as
+`ParagraphStyle/<group>:<group>:<name>` with `:` escaped as `%3a`. All 412
+paragraph styles and 21 groups in the pairs match.
+
+**Object styles** (class 0x1B901): chunk 0x1B907 is u32 based-on style,
+u8 1 for a built-in name, then the name. A page item's chunk 0x1B916 is
+its applied object style (`AppliedObjectStyle`, 671/671 rectangles). A
+style based on the root `[None]` has its `BasedOn` written as a string.
+
+## Master spread names and sections
+
+Master spread chunk 0x1402: a flag byte and the name prefix (`A`), a flag
+byte and the base name (`Master`). IDML `Name` is `<prefix>-<base>`, and
+the master's pages are named by the prefix (99/99 match).
+
+Section chunk 0x4C02: u8, string, u8, string, u32, u32 page number start,
+u32, u32 continue numbering (1 = true). All 73 sections match. Every
+section in the corpus uses Arabic numbering.
+
 ## Colours (0x1F05)
 
 | Chunk | Contents |

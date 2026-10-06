@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story,
-    Style,
+    Style, StyleGroup, root_kind,
 };
 
 #[derive(Clone, Copy)]
@@ -131,11 +131,9 @@ use xml::Xml;
 const PACKAGING_NS: &str = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging";
 const MIMETYPE: &str = "application/vnd.adobe.indesign-idml-package";
 
-/// Format a number the way IDML does: shortest round-trip form, no `-0`.
+/// Format a number the way IDML does: shortest round-trip form. IDML
+/// keeps negative zero (`1 -0 -0 1 0 0`).
 pub fn num(v: f64) -> String {
-    if v == 0.0 {
-        return "0".into();
-    }
     format!("{v}")
 }
 
@@ -173,6 +171,32 @@ fn self_name(name: &str) -> String {
 struct Writer<'a> {
     doc: &'a Document,
     dom: String,
+    /// Names of the enclosing style groups of each style or group UID.
+    group_path: std::collections::HashMap<u32, Vec<String>>,
+}
+
+fn group_paths(doc: &Document) -> std::collections::HashMap<u32, Vec<String>> {
+    fn walk(
+        doc: &Document,
+        g: &StyleGroup,
+        path: &[String],
+        out: &mut std::collections::HashMap<u32, Vec<String>>,
+    ) {
+        for &c in &g.children {
+            out.insert(c, path.to_vec());
+            if let Some(sub) = doc.style_groups.get(&c) {
+                let mut p = path.to_vec();
+                p.push(sub.name.clone());
+                out.insert(c, p.clone());
+                walk(doc, sub, &p, out);
+            }
+        }
+    }
+    let mut out = std::collections::HashMap::new();
+    for g in doc.style_groups.values().filter(|g| g.root.is_some()) {
+        walk(doc, g, &[], &mut out);
+    }
+    out
 }
 
 impl Writer<'_> {
@@ -189,7 +213,11 @@ impl Writer<'_> {
             "CharacterStyle"
         };
         match uid.and_then(|u| self.doc.styles.get(&u)) {
-            Some(s) => format!("{prefix}/{}", self_name(&style_name(s))),
+            Some(s) => {
+                let mut parts = self.group_path.get(&s.uid).cloned().unwrap_or_default();
+                parts.push(style_name(s));
+                format!("{prefix}/{}", self_name(&parts.join(":")))
+            }
             None if paragraph => "ParagraphStyle/$ID/NormalParagraphStyle".into(),
             None => "CharacterStyle/$ID/[No character style]".into(),
         }
@@ -246,6 +274,29 @@ impl Writer<'_> {
                 "idPkg:Spread",
                 &[("src", format!("Spreads/Spread_u{:x}.xml", s.uid))],
             );
+        }
+        if let (Some(first), Some(section)) = (
+            doc.spreads.iter().flat_map(|s| &s.pages).next(),
+            doc.sections.first(),
+        ) {
+            let pages = doc.spreads.iter().map(|s| s.pages.len()).sum::<usize>();
+            x.start("Section")
+                .attr("Self", uref(Some(section.uid)))
+                .attr("Length", pages.to_string())
+                .attr("Name", "")
+                .attr("ContinueNumbering", section.continue_numbering.to_string())
+                .attr("IncludeSectionPrefix", "false")
+                .attr("Marker", "")
+                .attr("PageStart", uref(Some(first.uid)))
+                .attr("PageNumberStart", section.start.to_string())
+                .attr("SectionPrefix", "");
+            x.start("Properties")
+                .start("PageNumberStyle")
+                .attr("type", "enumeration")
+                .text("Arabic")
+                .end()
+                .end();
+            x.end();
         }
         x.empty(
             "idPkg:BackingStory",
@@ -391,73 +442,145 @@ impl Writer<'_> {
         let doc = self.doc;
         let mut x = Xml::new();
         self.package_root(&mut x, "Styles");
+        let root_of = |kind: u32| doc.style_groups.values().find(|g| g.root == Some(kind));
         for paragraph in [false, true] {
-            let group = if paragraph {
-                "RootParagraphStyleGroup"
+            let (group_tag, tag, sub_tag) = if paragraph {
+                (
+                    "RootParagraphStyleGroup",
+                    "ParagraphStyle",
+                    "ParagraphStyleGroup",
+                )
             } else {
-                "RootCharacterStyleGroup"
+                (
+                    "RootCharacterStyleGroup",
+                    "CharacterStyle",
+                    "CharacterStyleGroup",
+                )
             };
-            let tag = if paragraph {
-                "ParagraphStyle"
+            let root = root_of(if paragraph {
+                root_kind::PARAGRAPH
             } else {
-                "CharacterStyle"
-            };
-            x.start(group).attr("Self", group);
-            let mut have_default = false;
-            for s in doc.styles.values().filter(|s| s.paragraph == paragraph) {
-                let name = style_name(s);
-                have_default |=
-                    name == "$ID/[No paragraph style]" || name == "$ID/[No character style]";
-                let (plain, mut props) = self.text_attrs(&s.attrs);
-                x.start(tag)
-                    .attr("Self", format!("{tag}/{}", self_name(&name)))
-                    .attr("Name", &name);
-                if paragraph {
-                    x.attr("NextStyle", self.style_ref(s.next.or(Some(s.uid)), true));
-                }
-                for (k, v) in &plain {
-                    x.attr(k, v);
-                }
-                if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {
-                    // The root "[No ... style]" is written as a string.
-                    let base_name = style_name(base);
-                    let root = base.builtin && base.name.starts_with("[No ");
-                    if root {
-                        props.insert(0, ("BasedOn", "string", base_name));
-                    } else {
-                        props.insert(
-                            0,
-                            (
-                                "BasedOn",
-                                "object",
-                                format!("{tag}/{}", self_name(&base_name)),
-                            ),
-                        );
-                    }
-                }
-                Self::properties(&mut x, &props);
-                x.end();
+                root_kind::CHARACTER
+            });
+            x.start(group_tag).attr(
+                "Self",
+                root.map_or(group_tag.to_string(), |g| uref(Some(g.uid))),
+            );
+            let mut written = std::collections::HashSet::new();
+            if let Some(root) = root {
+                self.style_group_children(&mut x, root, tag, sub_tag, &mut written);
             }
-            if !have_default && !paragraph {
-                x.empty(
-                    tag,
-                    &[
-                        ("Self", "CharacterStyle/$ID/[No character style]".into()),
-                        ("Name", "$ID/[No character style]".into()),
-                    ],
-                );
+            for s in doc.styles.values().filter(|s| s.paragraph == paragraph) {
+                if !written.contains(&s.uid) {
+                    self.style_element(&mut x, s, tag);
+                }
             }
             x.end();
         }
-        for group in [
-            "RootCellStyleGroup",
-            "RootTableStyleGroup",
-            "RootObjectStyleGroup",
+        for (tag, kind) in [
+            ("RootCellStyleGroup", root_kind::CELL),
+            ("RootTableStyleGroup", root_kind::TABLE),
         ] {
-            x.empty(group, &[("Self", group.into())]);
+            let id = root_of(kind).map_or(tag.to_string(), |g| uref(Some(g.uid)));
+            x.empty(tag, &[("Self", id)]);
+        }
+        let object_root = root_of(root_kind::OBJECT);
+        x.start("RootObjectStyleGroup").attr(
+            "Self",
+            object_root.map_or("RootObjectStyleGroup".to_string(), |g| uref(Some(g.uid))),
+        );
+        for os in doc.object_styles.values() {
+            let name = if os.builtin {
+                format!("$ID/{}", os.name)
+            } else {
+                os.name.clone()
+            };
+            x.start("ObjectStyle")
+                .attr("Self", format!("ObjectStyle/{}", self_name(&name)))
+                .attr("Name", &name);
+            if let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
+                let base_name = if base.builtin {
+                    format!("$ID/{}", base.name)
+                } else {
+                    base.name.clone()
+                };
+                // The root "[None]" is written as a string.
+                let prop = if base.builtin && base.name == "[None]" {
+                    ("BasedOn", "string", base_name)
+                } else {
+                    (
+                        "BasedOn",
+                        "object",
+                        format!("ObjectStyle/{}", self_name(&base_name)),
+                    )
+                };
+                Self::properties(&mut x, &[prop]);
+            }
+            x.end();
         }
         x.end();
+        x.end();
         x.finish()
+    }
+
+    fn style_group_children(
+        &self,
+        x: &mut Xml,
+        g: &StyleGroup,
+        tag: &str,
+        sub_tag: &str,
+        written: &mut std::collections::HashSet<u32>,
+    ) {
+        for &c in &g.children {
+            if let Some(sub) = self.doc.style_groups.get(&c) {
+                let path = self.group_path.get(&sub.uid).cloned().unwrap_or_default();
+                x.start(sub_tag)
+                    .attr(
+                        "Self",
+                        format!("{sub_tag}/$ID/{}", self_name(&path.join(":"))),
+                    )
+                    .attr("Name", format!("$ID/{}", sub.name));
+                self.style_group_children(x, sub, tag, sub_tag, written);
+                x.end();
+            } else if let Some(s) = self.doc.styles.get(&c) {
+                self.style_element(x, s, tag);
+                written.insert(c);
+            }
+        }
+    }
+
+    fn style_element(&self, x: &mut Xml, s: &Style, tag: &str) {
+        let doc = self.doc;
+        let paragraph = s.paragraph;
+        let name = style_name(s);
+        let (plain, mut props) = self.text_attrs(&s.attrs);
+        x.start(tag)
+            .attr("Self", self.style_ref(Some(s.uid), paragraph))
+            .attr("Name", &name);
+        if paragraph {
+            x.attr("NextStyle", self.style_ref(s.next.or(Some(s.uid)), true));
+        }
+        for (k, v) in &plain {
+            x.attr(k, v);
+        }
+        if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {
+            // The root "[No ... style]" is written as a string.
+            let root = base.builtin && base.name.starts_with("[No ");
+            if root {
+                props.insert(0, ("BasedOn", "string", style_name(base)));
+            } else {
+                props.insert(
+                    0,
+                    (
+                        "BasedOn",
+                        "object",
+                        self.style_ref(Some(base.uid), paragraph),
+                    ),
+                );
+            }
+        }
+        Self::properties(x, &props);
+        x.end();
     }
 
     fn path_geometry(x: &mut Xml, paths: &[Path]) {
@@ -548,6 +671,20 @@ impl Writer<'_> {
             x.attr("ContentType", content);
         }
         self.item_attrs(x, &item.attrs);
+        if let Some(os) = item
+            .object_style
+            .and_then(|u| self.doc.object_styles.get(&u))
+        {
+            let name = if os.builtin {
+                format!("$ID/{}", os.name)
+            } else {
+                os.name.clone()
+            };
+            x.attr(
+                "AppliedObjectStyle",
+                format!("ObjectStyle/{}", self_name(&name)),
+            );
+        }
         if let Some(layer) = item.layer {
             x.attr("ItemLayer", uref(Some(layer)));
         }
@@ -571,14 +708,18 @@ impl Writer<'_> {
             .attr("PageCount", s.pages.len().to_string())
             .attr("BindingLocation", s.binding_location.to_string())
             .attr("ItemTransform", matrix(&s.transform));
+        let (prefix, base) = s
+            .master_name
+            .clone()
+            .unwrap_or_else(|| ("A".into(), "Master".into()));
         if master {
-            x.attr("Name", format!("M-Master {}", s.uid))
-                .attr("NamePrefix", "M")
-                .attr("BaseName", format!("Master {}", s.uid));
+            x.attr("Name", format!("{prefix}-{base}"))
+                .attr("NamePrefix", &prefix)
+                .attr("BaseName", &base);
         }
         for p in &s.pages {
             let name = if master {
-                "M".to_string()
+                prefix.clone()
             } else {
                 *page_number += 1;
                 page_number.to_string()
@@ -717,6 +858,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
     let w = Writer {
         doc,
         dom: format!("{}.0", doc.version.major),
+        group_path: group_paths(doc),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();
     files.insert(
@@ -763,7 +905,7 @@ mod tests {
     #[test]
     fn formats_numbers_like_idml() {
         assert_eq!(num(205.2), "205.2");
-        assert_eq!(num(-0.0), "0");
+        assert_eq!(num(-0.0), "-0");
         assert_eq!(num(1.0), "1");
         assert_eq!(num(-89.99999999999999), "-89.99999999999999");
     }
