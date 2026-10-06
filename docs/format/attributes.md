@@ -114,6 +114,10 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1BD3 | `ParagraphShadingTint` | f64 | 79/79 styles |
 | 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
 
+`Capitalization` codes other than 0 and 2 have no IDML evidence. Code 1
+occurs in 3 styles of one sample, which has no IDML; the corpus pairs use
+only `Normal` and `AllCaps`. The converter leaves other codes out.
+
 Attributes whose value never varies in the corpus (for example
 `BaselineShift`, `RightIndent`) cannot be located this way and are not
 written; InDesign then uses its defaults.
