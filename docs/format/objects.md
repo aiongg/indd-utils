@@ -1,0 +1,165 @@
+# INDD objects
+
+How the byte stream of a database object (see `database.md`) is
+structured, and what the classes and chunks used by the converter mean.
+Implemented in `src/object.rs` and `src/model/`.
+
+## How this was learned
+
+IDML exported by InDesign names most objects `Self="u<hex>"`, and that hex
+number is the object's UID in the INDD file. So each corpus pair gives, for
+every such IDML element, the INDD object, its class, and the attribute
+values its chunks must encode. Facts below were found by comparing the two,
+and are checked by `tools/compare.py`, which converts every pair (75 unique
+pairs, InDesign 12–21) and compares the output with the reference IDML
+attribute by attribute.
+
+## Chunks
+
+Most objects (99.9 % of 773,753 in the little-endian corpus) are a sequence
+of chunks:
+
+| Size | Field |
+|---|---|
+| 4 | Chunk ID |
+| 4 | Data length *n* |
+| *n* | Data |
+
+The rest are plain byte streams: embedded image files (TIFF, PNG, SVG) and
+the XMP packet (UID 0x80000001). Chunk IDs are in the same number space as
+class IDs; a chunk often lists objects of the class with the same number
+(for example chunk 0x501 of the document lists spreads, class 0x501).
+
+## Primitive encodings
+
+All little-endian.
+
+- **UID lists:** u32 count, then that many u32 UIDs.
+- **Matrices:** six f64, in IDML `ItemTransform` order (a b c d tx ty).
+- **Text segments:** a u16 header, flags in bits 14–15 and a count in bits
+  0–13. 0x4000: *count* single-byte characters follow. 0x8000: *count*
+  UTF-16LE code units follow. A text of *n* code units is a sequence of
+  segments adding up to *n*. Example: "WOMEN’S\r" is
+  `05 40 "WOMEN" 01 80 19 20 02 40 "S\r"`.
+- **In-object strings:** u8 2, u8 (usually 0, meaning unknown), u16 length
+  in code units, then segments. 4,135 occurrences in three sample files.
+
+## Document (class 0xE01, always UID 1)
+
+| Chunk | Contents |
+|---|---|
+| 0x501 | UID list: spreads, in order |
+| 0x1401 | UID list: master spreads |
+| 0x301 | UID list: layers (the first is an internal layer that holds pages) |
+| 0x313 | u32: active layer (IDML `ActiveLayer`) |
+| 0x222 | UID lists: stories (IDML `StoryList`) |
+| 0x4C01 | UID list: sections |
+
+## Spreads (0x501) and master spreads (0x1401)
+
+| Chunk | Contents |
+|---|---|
+| 0x503 | u32 self, u32 0, UID list of spread layers |
+| 0x56E | Matrix: `ItemTransform` |
+| 0x1B8 | u32: `BindingLocation` |
+
+**Spread layers (0x301)** hold the items of one document layer on one
+spread. Chunk 0x302: u32 document layer UID, u16 1 for the layer's guide
+part. Chunk 0x303: u32 spread, u32 spread, UID list of children. Pages are
+children of the spread layer for the internal pages layer.
+
+## Layers (0x302)
+
+Chunk 0x304: u16 locked, u16 visible, then fields not yet identified, then
+the name as an in-object string. The internal layer is named
+`Internal_pages_layer_name` and has no IDML element.
+
+## Pages (0x50F)
+
+| Chunk | Contents |
+|---|---|
+| 0x140F | u32 applied master spread, u16 (unknown), matrix `MasterPageTransform` |
+| 0x5CC | Matrix: `ItemTransform` |
+| 0x5DD | Four f64: left, top, right, bottom. IDML `GeometricBounds` is top, left, bottom, right. |
+| 0x51A | Four f64: margins (36 in the blank document) |
+
+## Page items
+
+Frames, shapes and lines are all class 0x6201; groups are 0x401.
+
+| Chunk | Contents |
+|---|---|
+| 0x151 | Matrix: `ItemTransform` |
+| 0x162B | Path geometry (below) |
+| 0x15B | Hierarchy: u32 spread, u32 parent, UID list of children |
+| 0x6E03 | Attribute list: local formatting (see `attributes.md`) |
+| 0x1B916 | u32: applied object style |
+
+**Path geometry:** u32 path count; per path: u32 point count, points, u16
+1 if the path is open. Each point is a u32 type, then f64 values: type 2 =
+anchor (x, y) only; types 0 and 1 = left direction, anchor, right
+direction. All 3,191 path chunks in the samples parse exactly, and the
+points of every page item path match the IDML `PathPointType` values.
+
+**IDML element type** is not stored. A frame is a `TextFrame` if a child of
+class 0x263 exists. Otherwise the converter uses the path: two points and
+open → `GraphicLine`; four corner points on two distinct x and y values →
+`Rectangle`; four smooth points → `Oval`; anything else → `Polygon`. In the
+samples this gives 123/123 lines, 671/671 rectangles, 10/10 ovals and
+396/402 polygons (6 polygons are ellipse-like).
+
+**Text frames:** the frame's child of class 0x263 (multi-column frame) has
+a child of class 0x227 (frame column). Chunk 0x220 of the column holds the
+frame list (class 0x228). Its chunk 0x205: u32 story, then a UID list of
+the columns of all threaded frames in order, which gives
+`PreviousTextFrame` and `NextTextFrame`.
+
+## Stories (0x201)
+
+Chunk 0x223: u32 length, u16, u32 first strand, UID list of more strands,
+then other fields. Each strand has chunk 0x261: u16 count, then (u32
+length, u32 data object UID) pairs. Each data object has chunk 0x262:
+
+| Field | Contents |
+|---|---|
+| u32 | Kind: 0x202 text, 0x203 character style runs, 0x204 paragraph style runs |
+| u32 | Owning strand |
+| u16 | Run count |
+| runs | Each: u32 record size, then the record |
+| u32 | Total length |
+
+Each record starts with a u32 run length in UTF-16 code units. Text
+records continue with text segments. Style records continue with the
+style UID.
+
+INDD stores a forced line break as U+000A; IDML writes it as U+2028. The
+last paragraph return of a story is not written to IDML.
+
+## Styles (0x205)
+
+Paragraph and character styles share the class. Chunk 0x230: u32 next
+style (0 = itself), u32 based-on style, fields not yet identified, u32 1
+for paragraph styles or 0 for character styles, u8 1 if the name is a
+built-in key (`$ID/` in IDML), the name as an in-object string, then a GUID
+string in newer files. The name's offset varies (23–26 bytes), so the
+converter locates it as a flag byte followed by a valid in-object string.
+All 486 style names and 291 `NextStyle` values in the pairs match.
+
+IDML writes a `BasedOn` of the root `[No paragraph style]` or
+`[No character style]` as a string (`$ID/[No paragraph style]`), and any
+other base as an object reference.
+
+## Colours (0x1F05)
+
+| Chunk | Contents |
+|---|---|
+| 0x1F10 | u8 1 if the name is a built-in key; name; u32 flags: bit 0 removable, bit 1 visible, bit 2 editable |
+| 0x1F01 | u32 space (5 RGB, 6 CMYK), u16 count, f64 components as fractions |
+| 0x1F09 | u32 model: 0 Process, 2 Registration |
+| 0x1F24 | f64 (−1), then u32 `ColorOverride`: 0 Normal, 1 Specialpaper, 2 Specialblack, 3 Specialregistration, 4 Hiddenreserved |
+
+Unnamed colours are referenced by UID (`Color/u93`). All 1,296 colours in
+the pairs match on `Model`, `Space`, `ColorValue`, `ColorOverride`,
+`Name` and the three flags.
+
+The `None` swatch is class 0x6E0B (name in chunk 0x1F30).

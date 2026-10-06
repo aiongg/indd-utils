@@ -1,7 +1,13 @@
 //! A document model built from database objects. See
 //! `docs/format/objects.md` for the class and chunk layouts used here.
 
+pub mod attrs;
+pub mod color;
+
 use std::collections::{BTreeMap, HashMap};
+
+pub use attrs::{Attrs, Value};
+pub use color::Color;
 
 use crate::object::{Cursor, Object};
 use crate::{Database, Error, Version};
@@ -50,6 +56,8 @@ pub mod chunk {
     pub const STRAND_DATA: u32 = 0x261;
     pub const STRAND_RUNS: u32 = 0x262;
     pub const STYLE_INFO: u32 = 0x230;
+    pub const ITEM_ATTRS: u32 = 0x6E03;
+    pub const SWATCH_NAME: u32 = 0x1F30;
 }
 
 /// Kinds of strand run data (first u32 of chunk 0x262).
@@ -136,6 +144,8 @@ pub struct PageItem {
     pub transform: Matrix,
     pub paths: Vec<Path>,
     pub layer: u32,
+    /// Local formatting (fill, stroke, corners, ...).
+    pub attrs: Attrs,
     pub children: Vec<PageItem>,
 }
 
@@ -182,6 +192,9 @@ pub struct Document {
     pub master_spreads: Vec<Spread>,
     pub stories: Vec<Story>,
     pub styles: BTreeMap<u32, Style>,
+    pub colors: Vec<Color>,
+    /// IDML reference (`Color/...`, `Swatch/None`) for each swatch UID.
+    pub swatches: BTreeMap<u32, String>,
 }
 
 /// Reads typed objects from a database, caching them.
@@ -263,11 +276,28 @@ impl<'a> Reader<'a> {
             .map(|uid| self.story(uid))
             .collect::<Result<Vec<_>, _>>()?;
         let mut styles = BTreeMap::new();
+        let mut colors = Vec::new();
+        let mut swatches = BTreeMap::new();
         for &(uid, cls) in self.db.classes() {
-            if cls == class::STYLE
-                && let Some(style) = self.style(uid)?
-            {
-                styles.insert(uid, style);
+            match cls {
+                class::STYLE => {
+                    if let Some(style) = self.style(uid)? {
+                        styles.insert(uid, style);
+                    }
+                }
+                color::class::COLOR => {
+                    if self.db.object(uid)?.is_none() {
+                        continue;
+                    }
+                    if let Some(c) = Color::read(uid, &*self.object(uid)?)? {
+                        swatches.insert(uid, c.reference());
+                        colors.push(c);
+                    }
+                }
+                color::class::SWATCH_NONE => {
+                    swatches.insert(uid, "Swatch/None".into());
+                }
+                _ => {}
             }
         }
         Ok(Document {
@@ -278,6 +308,8 @@ impl<'a> Reader<'a> {
             master_spreads,
             stories,
             styles,
+            colors,
+            swatches,
         })
     }
 
@@ -443,6 +475,10 @@ impl<'a> Reader<'a> {
             }
         }
         let paths = self.paths(uid)?;
+        let attrs = match self.chunk(uid, chunk::ITEM_ATTRS)? {
+            Some(d) => Attrs::parse(&d).unwrap_or_default(),
+            None => Attrs::default(),
+        };
         let kind = if cls == Some(class::GROUP) {
             ItemKind::Group
         } else if let Some(column) = text_column {
@@ -456,6 +492,7 @@ impl<'a> Reader<'a> {
             transform,
             paths,
             layer,
+            attrs,
             children,
         }))
     }
@@ -539,8 +576,7 @@ impl<'a> Reader<'a> {
         c.skip(6)?;
         let mut strands = vec![c.u32()?];
         strands.extend(c.u32_list()?);
-        let mut text = String::new();
-        let mut text_units = 0usize;
+        let mut text: Vec<u16> = Vec::new();
         let mut para: Vec<(usize, u32)> = Vec::new();
         let mut chars: Vec<(usize, u32)> = Vec::new();
         for strand in strands {
@@ -564,8 +600,7 @@ impl<'a> Reader<'a> {
                     let len = rc.u32()? as usize;
                     match kind {
                         strand::TEXT => {
-                            text.push_str(&rc.segments(len)?);
-                            text_units += len;
+                            text.extend(rc.segment_units(len)?);
                         }
                         strand::PARAGRAPH_STYLE => para.push((len, rc.u32()?)),
                         strand::CHARACTER_STYLE => chars.push((len, rc.u32()?)),
@@ -576,7 +611,7 @@ impl<'a> Reader<'a> {
         }
         Ok(Story {
             uid,
-            runs: split_runs(&text, text_units, &para, &chars),
+            runs: split_runs(&text, &para, &chars),
         })
     }
 }
@@ -600,14 +635,7 @@ fn find_string(data: &[u8], from: usize) -> Result<String, Error> {
 
 /// Combine text with paragraph-style and character-style run lengths
 /// (counted in UTF-16 code units) into runs with both styles constant.
-fn split_runs(
-    text: &str,
-    units: usize,
-    para: &[(usize, u32)],
-    chars: &[(usize, u32)],
-) -> Vec<TextRun> {
-    let utf16: Vec<u16> = text.encode_utf16().collect();
-    debug_assert_eq!(utf16.len(), units);
+fn split_runs(utf16: &[u16], para: &[(usize, u32)], chars: &[(usize, u32)]) -> Vec<TextRun> {
     let mut cuts: Vec<usize> = vec![0, utf16.len()];
     for list in [para, chars] {
         let mut pos = 0;
@@ -674,7 +702,8 @@ mod tests {
 
     #[test]
     fn splits_runs_at_style_boundaries() {
-        let runs = split_runs("abcdef", 6, &[(4, 10), (2, 11)], &[(2, 20), (4, 21)]);
+        let text: Vec<u16> = "abcdef".encode_utf16().collect();
+        let runs = split_runs(&text, &[(4, 10), (2, 11)], &[(2, 20), (4, 21)]);
         let texts: Vec<_> = runs.iter().map(|r| r.text.as_str()).collect();
         assert_eq!(texts, ["ab", "cd", "ef"]);
         assert_eq!(runs[1].paragraph_style, Some(10));

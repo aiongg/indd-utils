@@ -123,6 +123,12 @@ impl<'a> Cursor<'a> {
     /// the rest: 0x4000 = single-byte characters, 0x8000 = UTF-16LE code
     /// units.
     pub fn segments(&mut self, chars: usize) -> Result<String, Error> {
+        Ok(String::from_utf16_lossy(&self.segment_units(chars)?))
+    }
+
+    /// Like [`Cursor::segments`], but returns the UTF-16 code units, so a
+    /// surrogate pair split between two runs can be joined by the caller.
+    pub fn segment_units(&mut self, chars: usize) -> Result<Vec<u16>, Error> {
         let mut units: Vec<u16> = Vec::with_capacity(chars);
         while units.len() < chars {
             let header = self.u16()?;
@@ -154,7 +160,7 @@ impl<'a> Cursor<'a> {
                 units.len()
             )));
         }
-        Ok(String::from_utf16_lossy(&units))
+        Ok(units)
     }
 
     /// A string stored inside object data: u8 2, a u8 whose meaning is

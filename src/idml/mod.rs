@@ -5,7 +5,25 @@ pub mod zip;
 
 use std::collections::BTreeMap;
 
-use crate::model::{Document, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story, Style};
+use crate::model::{
+    Attrs, Document, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story, Style,
+};
+
+#[derive(Clone, Copy)]
+enum AttrKind {
+    Number,
+    Swatch,
+}
+
+/// Page item attributes: attribute-list ID, IDML name, value kind.
+/// See `docs/format/attributes.md` for the evidence behind each entry.
+const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
+    (0x6E68, "FillColor", AttrKind::Swatch),
+    (0x6E69, "FillTint", AttrKind::Number),
+    (0x6E64, "StrokeColor", AttrKind::Swatch),
+    (0x6E65, "StrokeWeight", AttrKind::Number),
+    (0x6E6D, "MiterLimit", AttrKind::Number),
+];
 use xml::Xml;
 
 const PACKAGING_NS: &str = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging";
@@ -139,30 +157,23 @@ impl Writer<'_> {
     fn graphic(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Graphic");
-        let color = |x: &mut Xml, name: &str, model: &str, value: &str, editable: bool| {
+        for c in &self.doc.colors {
+            let name = c.idml_name();
             x.empty(
                 "Color",
                 &[
-                    ("Self", format!("Color/{name}")),
-                    ("Model", model.into()),
-                    ("Space", "CMYK".into()),
-                    ("ColorValue", value.into()),
-                    ("Name", name.into()),
-                    ("ColorEditable", editable.to_string()),
-                    ("ColorRemovable", "false".into()),
-                    ("Visible", "true".into()),
+                    ("Self", c.reference()),
+                    ("Model", c.model_name().into()),
+                    ("Space", c.space_name().into()),
+                    ("ColorValue", nums(&c.idml_values())),
+                    ("ColorOverride", c.override_name().into()),
+                    ("Name", name),
+                    ("ColorEditable", c.editable.to_string()),
+                    ("ColorRemovable", c.removable.to_string()),
+                    ("Visible", c.visible.to_string()),
                 ],
             );
-        };
-        color(&mut x, "Black", "Process", "0 0 0 100", false);
-        color(&mut x, "Paper", "Process", "0 0 0 0", true);
-        color(
-            &mut x,
-            "Registration",
-            "Registration",
-            "100 100 100 100",
-            false,
-        );
+        }
         x.empty(
             "Swatch",
             &[
@@ -182,6 +193,20 @@ impl Writer<'_> {
         );
         x.end();
         x.finish()
+    }
+
+    /// Write page item attributes from the item's attribute list.
+    fn item_attrs(&self, x: &mut Xml, attrs: &Attrs) {
+        for &(id, name, kind) in ITEM_ATTRS {
+            let Some(v) = attrs.get(id) else { continue };
+            let text = match kind {
+                AttrKind::Number => v.as_f64().map(num),
+                AttrKind::Swatch => v.as_ref().and_then(|u| self.doc.swatches.get(&u).cloned()),
+            };
+            if let Some(t) = text {
+                x.attr(name, t);
+            }
+        }
     }
 
     fn fonts(&self) -> String {
@@ -226,11 +251,16 @@ impl Writer<'_> {
                     x.attr("NextStyle", self.style_ref(s.next.or(Some(s.uid)), true));
                 }
                 if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {
+                    // The root "[No ... style]" is written as a string.
+                    let base_name = style_name(base);
+                    let root = base.builtin && base.name.starts_with("[No ");
+                    let (kind, value) = if root {
+                        ("string", base_name)
+                    } else {
+                        ("object", format!("{tag}/{}", self_name(&base_name)))
+                    };
                     x.start("Properties");
-                    x.start("BasedOn")
-                        .attr("type", "object")
-                        .text(&format!("{tag}/{}", self_name(&style_name(base))))
-                        .end();
+                    x.start("BasedOn").attr("type", kind).text(&value).end();
                     x.end();
                 }
                 x.end();
@@ -302,6 +332,7 @@ impl Writer<'_> {
                 .attr("NextTextFrame", uref(*next))
                 .attr("ContentType", "TextType");
         }
+        self.item_attrs(x, &item.attrs);
         x.attr("ItemLayer", uref(Some(item.layer)))
             .attr("ItemTransform", matrix(&item.transform));
         Self::path_geometry(x, &item.paths);
@@ -379,7 +410,10 @@ impl Writer<'_> {
                 let mut parts = text.split('\r').peekable();
                 while let Some(part) = parts.next() {
                     if !part.is_empty() {
-                        x.start("Content").text(part).end();
+                        // INDD stores a forced line break as LF; IDML as U+2028.
+                        x.start("Content")
+                            .text(&part.replace('\n', "\u{2028}"))
+                            .end();
                     }
                     if parts.peek().is_some() {
                         x.start("Br").end();
