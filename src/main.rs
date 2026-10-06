@@ -2,6 +2,7 @@ use std::io::Write;
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
+  indd convert <in.indd> <out.idml>  convert to IDML
   indd info <file.indd>...         header, master page and container summary
   indd objects <file.indd>         one line per object: UID, class, length, first bytes
   indd object <file.indd> <uid>    write one object's bytes to stdout
@@ -11,6 +12,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match (args.first().map(String::as_str), args.len()) {
         (Some("info"), n) if n > 1 => return info(&args[1..]),
+        (Some("convert"), 3) => convert(&args[1], &args[2]),
         (Some("objects"), 2) => objects(&args[1]),
         (Some("dump"), n) if n > 2 => args[2..]
             .iter()
@@ -146,5 +148,15 @@ fn dump(path: &str, uids: &[u32]) -> CliResult {
             None => writeln!(out, "  (not chunked)")?,
         }
     }
+    Ok(())
+}
+
+fn convert(input: &str, output: &str) -> CliResult {
+    let bytes = std::fs::read(input)?;
+    let name = std::path::Path::new(input)
+        .file_name()
+        .map_or_else(|| input.to_string(), |n| n.to_string_lossy().into_owned());
+    let file = std::io::BufWriter::new(std::fs::File::create(output)?);
+    indd::convert(&bytes, &name, file)?;
     Ok(())
 }

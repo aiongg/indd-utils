@@ -121,3 +121,30 @@ fn every_little_endian_corpus_object_reads() {
     );
     assert!(checked > 0);
 }
+
+#[test]
+fn every_little_endian_corpus_file_converts() {
+    let Some(root) = corpus_root() else {
+        eprintln!("corpus/ not present; skipping");
+        return;
+    };
+    let mut files = Vec::new();
+    indd_files(&root, &mut files);
+    let mut failures = Vec::new();
+    for p in &files {
+        let bytes = std::fs::read(p).unwrap();
+        let c = indd::Container::parse(&bytes).unwrap();
+        if c.header.byte_order != indd::ByteOrder::Little {
+            continue;
+        }
+        if let Err(e) = indd::convert(&bytes, "test.indd", std::io::sink()) {
+            failures.push(format!("{}: {e}", p.display()));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}

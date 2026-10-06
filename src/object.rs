@@ -157,16 +157,17 @@ impl<'a> Cursor<'a> {
         Ok(String::from_utf16_lossy(&units))
     }
 
-    /// A string stored inside object data: u16 2, u16 length in UTF-16
-    /// code units, then segments.
+    /// A string stored inside object data: u8 2, a u8 whose meaning is
+    /// unknown (usually 0), u16 length in UTF-16 code units, then segments.
     pub fn string(&mut self) -> Result<String, Error> {
         let start = self.pos;
-        let tag = self.u16()?;
+        let tag = self.u8()?;
         if tag != 2 {
             return Err(Error::Corrupt(format!(
                 "string tag {tag} at {start}, expected 2"
             )));
         }
+        self.u8()?;
         let n = self.u16()? as usize;
         if n == 0 {
             return Ok(String::new());

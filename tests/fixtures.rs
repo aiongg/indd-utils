@@ -94,3 +94,20 @@ fn big_endian_database_is_reported_unsupported() {
     let c = indd::Container::parse(&bytes).unwrap();
     assert!(matches!(c.database(), Err(indd::Error::Unsupported(_))));
 }
+
+#[test]
+fn little_endian_fixtures_convert() {
+    for rel in [
+        "scml-template/scml.indt",
+        "bootstrap3-template/bootstrap3-indesign-template.indd",
+        "lizdenys-minizine/indesign-minizine-template.indd",
+    ] {
+        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let mut out = Vec::new();
+        indd::convert(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        assert_eq!(&out[..4], b"PK\x03\x04", "{rel}");
+        assert_eq!(&out[30..38], b"mimetype", "{rel}: mimetype must be first");
+        let text = String::from_utf8_lossy(&out);
+        assert!(text.contains("designmap.xml"), "{rel}");
+    }
+}
