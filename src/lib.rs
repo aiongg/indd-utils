@@ -4,9 +4,11 @@
 //! recorded in `docs/format/`; see `CLEANROOM.md` for how it was learned.
 
 pub mod container;
+pub mod database;
 pub mod header;
 
 pub use container::{Container, ContigObject, MasterPage};
+pub use database::{Database, Entry};
 pub use header::{ByteOrder, Header, Version};
 
 #[derive(Debug)]
@@ -23,6 +25,10 @@ pub enum Error {
     BadContigObject {
         offset: usize,
     },
+    /// The database structures are inconsistent.
+    Corrupt(String),
+    /// A valid file using a feature this crate does not read yet.
+    Unsupported(&'static str),
 }
 
 impl std::fmt::Display for Error {
@@ -40,6 +46,8 @@ impl std::fmt::Display for Error {
                     "contiguous object at {offset:#x} has no matching trailer"
                 )
             }
+            Error::Corrupt(msg) => write!(f, "corrupt database: {msg}"),
+            Error::Unsupported(what) => write!(f, "not supported yet: {what}"),
         }
     }
 }

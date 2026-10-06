@@ -84,3 +84,40 @@ fn every_corpus_container_has_xmp() {
         failures.join("\n")
     );
 }
+
+#[test]
+fn every_little_endian_corpus_object_reads() {
+    let Some(root) = corpus_root() else {
+        eprintln!("corpus/ not present; skipping");
+        return;
+    };
+    let mut files = Vec::new();
+    indd_files(&root, &mut files);
+
+    let mut checked = 0;
+    let mut failures = Vec::new();
+    for p in &files {
+        let bytes = std::fs::read(p).unwrap();
+        let c = indd::Container::parse(&bytes).unwrap();
+        if c.header.byte_order != indd::ByteOrder::Little {
+            continue;
+        }
+        let result = c.database().and_then(|db| {
+            for uid in db.uids() {
+                db.object(uid)?;
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => checked += 1,
+            Err(e) => failures.push(format!("{}: {e}", p.display())),
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+    assert!(checked > 0);
+}

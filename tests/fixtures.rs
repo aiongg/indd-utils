@@ -69,3 +69,28 @@ fn fixture_containers() {
         );
     }
 }
+
+#[test]
+fn little_endian_fixture_objects_read() {
+    for rel in [
+        "scml-template/scml.indt",
+        "bootstrap3-template/bootstrap3-indesign-template.indd",
+        "lizdenys-minizine/indesign-minizine-template.indd",
+    ] {
+        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let c = indd::Container::parse(&bytes).unwrap();
+        let db = c.database().unwrap_or_else(|e| panic!("{rel}: {e}"));
+        let mut total = 0;
+        for uid in db.uids() {
+            total += db.object(uid).unwrap().unwrap().len();
+        }
+        assert!(total > 0, "{rel}: no object data");
+    }
+}
+
+#[test]
+fn big_endian_database_is_reported_unsupported() {
+    let bytes = std::fs::read(fixture("xmp-toolkit-bluesquare/BlueSquare.indd")).unwrap();
+    let c = indd::Container::parse(&bytes).unwrap();
+    assert!(matches!(c.database(), Err(indd::Error::Unsupported(_))));
+}

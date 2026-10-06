@@ -61,7 +61,7 @@ pub struct ContigObject<'a> {
 
 #[derive(Debug, Clone)]
 pub struct Container<'a> {
-    bytes: &'a [u8],
+    pub(crate) bytes: &'a [u8],
     pub header: Header,
     /// Index (0 or 1) of the active master page.
     pub active: usize,
@@ -94,6 +94,10 @@ impl<'a> Container<'a> {
             active,
             masters,
         })
+    }
+
+    pub fn database(&self) -> Result<crate::Database<'a>, Error> {
+        crate::Database::open(self)
     }
 
     pub fn master(&self) -> MasterPage {

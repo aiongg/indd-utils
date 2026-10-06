@@ -1,0 +1,148 @@
+# INDD object database
+
+The database pages (between the master pages and the contiguous objects;
+see `container.md`) hold an object database: every object has a UID and a
+byte stream, and the streams are found through a B+ tree. This layout is
+our own analysis of the corpus. It is implemented in `src/database.rs`.
+
+Everything here is little-endian and has been checked only on
+little-endian files (InDesign 7.5–21.6).
+
+**Evidence.** The reader in `src/database.rs` checks every rule below
+while it reads. It reads every object of all 351 little-endian corpus files
+without a single inconsistency (`tests/corpus.rs`,
+`every_little_endian_corpus_object_reads`). The worked example is a blank
+InDesign 19.0 document with 246 database pages.
+
+## Page trailer
+
+Every database page ends with 12 bytes:
+
+| Offset | Size | Field |
+|---|---|---|
+| 0xFF4 | 4 | Page type |
+| 0xFF8 | 4 | Type-specific number (below) |
+| 0xFFC | 4 | Probably a checksum (not yet verified) |
+
+The master pages have type 0 and an empty trailer apart from 0xFFC.
+
+| Type | Role | 0xFF8 holds |
+|---|---|---|
+| 0 | Master page, or an old master page copy | 0 |
+| 2 | Allocation directory | Physical page of its partner copy |
+| 3 | Allocation bitmap | Physical page of its partner copy |
+| 4 | Logical page directory | Physical page of its partner copy |
+| 5 | Logical page table | Physical page of its partner copy |
+| 6 | Object tree leaf | Its own logical page number |
+| 7 | Object tree interior node | Its own logical page number |
+| 8 | Data page (one object segment) | 0 |
+| 9 | Slotted page (several small records) | Its own logical page number |
+
+Types 2–5 come in pairs of physical pages that name each other (in the
+blank document: 3↔4, 5↔6, 7↔8, 9↔10). Each master page points to one
+member of each pair. The active master page points to the current copies;
+an older master page copy (page 2 in the blank document) points to the
+other members.
+
+## Master page fields used
+
+| Offset | Field |
+|---|---|
+| 0x160 | Physical page of the allocation directory (type 2) |
+| 0x3A8 | Physical page of the logical page directory (type 4) |
+| 0xB7C | Logical page of the object tree root |
+| 0xB80 | Object tree depth (2 in the blank document: root plus leaves) |
+| 0xB88 | Number of object tree leaf entries |
+
+Other fields at 0x100–0x3A8 and 0xB78–0xBAC are not yet identified. 0xBAC
+holds the document's `xmp.did:` identifier as a NUL-terminated string.
+
+## Logical pages
+
+Tree and slotted pages are addressed by logical page number, so they can
+be rewritten to a new physical page without changing their references
+(copy on write). Superseded copies stay in the file until their pages are
+reused.
+
+- The logical page directory (type 4) holds, at 0x80 + 4·j, the physical
+  page of table page *j* (0 = none).
+- Each logical page table (type 5) holds, at 0x80 + 4·i, the physical page
+  of logical page `j·989 + i` (0 = unmapped).
+- 989 entries fit between 0x80 and the trailer. Types 2, 4 and 5 store a
+  u32 at 0x00 followed by a bitmap up to 0x7F. In type 5 pages the u32 counts free
+  entries (989 − used) and the bitmap has a set bit for each free entry,
+  least significant bit first.
+
+Checks: in all 351 files, the trailer number of every mapped page equals
+its computed logical number. Two files use a second table page (j = 1).
+
+## Allocation bitmap
+
+Type 3 pages: a u32 count of free pages at 0x00, then one bit per physical
+page from 0x04, least significant bit first, set = free. In the blank
+document, the clear bits (211) plus the count (32429) equal the bitmap size
+(32640 bits), and superseded tree pages are marked free. The reader does
+not use the bitmap.
+
+## Object tree
+
+A B+ tree keyed by (UID, segment number).
+
+**Leaf page (type 6).** A u32 entry count at 0x00, then 16-byte entries:
+
+| Offset | Field |
+|---|---|
+| 0 | Segment number, 1-based |
+| 4 | UID |
+| 8 | Length field |
+| 12 | Page field |
+
+**Interior page (type 7).** A u32 child count *n* at 0x00, the first child
+at 0x04, then *n*−1 groups of 12 bytes: segment and UID of a separator
+key, then the next child. Children are logical page numbers.
+
+Entries are sorted by (UID, segment). Each object's segments are numbered
+1, 2, 3… without gaps. The object's bytes are its segments concatenated in
+order.
+
+**Where a segment's bytes are:**
+
+- **Length field < 0x10000:** the segment is the first *length* bytes of
+  data page (type 8) *page* (a physical page number). Length is at most
+  0xF70 (3952). The rest of the page is zero up to the trailer.
+- **Length field ≥ 0x10000:** the segment is a record in a slotted page.
+  The high 16 bits are the slot number, the low 16 bits the byte count, and
+  *page* is a logical page number.
+
+## Slotted pages (type 9)
+
+Records are stored from offset 0 upwards. A slot directory grows downwards
+from a 24-byte footer at 0xFDC:
+
+| Offset | Field |
+|---|---|
+| 0xFDC | Slot capacity (16 and 32 in the pages examined) |
+| 0xFE0 | Slots in use |
+| 0xFE4–0xFF3 | Not yet identified |
+| 0xFDC − 4·s | Offset of slot *s*'s record (s ≥ 1) |
+
+In the pages examined, unused directory entries hold a stack of free slot
+numbers.
+
+Each record starts with u16 record length (including this 4-byte header,
+padded to a multiple of 4, sometimes longer than needed) and u16 slot ID.
+Slot ID 0 marks free space.
+
+If bit 0x8000 of the slot ID is set, the record continues elsewhere. Its
+first 8 data bytes are a pointer in the same form as a leaf entry
+(`slot << 16`, then a logical page number). The bytes after the pointer
+are the first part of the data, and the rest is in the record the pointer
+names. Example: the last segment of an object of 1983 bytes is split into
+1856 bytes plus a 127-byte record in another slotted page.
+
+## Open questions
+
+- Byte order of these structures in big-endian files.
+- The checksum algorithm at 0xFFC.
+- The remaining master page fields.
+- What the high UIDs (from 0x80000000) are.
