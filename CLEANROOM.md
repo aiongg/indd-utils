@@ -28,9 +28,9 @@ was examined.
 
 ### What was done
 
-1. **Collected third-party samples.** 352 INDD files made by other people
+1. **Collected third-party samples.** 357 INDD files made by other people
    for other purposes: published templates, test suites and archives.
-   236 of them come with an IDML file exported from the same document.
+   240 of them come with an IDML file exported from the same document.
    No INDD file was made for this project, and we cannot make one: we
    have no InDesign. The samples stay in the local, git-ignored
    `corpus/` directory and are not redistributed.
@@ -62,6 +62,14 @@ was examined.
 - No one was asked to create INDD files for this project.
 
 ### Points a reviewer should know
+
+- **A few facts rest on a privately held sample.** Where no public
+  sample shows a value, the owner allowed the use of one INDD file made
+  by a third party for another purpose, before this project, together
+  with its print PDF. It has no IDML and is not redistributable, so
+  those facts cannot be re-checked by others. They were found by
+  black-box observation of the PDF (rendered glyphs, text positions,
+  page labels), and `docs/format/` marks each one.
 
 - **Adobe XMP Toolkit source was read.** The XMP Toolkit SDK is published
   by Adobe under the BSD 3-Clause licence. Its INDD handler

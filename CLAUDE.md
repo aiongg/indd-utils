@@ -33,7 +33,8 @@ now). Licence: MIT.
 
 ## Corpus
 
-`corpus/` (git-ignored, ~3.4 GB): 352 INDD files, 236 with a sibling IDML.
+`corpus/` (git-ignored, ~3.4 GB): 358 INDD files (357 third-party, 1
+privately held), 240 with a sibling IDML.
 `corpus/inventory.tsv` lists version and pairing per file. Priority:
 InDesign 18–21, little-endian. Pairs whose IDML DOMVersion is older than
 the INDD version were probably re-saved after export; trust them less.
