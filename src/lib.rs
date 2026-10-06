@@ -6,10 +6,12 @@
 pub mod container;
 pub mod database;
 pub mod header;
+pub mod object;
 
 pub use container::{Container, ContigObject, MasterPage};
 pub use database::{Database, Entry};
 pub use header::{ByteOrder, Header, Version};
+pub use object::{Chunk, Cursor, Object};
 
 #[derive(Debug)]
 pub enum Error {

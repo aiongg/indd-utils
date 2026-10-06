@@ -4,13 +4,19 @@ use std::process::ExitCode;
 const USAGE: &str = "usage:
   indd info <file.indd>...         header, master page and container summary
   indd objects <file.indd>         one line per object: UID, class, length, first bytes
-  indd object <file.indd> <uid>    write one object's bytes to stdout";
+  indd object <file.indd> <uid>    write one object's bytes to stdout
+  indd dump <file.indd> <uid>...   print objects' chunks in hex";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match (args.first().map(String::as_str), args.len()) {
         (Some("info"), n) if n > 1 => return info(&args[1..]),
         (Some("objects"), 2) => objects(&args[1]),
+        (Some("dump"), n) if n > 2 => args[2..]
+            .iter()
+            .map(|a| parse_uid(a))
+            .collect::<Result<Vec<_>, _>>()
+            .and_then(|uids| dump(&args[1], &uids)),
         (Some("object"), 3) => match args[2].parse() {
             Ok(uid) => object(&args[1], uid),
             Err(_) => Err(format!("not a UID: {}", args[2]).into()),
@@ -91,5 +97,54 @@ fn object(path: &str, uid: u32) -> CliResult {
         .object(uid)?
         .ok_or_else(|| format!("no object with UID {uid}"))?;
     std::io::stdout().lock().write_all(&data)?;
+    Ok(())
+}
+
+fn parse_uid(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
+    let parsed = match s.strip_prefix("0x").or_else(|| s.strip_prefix('u')) {
+        Some(hex) => u32::from_str_radix(hex, 16),
+        None => s.parse(),
+    };
+    parsed.map_err(|_| format!("not a UID: {s}").into())
+}
+
+fn dump(path: &str, uids: &[u32]) -> CliResult {
+    let bytes = std::fs::read(path)?;
+    let c = indd::Container::parse(&bytes)?;
+    let db = c.database()?;
+    let mut out = std::io::stdout().lock();
+    for &uid in uids {
+        let Some(obj) = db.get(uid)? else {
+            writeln!(out, "== {uid} ({uid:#x}): no data")?;
+            continue;
+        };
+        let class = obj.class.map_or("-".into(), |c| format!("{c:#x}"));
+        writeln!(
+            out,
+            "== {uid} ({uid:#x}) class {class} len {}",
+            obj.bytes.len()
+        )?;
+        match obj.chunks() {
+            Some(chunks) => {
+                for ch in chunks {
+                    let hex: Vec<String> = ch
+                        .data
+                        .iter()
+                        .take(120)
+                        .map(|b| format!("{b:02x}"))
+                        .collect();
+                    let more = if ch.data.len() > 120 { " ..." } else { "" };
+                    writeln!(
+                        out,
+                        "  {:#07x} {:5}: {}{more}",
+                        ch.id,
+                        ch.data.len(),
+                        hex.join(" ")
+                    )?;
+                }
+            }
+            None => writeln!(out, "  (not chunked)")?,
+        }
+    }
     Ok(())
 }

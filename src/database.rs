@@ -297,6 +297,15 @@ impl<'a> Database<'a> {
             .map(|(_, e)| e.uid)
     }
 
+    /// Object `uid` with its class, or `None` if it has no data.
+    pub fn get(&self, uid: u32) -> Result<Option<crate::Object>, Error> {
+        Ok(self.object(uid)?.map(|bytes| crate::Object {
+            uid,
+            class: self.class_of(uid),
+            bytes,
+        }))
+    }
+
     /// The complete byte stream of object `uid`, or `None` if it doesn't exist.
     pub fn object(&self, uid: u32) -> Result<Option<Vec<u8>>, Error> {
         let start = self.entries.partition_point(|e| e.uid < uid);
