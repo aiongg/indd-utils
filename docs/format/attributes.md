@@ -82,6 +82,8 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B0A | `StrokeWeight` | f64 | 241/241 ranges |
 | 0x1B0B | `Tracking` | thousandths of an em ×1000 | 49/49 ranges, 94/94 styles |
 | 0x1B0C | `Composer` | code: 0x2001 HL Single, 0x2002 HL Composer, 0x2078 HL Composer Optyca | 4/4 ranges, 114/114 styles |
+| 0x1B0D | `DropCapCharacters` | u16 | 79/79 styles; see below |
+| 0x1B0E | `DropCapLines` | u16 | 79/79 styles; see below |
 | 0x1B11 | `Capitalization` | 0 Normal, 1 SmallCaps, 2 AllCaps, 3 CapToSmallCap | 77/77 styles; codes 1 and 3 below |
 | 0x1B12 | `StrokeColor` | swatch UID | 75/75 styles |
 | 0x1B16 | `LeftIndent` | f64 | 22/22 ranges |
@@ -96,6 +98,9 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B2B | `AppliedFont` (Properties) | font family UID | 1,071/1,071 ranges, 236/247 styles |
 | 0x1B2E | `MaximumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B2F | `MinimumWordSpacing` | fraction ×100 | 77/77 styles |
+| 0x1B31 | `MaximumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
+| 0x1B32 | `MinimumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
+| 0x1B37 | `StartParagraph` | 0 Anywhere, 2 NextPage | 78/78 styles; code 2 below |
 | 0x1B42 | `FillTint` | f64 | 24/24 ranges |
 | 0x1B4D | `RuleAboveLineWeight` | f64 | 155/155 ranges |
 | 0x1B4F | `RuleAboveOffset` | f64 | 78/78 styles |
@@ -132,6 +137,47 @@ styles with INDD styles of the same name (486 styles), then checked with
   that.
 
 The converter leaves out other codes.
+
+**Drop caps (0x1B0D, 0x1B0E).** In every pair, the root style
+`[No paragraph style]` has 0 for both and IDML writes
+`DropCapCharacters="0"` and `DropCapLines="0"`. One pair (InDesign 20.2,
+IDML from the same version) also has a style with 0x1B0D = 1 and
+0x1B0E = 3; its IDML has `DropCapCharacters="1"` and `DropCapLines="3"`.
+The different values tell the two attributes apart.
+
+**Letter spacing (0x1B31, 0x1B32).** In every pair both are 0 in the root
+style, as are `MaximumLetterSpacing` and `MinimumLetterSpacing` in the
+IDML. That does not tell them apart from other attributes that are 0
+there. The rest of the evidence is a sample and its print PDF:
+
+- A paragraph style of the sample sets 0x1B31 to a positive fraction
+  and 0x1B32 to a negative one. The style sets no tracking, and its
+  other unidentified attributes are not fractions.
+- In the PDF, justified lines in that style have a character spacing
+  (`Tc` operator) that changes from line to line, both positive and
+  negative. So the style lets letter spacing vary in both directions,
+  which needs a negative minimum and a positive maximum.
+- The values are stored as fractions, like word spacing (0x1B2E,
+  0x1B2F), so they are written ×100. The positive one is the maximum.
+
+A layout of the converted sample with these two attributes reproduces
+noticeably more of the PDF's line breaks than one without them.
+
+**`StartParagraph` (0x1B37).** In every pair the root style has 0 and
+IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
+2 rests on a sample and its print PDF:
+
+- Every paragraph whose style has code 2 is the first text on its page
+  in the PDF, and the page before it often ends with room for more
+  lines. Those styles set no other attribute that is unidentified.
+- Such paragraphs start on both odd and even pages, so code 2 is not
+  `NextOddPage` or `NextEvenPage`.
+- In the sample, `NextColumn`, `NextFrame` and `NextPage` would give the
+  same layout, so the PDF does not tell them apart. The converter writes
+  `NextPage`.
+
+One public template without an IDML has a style with code 4; with no
+reference, the converter leaves out codes other than 0 and 2.
 
 Attributes whose value never varies in the corpus (for example
 `BaselineShift`, `RightIndent`) cannot be located this way and are not

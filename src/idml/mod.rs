@@ -63,6 +63,8 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
         ]),
         false,
     ),
+    (0x1B0D, "DropCapCharacters", TextKind::Number, false),
+    (0x1B0E, "DropCapLines", TextKind::Number, false),
     (
         0x1B11,
         "Capitalization",
@@ -87,6 +89,14 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
     (0x1B2B, "AppliedFont", TextKind::Font, true),
     (0x1B2E, "MaximumWordSpacing", TextKind::Percent, false),
     (0x1B2F, "MinimumWordSpacing", TextKind::Percent, false),
+    (0x1B31, "MaximumLetterSpacing", TextKind::Percent, false),
+    (0x1B32, "MinimumLetterSpacing", TextKind::Percent, false),
+    (
+        0x1B37,
+        "StartParagraph",
+        TextKind::Enum(&[(0, "Anywhere"), (2, "NextPage")]),
+        false,
+    ),
     (0x1B42, "FillTint", TextKind::Number, false),
     (0x1B4D, "RuleAboveLineWeight", TextKind::Number, false),
     (0x1B4F, "RuleAboveOffset", TextKind::Number, false),
@@ -838,6 +848,7 @@ impl Writer<'_> {
             "BottomRightPoint",
         ];
         const JUSTIFY: [&str; 4] = ["TopAlign", "CenterAlign", "BottomAlign", "JustifyAlign"];
+        const FIRST_BASELINE: [&str; 3] = ["LeadingOffset", "AscentOffset", "CapHeight"];
         const SIZING: [&str; 5] = [
             "Off",
             "HeightOnly",
@@ -849,6 +860,9 @@ impl Writer<'_> {
             .attr("TextColumnCount", p.column_count.to_string())
             .attr("TextColumnGutter", num(p.column_gutter))
             .attr("TextColumnFixedWidth", num(p.column_fixed_width));
+        if let Some(v) = FIRST_BASELINE.get(p.first_baseline_offset as usize) {
+            x.attr("FirstBaselineOffset", *v);
+        }
         if let Some(v) = JUSTIFY.get(p.vertical_justification as usize) {
             x.attr("VerticalJustification", *v);
         }

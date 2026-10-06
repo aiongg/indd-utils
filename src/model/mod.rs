@@ -354,6 +354,9 @@ pub struct TextFramePreferences {
     pub column_count: u32,
     pub column_gutter: f64,
     pub column_fixed_width: f64,
+    /// First baseline offset code (chunk 0x2CE, u16 at 0): 0 LeadingOffset,
+    /// 1 AscentOffset, 2 CapHeight.
+    pub first_baseline_offset: u16,
     pub vertical_justification: u16,
     pub vertical_balance_columns: bool,
     pub auto_sizing_type: u16,
@@ -656,6 +659,7 @@ impl<'a> Reader<'a> {
             column_count: Cursor::new(&cols).u32()?,
             column_gutter: Cursor::new(&cols[4..]).f64()?,
             column_fixed_width: Cursor::new(&cols[14..]).f64()?,
+            first_baseline_offset: Cursor::new(&just).u16()?,
             vertical_justification: Cursor::new(&just[2..]).u16()?,
             vertical_balance_columns: Cursor::new(&just[20..]).u16()? != 0,
             auto_sizing_type: Cursor::new(&just[22..]).u16()?,

@@ -420,12 +420,32 @@ From the frame's multi-column frame object (class 0x263):
 | 0x2D1 | u32 0 | `TextColumnCount` (1,052/1,052) |
 | 0x2D1 | f64 4 | `TextColumnGutter` (93/93) |
 | 0x2D1 | f64 14 | `TextColumnFixedWidth` (1,045/1,045) |
+| 0x2CE | u16 0 | `FirstBaselineOffset`: 0 LeadingOffset, 1 AscentOffset, 2 CapHeight (below) |
 | 0x2CE | u16 2 | `VerticalJustification`: 0 Top, 1 Center, 2 Bottom, 3 Justify (350/350) |
 | 0x2CE | u16 20 | `VerticalBalanceColumns` (18/18) |
 | 0x2CE | u16 22 | `AutoSizingType`: 0 Off, 1 HeightOnly, 2 WidthOnly, 3 HeightAndWidth (61/61) |
 | 0x2CE | u32 24 | `AutoSizingReferencePoint`: 0–8, top-left to bottom-right by rows (58/58) |
 
 Inset spacing is 0 in every sample and not located.
+
+**First baseline offset.** IDML writes `FirstBaselineOffset` on a frame's
+`TextFramePreference` only when it differs from the frame's object style.
+Over the frames of the corpus pairs, compared with the value written on
+the frame or, if absent, on its object style:
+
+| Code | IDML value | Frames |
+|---|---|---|
+| 1 | `AscentOffset` | 1,121 of 1,121 (13 on the frame, 1,108 from the object style) |
+| 2 | `CapHeight` | 10 of 10 (copies of one document) |
+
+No pair has code 0. The evidence for it is a sample and its print PDF. In
+the PDF, the first baseline in each frame with code 0 lies below the
+frame's top edge by exactly the leading of that first line, for first
+lines with several different leadings. Of the values in the IDML schema
+(`AscentOffset`, `CapHeight`, `LeadingOffset`, `EmboxHeight`, `XHeight`,
+`FixedHeight`), only `LeadingOffset` depends on the leading. The sample
+also has code 3, with no evidence; the converter leaves out codes other
+than 0, 1 and 2.
 
 ## Colours (0x1F05)
 
