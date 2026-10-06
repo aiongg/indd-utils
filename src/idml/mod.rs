@@ -887,11 +887,10 @@ impl Writer<'_> {
                 .attr("Self", uref(Some(p.uid)))
                 .attr("Name", name)
                 .attr("GeometricBounds", nums(&[y0, x0, y1, x1]))
-                .attr("ItemTransform", matrix(&p.transform));
-            if !master {
-                x.attr("AppliedMaster", uref(p.master))
-                    .attr("MasterPageTransform", matrix(&p.master_transform));
-            }
+                .attr("ItemTransform", matrix(&p.transform))
+                // A master page can itself be based on a master.
+                .attr("AppliedMaster", uref(p.master))
+                .attr("MasterPageTransform", matrix(&p.master_transform));
             x.end();
         }
         for item in &s.items {

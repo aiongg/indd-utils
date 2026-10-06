@@ -84,6 +84,15 @@ the name as an in-object string. The internal layer is named
 | 0x5DD | Four f64: left, top, right, bottom. IDML `GeometricBounds` is top, left, bottom, right. |
 | 0x51A | Four f64: margins (36 in the blank document) |
 
+**Applied master of a master page.** Pages of master spreads use the same
+chunk 0x140F. When it is absent or names UID 0, IDML writes
+`AppliedMaster="n"` and `MasterPageTransform="1 0 0 1 0 0"` (220 of 220
+master pages in the corpus pairs; 2 of them have the chunk with UID 0 and
+an identity matrix). In 147 master pages of 73 distinct INDD files without
+an IDML, chunk 0x140F names another master spread of the same document,
+never the page's own spread. No pair shows the IDML for this case; the
+converter writes it as `AppliedMaster`, as for document pages.
+
 ## Page items
 
 Frames, shapes and lines are all class 0x6201; groups are 0x401.
