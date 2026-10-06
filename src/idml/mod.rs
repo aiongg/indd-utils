@@ -6,8 +6,9 @@ pub mod zip;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story,
-    Style, StyleGroup, Table, TextFramePreferences, TextRun, Value, root_kind,
+    Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Section, Shape,
+    Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, Value, numbering,
+    root_kind,
 };
 
 #[derive(Clone, Copy)]
@@ -216,6 +217,63 @@ fn self_name(name: &str) -> String {
     name.replace('%', "%25").replace(':', "%3a")
 }
 
+/// UIDs of the document pages, in order.
+fn document_pages(doc: &Document) -> Vec<u32> {
+    doc.spreads
+        .iter()
+        .flat_map(|s| &s.pages)
+        .map(|p| p.uid)
+        .collect()
+}
+
+/// Sections in page order, each with the index of its first page and its
+/// length in pages. A section whose first page is not a document page is
+/// left out.
+fn section_ranges(doc: &Document) -> Vec<(&Section, usize, usize)> {
+    let pages = document_pages(doc);
+    if pages.is_empty() {
+        return Vec::new();
+    }
+    let mut starts: Vec<(usize, &Section)> = doc
+        .sections
+        .iter()
+        .filter_map(|s| match s.page {
+            None => Some((0, s)),
+            Some(p) => pages.iter().position(|&u| u == p).map(|i| (i, s)),
+        })
+        .collect();
+    starts.sort_by_key(|&(i, _)| i);
+    starts.dedup_by_key(|&mut (i, _)| i);
+    (0..starts.len())
+        .map(|k| {
+            let (i, s) = starts[k];
+            let end = starts.get(k + 1).map_or(pages.len(), |&(j, _)| j);
+            (s, i, end - i)
+        })
+        .collect()
+}
+
+/// The number shown on each document page, from the sections. Pages
+/// not covered by a section are numbered by their position.
+fn page_numbers(doc: &Document) -> Vec<u32> {
+    let count = document_pages(doc).len();
+    let mut out: Vec<u32> = (1..=count as u32).collect();
+    let mut next: Option<u32> = None;
+    for (s, first, length) in section_ranges(doc) {
+        let mut number = match next {
+            Some(n) if s.continue_numbering => n,
+            None if s.continue_numbering => first as u32 + 1,
+            _ => s.start,
+        };
+        for n in out.iter_mut().skip(first).take(length) {
+            *n = number;
+            number += 1;
+        }
+        next = Some(number);
+    }
+    out
+}
+
 struct Writer<'a> {
     doc: &'a Document,
     dom: String,
@@ -323,27 +381,30 @@ impl Writer<'_> {
                 &[("src", format!("Spreads/Spread_u{:x}.xml", s.uid))],
             );
         }
-        if let (Some(first), Some(section)) = (
-            doc.spreads.iter().flat_map(|s| &s.pages).next(),
-            doc.sections.first(),
-        ) {
-            let pages = doc.spreads.iter().map(|s| s.pages.len()).sum::<usize>();
+        let pages = document_pages(doc);
+        for (section, first, length) in section_ranges(doc) {
             x.start("Section")
                 .attr("Self", uref(Some(section.uid)))
-                .attr("Length", pages.to_string())
+                .attr("Length", length.to_string())
                 .attr("Name", "")
                 .attr("ContinueNumbering", section.continue_numbering.to_string())
                 .attr("IncludeSectionPrefix", "false")
                 .attr("Marker", "")
-                .attr("PageStart", uref(Some(first.uid)))
-                .attr("PageNumberStart", section.start.to_string())
-                .attr("SectionPrefix", "");
-            x.start("Properties")
-                .start("PageNumberStyle")
-                .attr("type", "enumeration")
-                .text("Arabic")
-                .end()
-                .end();
+                .attr("PageStart", uref(Some(pages[first])));
+            // IDML gives a start number only to sections that restart
+            // numbering.
+            if !section.continue_numbering {
+                x.attr("PageNumberStart", section.start.to_string());
+            }
+            x.attr("SectionPrefix", "");
+            if section.style == numbering::ARABIC {
+                x.start("Properties")
+                    .start("PageNumberStyle")
+                    .attr("type", "enumeration")
+                    .text("Arabic")
+                    .end()
+                    .end();
+            }
             x.end();
         }
         x.empty(
@@ -855,7 +916,9 @@ impl Writer<'_> {
         x.end();
     }
 
-    fn spread(&self, s: &Spread, master: bool, page_number: &mut usize) -> String {
+    /// `page_index` counts the document pages written so far; `numbers`
+    /// gives each document page its number (see `page_numbers`).
+    fn spread(&self, s: &Spread, master: bool, page_index: &mut usize, numbers: &[u32]) -> String {
         let mut x = Xml::new();
         let kind = if master { "MasterSpread" } else { "Spread" };
         self.package_root(&mut x, kind);
@@ -879,8 +942,10 @@ impl Writer<'_> {
             let name = if master {
                 prefix.clone()
             } else {
-                *page_number += 1;
-                page_number.to_string()
+                *page_index += 1;
+                numbers
+                    .get(*page_index - 1)
+                    .map_or_else(|| page_index.to_string(), u32::to_string)
             };
             let [x0, y0, x1, y1] = p.bounds;
             x.start("Page")
@@ -1087,18 +1152,19 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
     files.insert("Resources/Preferences.xml".into(), w.preferences());
     files.insert("XML/BackingStory.xml".into(), w.backing_story());
     files.insert("XML/Tags.xml".into(), w.tags());
+    let numbers = page_numbers(doc);
     let mut unused = 0;
     for s in &doc.master_spreads {
         files.insert(
             format!("MasterSpreads/MasterSpread_u{:x}.xml", s.uid),
-            w.spread(s, true, &mut unused),
+            w.spread(s, true, &mut unused, &numbers),
         );
     }
-    let mut page_number = 0;
+    let mut page_index = 0;
     for s in &doc.spreads {
         files.insert(
             format!("Spreads/Spread_u{:x}.xml", s.uid),
-            w.spread(s, false, &mut page_number),
+            w.spread(s, false, &mut page_index, &numbers),
         );
     }
     for s in &doc.stories {
@@ -1116,6 +1182,48 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numbers_pages_by_section() {
+        use crate::model::{Page, Section, Spread, numbering};
+        let page = |uid| Page {
+            uid,
+            bounds: [0.0; 4],
+            transform: Matrix::IDENTITY,
+            master: None,
+            master_transform: Matrix::IDENTITY,
+        };
+        let section = |uid, page, continue_numbering, start| Section {
+            uid,
+            page,
+            continue_numbering,
+            start,
+            style: numbering::ARABIC,
+        };
+        let doc = Document {
+            spreads: vec![Spread {
+                uid: 1,
+                master_name: None,
+                transform: Matrix::IDENTITY,
+                binding_location: 0,
+                pages: (10..16).map(page).collect(),
+                items: Vec::new(),
+            }],
+            // Listed out of page order, as in some samples.
+            sections: vec![
+                section(1, None, true, 1),
+                section(3, Some(14), true, 9),
+                section(2, Some(12), false, 1),
+            ],
+            ..Document::default()
+        };
+        assert_eq!(page_numbers(&doc), [1, 2, 1, 2, 3, 4]);
+        let ranges: Vec<_> = section_ranges(&doc)
+            .iter()
+            .map(|(s, first, len)| (s.uid, *first, *len))
+            .collect();
+        assert_eq!(ranges, [(1, 0, 2), (2, 2, 2), (3, 4, 2)]);
+    }
 
     #[test]
     fn formats_numbers_like_idml() {

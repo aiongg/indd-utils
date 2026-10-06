@@ -284,7 +284,7 @@ pub struct Story {
     pub text_variables: std::collections::BTreeSet<usize>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Document {
     pub version: Version,
     pub layers: Vec<Layer>,
@@ -356,8 +356,18 @@ pub mod root_kind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Section {
     pub uid: u32,
+    /// The section's first page; `None` for the first section, which
+    /// starts at the first page of the document.
+    pub page: Option<u32>,
     pub continue_numbering: bool,
     pub start: u32,
+    /// Page number style code (see `numbering`).
+    pub style: u32,
+}
+
+/// Page number style codes of sections.
+pub mod numbering {
+    pub const ARABIC: u32 = 0x4C15;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -627,26 +637,34 @@ impl<'a> Reader<'a> {
     fn section(&self, uid: u32) -> Result<Section, Error> {
         let mut section = Section {
             uid,
+            page: None,
             continue_numbering: true,
             start: 1,
+            style: numbering::ARABIC,
         };
-        // u8, string, u8, string, u32, u32 start, u32, u32 continue.
+        // u8, string, u8, string, u32 first page, u32 page number start,
+        // u32 numbering style, u32 continue.
         if let Some(d) = self.chunk(uid, chunk::SECTION_INFO)? {
             let mut c = Cursor::new(&d);
-            let parsed = (|| -> Result<(u32, u32), Error> {
+            let parsed = (|| -> Result<[u32; 4], Error> {
                 c.u8()?;
                 c.string()?;
                 c.u8()?;
                 c.string()?;
-                c.u32()?;
-                let start = c.u32()?;
-                c.u32()?;
-                Ok((start, c.u32()?))
+                Ok([c.u32()?, c.u32()?, c.u32()?, c.u32()?])
             })();
-            if let Ok((start, cont)) = parsed {
+            if let Ok([page, start, style, cont]) = parsed {
+                section.page = uid_or_none(page);
                 section.start = start;
+                section.style = style;
                 section.continue_numbering = cont != 0;
             }
+        }
+        if section.style != numbering::ARABIC {
+            self.warn(format!(
+                "section {uid}: page number style {:#x} is not known; left out",
+                section.style
+            ));
         }
         Ok(section)
     }

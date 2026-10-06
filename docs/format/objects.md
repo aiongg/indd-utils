@@ -269,9 +269,39 @@ Master spread chunk 0x1402: a flag byte and the name prefix (`A`), a flag
 byte and the base name (`Master`). IDML `Name` is `<prefix>-<base>`, and
 the master's pages are named by the prefix (99/99 match).
 
-Section chunk 0x4C02: u8, string, u8, string, u32, u32 page number start,
-u32, u32 continue numbering (1 = true). All 73 sections match. Every
-section in the corpus uses Arabic numbering.
+**Sections (class 0x4C01).** The document's chunk 0x4C01 lists them.
+Section chunk 0x4C02:
+
+| Field | Contents |
+|---|---|
+| u8, string | Not identified (empty in all samples) |
+| u8, string | Not identified (empty in all samples) |
+| u32 | First page of the section; 0 for the section that starts at the document's first page |
+| u32 | Page number start (`PageNumberStart`) |
+| u32 | Page number style: 0x4C15 = Arabic |
+| u32 | Continue numbering (1 = true, `ContinueNumbering`) |
+
+Evidence:
+
+- Every corpus pair has one section, and its IDML `PageStart` is the
+  document's first page. In all of them the first-page field is 0. All 73
+  sections match on `ContinueNumbering` and, where IDML writes it,
+  `PageNumberStart`. IDML writes `PageNumberStart` only for sections with
+  `ContinueNumbering="false"` (14 of 14); a continuing section can store a
+  start number that IDML leaves out.
+- 84 distinct INDD files without an IDML have more than one section (254
+  sections). The first section listed has first page 0 in all 84. Each of
+  the other 170 names a page of the document (170 of 170). The list is not
+  always in page order, so the converter sorts sections by their first
+  page. A section ends where the next one starts; that gives IDML
+  `Length`.
+- The style is 0x4C15 in all 415 sections of the 245 distinct
+  little-endian files, and those in the pairs are `Arabic`. No sample
+  shows another style, so the converter writes `PageNumberStyle` only for
+  0x4C15 and leaves it out (with a warning) for other codes.
+
+The converter names document pages by their number in their section,
+counting on from the previous section when numbering continues.
 
 ## Document preferences (class 0x2202)
 
