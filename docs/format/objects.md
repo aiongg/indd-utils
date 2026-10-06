@@ -369,6 +369,8 @@ the text position at the start of the run. An item anchored in text has
 the character U+FFFC at that position and is owned through an object of
 class 0x262, whose chunk 0x2C8 (u32, u32, UID list) lists the anchored page
 item. IDML writes the page item element in place of the U+FFFC.
+A text variable instance (class 0xCA64) is owned by a U+0018 at its
+position; see `text-variables.md`.
 
 INDD stores a forced line break as U+000A; IDML writes it as U+2028. The
 last paragraph return of a story is not written to IDML.

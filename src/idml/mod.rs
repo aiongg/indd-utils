@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Page, PageItem, Path, Section,
-    Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextWrap, Value,
-    numbering, root_kind, wrap_mode,
+    Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextVariable,
+    TextWrap, Value, numbering, root_kind, variable::Instance, wrap_mode,
 };
 
 #[derive(Clone, Copy)]
@@ -523,6 +523,20 @@ fn style_name(s: &Style) -> String {
 }
 
 /// Escape a style name for use in a `Self` reference (`:` separates groups).
+/// A text variable name as IDML writes it: control characters (U+001B in
+/// the built-in cross-reference variables) become `<?AID 00xx?>`.
+fn variable_name(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if (c as u32) < 0x20 {
+            out.push_str(&format!("<?AID {:04x}?>", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 fn self_name(name: &str) -> String {
     name.replace('%', "%25").replace(':', "%3a")
 }
@@ -652,6 +666,8 @@ fn page_numbers(doc: &Document) -> Vec<u32> {
 struct Writer<'a> {
     doc: &'a Document,
     dom: String,
+    /// Document file name.
+    name: String,
     /// Names of the enclosing style groups of each style or group UID.
     group_path: std::collections::HashMap<u32, Vec<String>>,
 }
@@ -740,6 +756,7 @@ impl Writer<'_> {
             "idPkg:Preferences",
             &[("src", "Resources/Preferences.xml".into())],
         );
+        self.text_variables(&mut x);
         x.empty("idPkg:Tags", &[("src", "XML/Tags.xml".into())]);
         for l in doc.layers.iter().filter(|l| !l.internal) {
             x.empty(
@@ -805,6 +822,132 @@ impl Writer<'_> {
         }
         x.end();
         x.finish()
+    }
+
+    /// `TextVariable` elements, sorted by name as in every corpus IDML.
+    /// See docs/format/text-variables.md.
+    fn text_variables(&self, x: &mut Xml) {
+        let mut vars: Vec<_> = self.doc.text_variables.iter().collect();
+        vars.sort_by(|a, b| a.name.cmp(&b.name));
+        for v in vars {
+            let name = variable_name(&v.name);
+            x.start("TextVariable")
+                .attr("Self", format!("dTextVariablen{name}"))
+                .attr("Name", &name);
+            if let Some(t) = v.type_name() {
+                x.attr("VariableType", t);
+            }
+            self.variable_preference(x, v);
+            x.end();
+        }
+    }
+
+    /// The settings element of a text variable. Attributes other than the
+    /// date format and the running header's style are not located in the
+    /// INDD; they are written only for variables whose unidentified fields
+    /// hold the values of every corpus sample, and then with the values
+    /// those samples have in IDML.
+    fn variable_preference(&self, x: &mut Xml, v: &TextVariable) {
+        let same = v.as_in_samples;
+        let text = |x: &mut Xml, name: &str| {
+            if same {
+                x.attr(name, "");
+            }
+        };
+        match v.kind {
+            0xCAA1 | 0xCAAB | 0xCAAC => {
+                x.start("DateVariablePreference");
+                text(x, "TextBefore");
+                x.attr("Format", &v.text);
+                text(x, "TextAfter");
+                x.end();
+            }
+            0xCAAA => {
+                x.start("MatchParagraphStylePreference");
+                text(x, "TextBefore");
+                text(x, "TextAfter");
+                x.attr("AppliedParagraphStyle", self.style_ref(v.style, true));
+                if same {
+                    x.attr("SearchStrategy", "FirstOnPage")
+                        .attr("ChangeCase", "None")
+                        .attr("DeleteEndPunctuation", "false");
+                }
+                x.end();
+            }
+            _ if !same => {}
+            0xCAA3 => {
+                x.start("CustomTextVariablePreference")
+                    .start("Properties")
+                    .start("Contents")
+                    .attr("type", "string")
+                    .end()
+                    .end()
+                    .end();
+            }
+            0xCAA6 => {
+                x.empty(
+                    "FileNameVariablePreference",
+                    &[
+                        ("TextBefore", String::new()),
+                        ("IncludePath", "false".into()),
+                        ("IncludeExtension", "false".into()),
+                        ("TextAfter", String::new()),
+                    ],
+                );
+            }
+            0xCAA8 => {
+                x.empty(
+                    "PageNumberVariablePreference",
+                    &[
+                        ("TextBefore", String::new()),
+                        ("Format", "Current".into()),
+                        ("TextAfter", String::new()),
+                        ("Scope", "SectionScope".into()),
+                    ],
+                );
+            }
+            0xCAA9 => {
+                x.empty(
+                    "ChapterNumberVariablePreference",
+                    &[
+                        ("TextBefore", String::new()),
+                        ("Format", "Current".into()),
+                        ("TextAfter", String::new()),
+                    ],
+                );
+            }
+            0xCAC0 => {
+                x.empty(
+                    "CaptionMetadataVariablePreference",
+                    &[
+                        ("TextBefore", String::new()),
+                        ("MetadataProviderName", "$ID/#LinkInfoNameStr".into()),
+                        ("TextAfter", String::new()),
+                    ],
+                );
+            }
+            _ => {}
+        }
+    }
+
+    /// A text variable instance in place of its U+0018.
+    fn variable_instance(&self, x: &mut Xml, v: &Instance) {
+        let name = variable_name(&v.name);
+        x.start("TextVariableInstance")
+            .attr("Self", uref(Some(v.uid)))
+            .attr("Name", &name);
+        // The displayed text is not stored. A file name variable with the
+        // sample settings shows the document's name without extension.
+        let def = self.doc.text_variables.iter().find(|d| d.name == v.name);
+        if let Some(d) = def
+            && d.kind == 0xCAA6
+            && d.as_in_samples
+        {
+            let stem = self.name.strip_suffix(".indd").unwrap_or(&self.name);
+            x.attr("ResultText", stem);
+        }
+        x.attr("AssociatedTextVariable", format!("dTextVariablen{name}"));
+        x.end();
     }
 
     fn graphic(&self) -> String {
@@ -1778,9 +1921,10 @@ impl Writer<'_> {
                 }
                 // Internal table markers that follow U+0016.
                 '\u{17}' => {}
-                // Text variables are not converted yet; leave them out
-                // rather than writing a page number marker.
-                '\u{18}' if story.text_variables.contains(&pos) => flush(x, &mut buf),
+                '\u{18}' if story.text_variables.contains_key(&pos) => {
+                    flush(x, &mut buf);
+                    self.variable_instance(x, &story.text_variables[&pos]);
+                }
                 c => buf.push(c),
             }
             pos += ch.len_utf16();
@@ -1857,6 +2001,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
     let w = Writer {
         doc,
         dom: format!("{}.0", doc.version.major),
+        name: name.to_string(),
         group_path: group_paths(doc),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();

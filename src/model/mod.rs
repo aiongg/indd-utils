@@ -5,6 +5,7 @@ pub mod attrs;
 pub mod color;
 pub mod font;
 pub mod table;
+pub mod variable;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -12,6 +13,7 @@ pub use attrs::{Attrs, Value};
 pub use color::{Color, Gradient};
 pub use font::{Font, FontFamily};
 pub use table::{Cell, Table};
+pub use variable::TextVariable;
 
 use crate::object::{Cursor, Object};
 use crate::{Database, Error, Version};
@@ -43,6 +45,7 @@ pub mod class {
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
+    pub const TEXT_VARIABLE: u32 = 0xCAB4;
     pub const STYLE_ROOT_GROUP: u32 = 0xCA8C;
     pub const STYLE_GROUP: u32 = 0xCA8B;
     pub const OBJECT_STYLE: u32 = 0x1B901;
@@ -334,9 +337,8 @@ pub struct Story {
     pub anchors: BTreeMap<usize, Vec<PageItem>>,
     /// Tables, by UTF-16 offset of their U+0016.
     pub tables: BTreeMap<usize, Table>,
-    /// Offsets of text variable instances (U+0018 owning a class 0xCA64
-    /// object). Their displayed text is computed by InDesign and not stored.
-    pub text_variables: std::collections::BTreeSet<usize>,
+    /// Text variable instances, by UTF-16 offset of their U+0018.
+    pub text_variables: BTreeMap<usize, variable::Instance>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -361,6 +363,7 @@ pub struct Document {
     pub style_groups: BTreeMap<u32, StyleGroup>,
     pub object_styles: BTreeMap<u32, ObjectStyle>,
     pub sections: Vec<Section>,
+    pub text_variables: Vec<TextVariable>,
     /// Problems that did not stop the conversion (content left out).
     pub warnings: Vec<String>,
     pub preferences: Option<DocumentPreferences>,
@@ -533,6 +536,7 @@ impl<'a> Reader<'a> {
         let mut languages = BTreeMap::new();
         let mut style_groups = BTreeMap::new();
         let mut object_styles = BTreeMap::new();
+        let mut text_variables = Vec::new();
         for &(uid, cls) in self.db.classes() {
             if self.db.object(uid)?.is_none() {
                 continue;
@@ -639,6 +643,11 @@ impl<'a> Reader<'a> {
                         }
                     }
                 },
+                class::TEXT_VARIABLE => {
+                    if let Some(v) = TextVariable::read(uid, &*self.object(uid)?)? {
+                        text_variables.push(v);
+                    }
+                }
                 class::LANGUAGE => {
                     if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
                         && d.len() > 1
@@ -669,6 +678,7 @@ impl<'a> Reader<'a> {
                 .into_iter()
                 .map(|uid| self.section(uid))
                 .collect::<Result<Vec<_>, _>>()?,
+            text_variables,
             warnings: self.warnings.borrow().clone(),
             preferences: self.document_preferences()?,
         })
@@ -1289,11 +1299,12 @@ impl<'a> Reader<'a> {
         }
         let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
         let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
-        let mut text_variables = std::collections::BTreeSet::new();
+        let mut text_variables = BTreeMap::new();
         for (pos, cls, item) in owned {
             match cls {
                 class::TEXT_VARIABLE_INSTANCE => {
-                    text_variables.insert(pos);
+                    let v = variable::Instance::read(item, &*self.object(item)?)?;
+                    text_variables.insert(pos, v);
                 }
                 class::ANCHOR => {
                     for child in self.children(item, chunk::ANCHOR_CHILDREN)? {

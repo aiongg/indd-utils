@@ -1,0 +1,159 @@
+//! Text variables: definitions (class 0xCAB4) and their instances in text
+//! (class 0xCA64). See `docs/format/text-variables.md`.
+
+use crate::Error;
+use crate::object::{Cursor, Object};
+
+pub mod chunk {
+    /// Definition: name, text, type and settings.
+    pub const DEFINITION: u32 = 0x28BD;
+    /// Instance: flag byte and the name of its variable.
+    pub const INSTANCE_NAME: u32 = 0x100B;
+}
+
+/// Variable type codes and their IDML `VariableType`.
+pub const TYPES: &[(u32, &str)] = &[
+    (0xCAA1, "OutputDateType"),
+    (0xCAA3, "CustomTextType"),
+    (0xCAA6, "FileNameType"),
+    (0xCAA8, "LastPageNumberType"),
+    (0xCAA9, "ChapterNumberType"),
+    (0xCAAA, "MatchParagraphStyleType"),
+    (0xCAAB, "ModificationDateType"),
+    (0xCAAC, "CreationDateType"),
+    (0xCAB5, "XrefPageNumberType"),
+    (0xCAB6, "XrefChapterNumberType"),
+    (0xCAC0, "LiveCaptionType"),
+];
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextVariable {
+    pub uid: u32,
+    pub name: String,
+    /// Type code (see [`TYPES`]).
+    pub kind: u32,
+    /// The date format of date variables; the contents of custom text
+    /// variables (not proven, see the format notes).
+    pub text: String,
+    /// Paragraph style of a running header (`MatchParagraphStyleType`).
+    pub style: Option<u32>,
+    /// The fields not identified hold the values every corpus sample of
+    /// this type has, so the IDML settings are those of the samples.
+    pub as_in_samples: bool,
+}
+
+impl TextVariable {
+    pub fn type_name(&self) -> Option<&'static str> {
+        TYPES.iter().find(|t| t.0 == self.kind).map(|t| t.1)
+    }
+
+    pub fn read(uid: u32, obj: &Object) -> Result<Option<TextVariable>, Error> {
+        let Some(data) = obj.chunk(chunk::DEFINITION) else {
+            return Ok(None);
+        };
+        parse(uid, data).map(Some)
+    }
+}
+
+/// u32 length and text segments.
+fn counted(c: &mut Cursor) -> Result<String, Error> {
+    match c.u32()? as usize {
+        0 => Ok(String::new()),
+        n => c.segments(n),
+    }
+}
+
+/// Chunk 0x28BD: name, text, u32 type, then 20 bytes.
+fn parse(uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
+    let mut c = Cursor::new(data);
+    let name = counted(&mut c)?;
+    let text = counted(&mut c)?;
+    let kind = c.u32()?;
+    let rest = c.bytes(c.remaining())?;
+    let zero = |r: &[u8]| r.iter().all(|&b| b == 0);
+    let mut style = None;
+    let as_in_samples = rest.len() == 20
+        && match kind {
+            // Dates: the first u32 is 0 or 0xCAB3 in the samples.
+            0xCAA1 | 0xCAAB | 0xCAAC => {
+                (zero(&rest[..4]) || rest[..4] == [0xB3, 0xCA, 0, 0]) && zero(&rest[4..])
+            }
+            0xCAC0 => rest[..4] == [0x64, 0x8C, 0, 0] && zero(&rest[4..]),
+            0xCAAA => {
+                style = Some(u32::from_le_bytes(rest[4..8].try_into().unwrap()));
+                zero(&rest[..4]) && zero(&rest[8..])
+            }
+            _ => zero(rest) && text.is_empty(),
+        };
+    Ok(TextVariable {
+        uid,
+        name,
+        kind,
+        text,
+        style: style.filter(|&s| s != 0),
+        as_in_samples,
+    })
+}
+
+/// A text variable placed in text (U+0018 owning a class 0xCA64 object).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Instance {
+    pub uid: u32,
+    /// Name of the variable it shows.
+    pub name: String,
+}
+
+impl Instance {
+    pub fn read(uid: u32, obj: &Object) -> Result<Instance, Error> {
+        let name = match obj.chunk(chunk::INSTANCE_NAME) {
+            Some(d) if d.len() > 1 => Cursor::new(&d[1..]).string()?,
+            _ => String::new(),
+        };
+        Ok(Instance { uid, name })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn counted_text(s: &str) -> Vec<u8> {
+        let mut v = (s.len() as u32).to_le_bytes().to_vec();
+        if !s.is_empty() {
+            v.extend((0x4000u16 | s.len() as u16).to_le_bytes());
+            v.extend(s.as_bytes());
+        }
+        v
+    }
+
+    #[test]
+    fn parses_a_date_variable() {
+        let mut d = counted_text("Output Date");
+        d.extend(counted_text("dd.MM.yy"));
+        d.extend(0xCAA1u32.to_le_bytes());
+        d.extend([0xB3, 0xCA, 0, 0]);
+        d.extend([0; 16]);
+        let v = parse(0x84, &d).unwrap();
+        assert_eq!(v.name, "Output Date");
+        assert_eq!(v.text, "dd.MM.yy");
+        assert_eq!(v.type_name(), Some("OutputDateType"));
+        assert!(v.as_in_samples);
+    }
+
+    #[test]
+    fn reads_the_running_header_style() {
+        let mut d = counted_text("Running Header");
+        d.extend(counted_text(""));
+        d.extend(0xCAAAu32.to_le_bytes());
+        d.extend([0; 4]);
+        d.extend(0x81u32.to_le_bytes());
+        d.extend([0; 12]);
+        let v = parse(0x89, &d).unwrap();
+        assert_eq!(v.style, Some(0x81));
+        assert!(v.as_in_samples);
+        // Another value in a field not identified.
+        let last = d.len() - 1;
+        d[last] = 1;
+        assert!(!parse(0x89, &d).unwrap().as_in_samples);
+    }
+}
