@@ -91,8 +91,16 @@ def load(path):
                 # Children without Self (TextFramePreference, ...) are
                 # compared as "<parent tag>/<child tag>" of the parent.
                 for ch in el:
-                    if ch.get("Self") is None and ch.tag not in ("Properties",) and len(ch.attrib):
+                    if ch.get("Self") is not None or ch.tag == "Properties":
+                        continue
+                    if len(ch.attrib):
                         elements.setdefault((f"{el.tag}/{ch.tag}", s), ch)
+                    else:
+                        # A container without attributes (TransparencySetting):
+                        # compare its children as "<parent>/<child>/<grandchild>".
+                        for g in ch:
+                            if g.get("Self") is None and len(g.attrib):
+                                elements.setdefault((f"{el.tag}/{ch.tag}/{g.tag}", s), g)
         if name == "Resources/Preferences.xml":
             for el in root:
                 elements.setdefault((el.tag, "Preferences"), el)
