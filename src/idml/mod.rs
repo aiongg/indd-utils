@@ -903,6 +903,9 @@ impl Writer<'_> {
                 }
                 // Internal table markers that follow U+0016.
                 '\u{17}' => {}
+                // Text variables are not converted yet; leave them out
+                // rather than writing a page number marker.
+                '\u{18}' if story.text_variables.contains(&pos) => flush(x, &mut buf),
                 c => buf.push(c),
             }
             pos += ch.len_utf16();

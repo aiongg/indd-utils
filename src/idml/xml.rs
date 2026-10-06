@@ -88,7 +88,9 @@ impl Xml {
         self
     }
 
-    /// Text content. Characters below U+0020 other than tab become `<?ACE n?>`.
+    /// Text content. Characters below U+0020 other than tab and line feed
+    /// become `<?ACE n?>`, with the code in hex as IDML writes it (U+0018,
+    /// the automatic page number, is `<?ACE 18?>`).
     pub fn text(&mut self, s: &str) -> &mut Self {
         self.close_start();
         self.inline = true;
@@ -99,7 +101,7 @@ impl Xml {
                 '>' => self.out.push_str("&gt;"),
                 '\t' | '\n' => self.out.push(ch),
                 c if (c as u32) < 0x20 => {
-                    let _ = write!(self.out, "<?ACE {}?>", c as u32);
+                    let _ = write!(self.out, "<?ACE {:x}?>", c as u32);
                 }
                 c => self.out.push(c),
             }
@@ -159,6 +161,6 @@ mod tests {
     fn control_characters_become_processing_instructions() {
         let mut x = Xml::new();
         x.start("Content").text("a\u{18}b").end();
-        assert!(x.finish().ends_with("<Content>a<?ACE 24?>b</Content>"));
+        assert!(x.finish().ends_with("<Content>a<?ACE 18?>b</Content>"));
     }
 }

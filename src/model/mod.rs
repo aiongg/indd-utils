@@ -37,6 +37,7 @@ pub mod class {
     pub const FONT_FAMILY: u32 = 0x3E03;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
+    pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
     pub const STYLE_ROOT_GROUP: u32 = 0xCA8C;
     pub const STYLE_GROUP: u32 = 0xCA8B;
     pub const OBJECT_STYLE: u32 = 0x1B901;
@@ -264,6 +265,9 @@ pub struct Story {
     pub anchors: BTreeMap<usize, Vec<PageItem>>,
     /// Tables, by UTF-16 offset of their U+0016.
     pub tables: BTreeMap<usize, Table>,
+    /// Offsets of text variable instances (U+0018 owning a class 0xCA64
+    /// object). Their displayed text is computed by InDesign and not stored.
+    pub text_variables: std::collections::BTreeSet<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1046,8 +1050,12 @@ impl<'a> Reader<'a> {
         }
         let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
         let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
+        let mut text_variables = std::collections::BTreeSet::new();
         for (pos, cls, item) in owned {
             match cls {
+                class::TEXT_VARIABLE_INSTANCE => {
+                    text_variables.insert(pos);
+                }
                 class::ANCHOR => {
                     for child in self.children(item, chunk::ANCHOR_CHILDREN)? {
                         if let Some(pi) = self.page_item(child, None)? {
@@ -1096,6 +1104,7 @@ impl<'a> Reader<'a> {
             runs,
             anchors,
             tables,
+            text_variables,
         })
     }
 }
