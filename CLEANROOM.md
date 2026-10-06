@@ -63,8 +63,8 @@ was examined.
 
 ### Points a reviewer should know
 
-- **A few facts rest on a privately held sample.** Where no public
-  sample shows a value, the owner allowed the use of one INDD file made
+- **A few facts rest on a sample that is not public.** Where no public
+  sample shows a value, the owner allowed the use of an INDD file made
   by a third party for another purpose, before this project, together
   with its print PDF. It has no IDML and is not redistributable, so
   those facts cannot be re-checked by others. They were found by

@@ -172,34 +172,28 @@ rests on a few elements:
   11.34 at offset 16 and 5.67 at offset 32. Its UID differs from the IDML
   element's, but its path and `ItemTransform` are identical to those of
   the IDML's only jump-object frame, which has `Top="11.338582677165356"`
-  and `Bottom="5.669291338582678"`. A privately held sample and its print
-  PDF agree; see below.
+  and `Bottom="5.669291338582678"`. A sample and its print PDF agree; see
+  below.
 - Offset 8 (first) is therefore `Left`. It is 0 in every sample that
   has a reference.
 - The two contour frames have the same value at all four offsets, as in
   their IDML.
 
-**Evidence from a privately held sample and its print PDF.** The sample
-[detail of a non-public sample removed]
-[detail of a non-public sample removed]
-is set beside a frame, and text above the frame must end above the top
-of the wrap area. Text line positions in the PDF were taken from
-pdftotext word boxes and compared with the frame bounds:
+**Evidence from a sample and its print PDF.** The sample has frames
+with mode 1. Offset 8 is 0 in all of them; offset 16 is 0, negative or
+positive. With jump-object wrap, no text is set beside a frame, and text
+above the frame must end above the top of the wrap area. Text line
+positions in the PDF were taken from pdftotext word boxes and compared
+with the frame bounds:
 
-- [detail of a non-public sample removed]
-  ends at most 1.5 pt below the frame's top edge.
-- [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  frame's top edge, inside the frame; in each, the overlap is at most
-  [detail of a non-public sample removed]
-  next line position would have ended more than the offset's size plus
-  1.5 pt below the edge, and is empty.
-- [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  frame's top edge.
+- Where offset 16 is 0, the body line above a frame ends at most 1.5 pt
+  below the frame's top edge.
+- Where offset 16 is negative, the body line above may end inside the
+  frame, never further below its top edge than the offset's size plus
+  1.5 pt. Where the next line position would end further down than
+  that, it is left empty.
+- A line that lies wholly between a frame's top and bottom edges falls
+  inside the band that a large negative offset opens.
 
 So the value at offset 16 moves the top edge of the wrap area, and a
 negative value lets text into the frame from above.
@@ -385,15 +379,10 @@ Evidence:
 - The style is 0x4C15 in all 423 sections of the 250 distinct
   little-endian files, and those in the pairs are `Arabic`.
 - Style 0x4C17 is lower-case Roman. No pair has it. The evidence is a
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  PDF's page labels (`/PageLabels` in the document catalog) give every
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  evidence. The
-  converter writes `PageNumberStyle` for 0x4C15 and 0x4C17 and leaves it
+  sample and its print PDF. The PDF's page labels (`/PageLabels` in the
+  document catalog) give the pages of the sample's 0x4C17 sections style
+  `/r`, lower-case Roman, and the pages of its 0x4C15 section style
+  `/D`, decimal. The converter writes `PageNumberStyle` for 0x4C15 and 0x4C17 and leaves it
   out (with a warning) for other codes.
 
 The converter names document pages by their number in their section,
@@ -443,7 +432,7 @@ the PDF, the first baseline in each frame with code 0 lies below the
 frame's top edge by exactly the leading of that first line, for first
 lines with several different leadings. Of the values in the IDML schema
 (`AscentOffset`, `CapHeight`, `LeadingOffset`, `EmboxHeight`, `XHeight`,
-`FixedHeight`), only `LeadingOffset` depends on the leading. The sample
+`FixedHeight`), only `LeadingOffset` depends on the leading. A sample
 also has code 3, with no evidence; the converter leaves out codes other
 than 0, 1 and 2.
 

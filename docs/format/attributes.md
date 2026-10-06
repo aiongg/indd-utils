@@ -125,14 +125,12 @@ styles with INDD styles of the same name (486 styles), then checked with
   version), 8 of 8 paragraph styles with code 1 have
   `Capitalization="SmallCaps"`. The same pair confirms code 2 (4 of 4
   styles) and code 0.
-- Code 3 is `CapToSmallCap`. No pair has it. The evidence is a privately
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  rendered pages. So code 3 sets capital letters as small capitals
-  too. Of the values in the IDML schema (`Normal`, `SmallCaps`,
+- Code 3 is `CapToSmallCap`. No pair has it. The evidence is a sample
+  and its print PDF. In the PDF, words set in a style with code 3 that
+  start with a capital letter show that capital at the height of the
+  letter after it, about two thirds of the height of word-initial
+  capitals in ordinary text. Heights were measured on the rendered
+  pages. So code 3 sets capital letters as small capitals too. Of the values in the IDML schema (`Normal`, `SmallCaps`,
   `AllCaps`, `CapToSmallCap`, `LowerCase`), only `CapToSmallCap` does
   that.
 
