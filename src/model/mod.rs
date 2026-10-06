@@ -101,6 +101,8 @@ pub mod chunk {
     /// Pasted PDF without a link: u32 raw data object.
     pub const PDF_DATA: u32 = 0x2521;
     pub const SWATCH_NAME: u32 = 0x1F30;
+    pub const TEXT_WRAP: u32 = 0x3703;
+    pub const CONTOUR_OPTION: u32 = 0x373D;
 }
 
 /// Kinds of strand run data (first u32 of chunk 0x262).
@@ -199,6 +201,27 @@ pub struct PageItem {
     pub attrs: Attrs,
     pub object_style: Option<u32>,
     pub children: Vec<PageItem>,
+    /// Text wrap (chunk 0x3703); `None` if the item has none.
+    pub text_wrap: Option<TextWrap>,
+}
+
+/// Text wrap settings of a page item or graphic (chunk 0x3703).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextWrap {
+    /// Wrap mode code (see `wrap_mode`).
+    pub mode: u32,
+    /// The four offsets, in stored order (not yet mapped to sides).
+    pub offsets: [f64; 4],
+    /// The u32 at offset 40; 1 in every sample whose IDML has
+    /// `Inverse="false"`, `ApplyToMasterPageOnly="false"` and
+    /// `TextWrapSide="BothSides"`.
+    pub flags: u32,
+}
+
+/// Text wrap mode codes.
+pub mod wrap_mode {
+    pub const NONE: u32 = 0;
+    pub const CONTOUR: u32 = 6;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,6 +255,9 @@ pub struct Graphic {
     /// The graphic's file, when the document holds it: an embedded link or
     /// a graphic pasted without a link. IDML writes it as `Contents`.
     pub contents: Option<Vec<u8>>,
+    pub text_wrap: Option<TextWrap>,
+    /// Contour type code of the text wrap (chunk 0x373D): 5 = SameAsClipping.
+    pub contour_type: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -775,6 +801,32 @@ impl<'a> Reader<'a> {
         })
     }
 
+    /// Text wrap of a page item or graphic, from chunk 0x3703: u32 mode,
+    /// u32 contour path object, four f64 offsets, u32 flags.
+    fn text_wrap(&self, uid: u32) -> Result<Option<TextWrap>, Error> {
+        let Some(d) = self.chunk(uid, chunk::TEXT_WRAP)? else {
+            return Ok(None);
+        };
+        if d.len() < 44 {
+            return Ok(None);
+        }
+        let mut c = Cursor::new(&d);
+        let mode = c.u32()?;
+        c.skip(4)?;
+        let offsets = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
+        let flags = c.u32()?;
+        if mode != wrap_mode::NONE && mode != wrap_mode::CONTOUR {
+            self.warn(format!(
+                "item {uid}: text wrap mode {mode} is not known; left out"
+            ));
+        }
+        Ok(Some(TextWrap {
+            mode,
+            offsets,
+            flags,
+        }))
+    }
+
     fn paths(&self, uid: u32) -> Result<Vec<Path>, Error> {
         let Some(data) = self.chunk(uid, chunk::ITEM_PATHS)? else {
             return Ok(Vec::new());
@@ -877,6 +929,7 @@ impl<'a> Reader<'a> {
             attrs,
             object_style,
             children,
+            text_wrap: self.text_wrap(uid)?,
         }))
     }
 
@@ -928,6 +981,11 @@ impl<'a> Reader<'a> {
             bounds,
             link,
             contents,
+            text_wrap: self.text_wrap(uid)?,
+            contour_type: match self.chunk(uid, chunk::CONTOUR_OPTION)? {
+                Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                _ => None,
+            },
         }))
     }
 

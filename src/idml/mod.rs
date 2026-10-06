@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Section, Shape,
-    Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, Value, numbering,
-    root_kind,
+    Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextWrap, Value,
+    numbering, root_kind, wrap_mode,
 };
 
 #[derive(Clone, Copy)]
@@ -808,6 +808,41 @@ impl Writer<'_> {
         x.end();
     }
 
+    /// `TextWrapPreference` from an item's text wrap chunk. An item without
+    /// the chunk has no wrap. Values not identified yet are left out: the
+    /// whole element for an unknown mode, the side and inverse settings
+    /// for flags other than 1, and the offsets unless all are 0.
+    fn text_wrap_preference(x: &mut Xml, wrap: Option<&TextWrap>, contour_type: Option<u32>) {
+        let mode = match wrap.map(|w| w.mode) {
+            None | Some(wrap_mode::NONE) => "None",
+            Some(wrap_mode::CONTOUR) => "Contour",
+            Some(_) => return,
+        };
+        x.start("TextWrapPreference");
+        if wrap.is_none_or(|w| w.flags == 1) {
+            x.attr("Inverse", "false")
+                .attr("ApplyToMasterPageOnly", "false")
+                .attr("TextWrapSide", "BothSides");
+        }
+        x.attr("TextWrapMode", mode);
+        if wrap.is_none_or(|w| w.offsets == [0.0; 4]) {
+            x.start("Properties").empty(
+                "TextWrapOffset",
+                &[
+                    ("Top", "0".into()),
+                    ("Left", "0".into()),
+                    ("Bottom", "0".into()),
+                    ("Right", "0".into()),
+                ],
+            );
+            x.end();
+        }
+        if contour_type == Some(5) {
+            x.empty("ContourOption", &[("ContourType", "SameAsClipping".into())]);
+        }
+        x.end();
+    }
+
     fn placed_graphic(x: &mut Xml, g: &Graphic) {
         let tag = match g.kind {
             GraphicKind::Image => "Image",
@@ -835,6 +870,7 @@ impl Writer<'_> {
             ],
         );
         x.end();
+        Self::text_wrap_preference(x, g.text_wrap.as_ref(), g.contour_type);
         if let Some(link) = &g.link {
             x.empty(
                 "Link",
@@ -907,6 +943,7 @@ impl Writer<'_> {
         {
             Self::text_frame_preference(x, p);
         }
+        Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
         for child in &item.children {
             self.page_item(x, child);
         }

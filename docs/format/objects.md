@@ -124,6 +124,46 @@ frame list (class 0x228). Its chunk 0x205: u32 story, then a UID list of
 the columns of all threaded frames in order, which gives
 `PreviousTextFrame` and `NextTextFrame`.
 
+## Text wrap
+
+Page items (class 0x6201 and groups, 0x401) and placed graphics have
+chunk 0x3703 (44 bytes):
+
+| Offset | Contents |
+|---|---|
+| 0 | u32 wrap mode: 0 = `None`, 6 = `Contour` |
+| 4 | u32 UID of the wrap path object (class 0x3702), or 0 |
+| 8 | Four f64 offsets; which side each belongs to is not known |
+| 40 | u32, not identified; 1 in every pair |
+
+The wrap path object holds the contour as path geometry (chunk 0x162B,
+as for page items) and names the item in chunk 0x3709.
+
+Placed graphics also have chunk 0x373D. Its first u32 is the contour
+type: 5 = `SameAsClipping`.
+
+Evidence, from the IDML `TextWrapPreference` of every element with a
+`Self` in the corpus pairs (same-version pairs first, then the pairs
+whose IDML is from an older version):
+
+| INDD | IDML | Same version | Older IDML |
+|---|---|---|---|
+| Mode 0 | `TextWrapMode="None"` | 2,220 of 2,220 | 615 of 615 |
+| No chunk 0x3703 | `TextWrapMode="None"` | 1,219 of 1,219 | 722 of 722 |
+| Mode 6 | `TextWrapMode="Contour"` | none | 1 of 1 (an image) |
+| Offsets all 0 | `TextWrapOffset` all 0 | 2,220 of 2,220 | 616 of 616 |
+| u32 at 40 = 1 | `Inverse="false"`, `ApplyToMasterPageOnly="false"`, `TextWrapSide="BothSides"` | 2,220 of 2,220 | 616 of 616 |
+| 0x373D type 5 | `ContourType="SameAsClipping"` | 224 of 225 (1 has no `ContourOption`) | 75 of 75 |
+
+Every offset in the pairs is 0, so the order of the four offsets is not
+known. Modes 1, 3 and 6 also occur on 10 page items that have no element
+in their pair's IDML (the IDML is from an older version and was probably
+exported before the items were made), so the IDML names of modes 1 and 3
+are not known. The converter
+writes `TextWrapPreference` only for modes 0 and 6, leaves out the
+offsets unless all four are 0, and leaves out the side and inverse
+settings unless the u32 at 40 is 1.
+
 ## Placed graphics
 
 Images (0x1702), PDF (0x2501), EPS (0x6601) and SVG (0x6639) are children
