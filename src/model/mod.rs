@@ -34,6 +34,8 @@ pub mod class {
     pub const PDF: u32 = 0x2501;
     pub const EPS: u32 = 0x6601;
     pub const SVG: u32 = 0x6639;
+    /// A plain byte stream, such as the file of an embedded graphic.
+    pub const RAW_DATA: u32 = 0x129;
     pub const FONT_FAMILY: u32 = 0x3E03;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
@@ -94,6 +96,10 @@ pub mod chunk {
     pub const GRAPHIC_LINK: u32 = 0x8CBC;
     pub const LINK_INFO: u32 = 0x8C9B;
     pub const LINK_RESOURCE_URI: u32 = 0x8C92;
+    /// Pasted image without a link: u32 raw data object.
+    pub const IMAGE_DATA: u32 = 0x8C23;
+    /// Pasted PDF without a link: u32 raw data object.
+    pub const PDF_DATA: u32 = 0x2521;
     pub const SWATCH_NAME: u32 = 0x1F30;
 }
 
@@ -208,7 +214,12 @@ pub struct Link {
     pub uid: u32,
     /// `LinkResourceURI`, for example `file:/Users/me/image.jpg`.
     pub uri: String,
+    /// The linked file is stored in the document (`StoredState="Embedded"`).
+    pub embedded: bool,
 }
+
+/// The bytes of a file stored in the document, if there is one.
+type EmbeddedFile = Option<Vec<u8>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Graphic {
@@ -218,6 +229,9 @@ pub struct Graphic {
     /// Left, top, right, bottom in the graphic's own coordinates.
     pub bounds: [f64; 4],
     pub link: Option<Link>,
+    /// The graphic's file, when the document holds it: an embedded link or
+    /// a graphic pasted without a link. IDML writes it as `Contents`.
+    pub contents: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -871,17 +885,45 @@ impl<'a> Reader<'a> {
             Some(d) if d.len() >= 12 => self.link(Cursor::new(&d[8..]).u32()?)?,
             _ => None,
         };
+        let (link, contents) = match link {
+            Some((link, data)) => (Some(link), data),
+            None => {
+                let id = match kind {
+                    GraphicKind::Image => Some(chunk::IMAGE_DATA),
+                    GraphicKind::Pdf => Some(chunk::PDF_DATA),
+                    _ => None,
+                };
+                let data = match id {
+                    Some(id) => match self.chunk(uid, id)? {
+                        Some(d) if d.len() >= 4 => self.raw_data(Cursor::new(&d).u32()?)?,
+                        _ => None,
+                    },
+                    None => None,
+                };
+                (None, data)
+            }
+        };
         Ok(Some(Graphic {
             uid,
             kind,
             transform,
             bounds,
             link,
+            contents,
         }))
     }
 
-    /// A link and the URI of its resource.
-    fn link(&self, uid: u32) -> Result<Option<Link>, Error> {
+    /// The bytes of raw data object `uid` (`None` if `uid` is not one).
+    fn raw_data(&self, uid: u32) -> Result<EmbeddedFile, Error> {
+        if uid == 0 || self.class(uid) != Some(class::RAW_DATA) {
+            return Ok(None);
+        }
+        self.db.object(uid)
+    }
+
+    /// A link, the URI of its resource and, for an embedded link, the
+    /// embedded file.
+    fn link(&self, uid: u32) -> Result<Option<(Link, EmbeddedFile)>, Error> {
         if uid == 0 || self.db.object(uid)?.is_none() {
             return Ok(None);
         }
@@ -892,16 +934,30 @@ impl<'a> Reader<'a> {
             return Ok(None);
         }
         let resource = Cursor::new(&info[8..]).u32()?;
-        let uri = match self.chunk(resource, chunk::LINK_RESOURCE_URI)? {
+        let (uri, data) = match self.chunk(resource, chunk::LINK_RESOURCE_URI)? {
             Some(d) if d.len() >= 5 => {
                 let mut c = Cursor::new(&d);
                 c.u8()?;
                 let n = c.u32()? as usize;
-                String::from_utf8_lossy(c.bytes(n.min(c.remaining()))?).into_owned()
+                let uri = String::from_utf8_lossy(c.bytes(n.min(c.remaining()))?).into_owned();
+                // After the URI: 12 bytes, then the UID of the embedded
+                // file's raw data object (0 for a normal link).
+                let data = if c.remaining() >= 16 {
+                    c.skip(12)?;
+                    self.raw_data(c.u32()?)?
+                } else {
+                    None
+                };
+                (uri, data)
             }
-            _ => String::new(),
+            _ => (String::new(), None),
         };
-        Ok(Some(Link { uid, uri }))
+        let link = Link {
+            uid,
+            uri,
+            embedded: data.is_some(),
+        };
+        Ok(Some((link, data)))
     }
 
     /// Story and threading of the text frame owning `column`.

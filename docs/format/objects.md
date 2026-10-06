@@ -25,8 +25,9 @@ of chunks:
 | 4 | Data length *n* |
 | *n* | Data |
 
-The rest are plain byte streams: embedded image files (TIFF, PNG, SVG) and
-the XMP packet (UID 0x80000001). Chunk IDs are in the same number space as
+The rest are plain byte streams: objects of class 0x129 (raw data, below)
+and the XMP packet (UID 0x80000001). In the 245 distinct little-endian
+files, all 1,171 class 0x129 objects are plain byte streams. Chunk IDs are in the same number space as
 class IDs; a chunk often lists objects of the class with the same number
 (for example chunk 0x501 of the document lists spreads, class 0x501).
 
@@ -131,9 +132,64 @@ segments, then two 8-byte timestamps. **Link resources (0x8C41)**: chunk
 0x8C92 is a flag byte, u32 length, then the URI as bytes
 (`LinkResourceURI`; 335/340 match, the rest were relinked after export).
 
-Not yet identified: what marks a link as embedded (`StoredState=
-"Embedded"`, 12 of 340 links). The second u32 of the resource's chunk
-0x15A09 is 0 for all embedded links but also for 23 normal ones.
+After the URI, chunk 0x8C92 continues:
+
+| Offset after the URI | Field |
+|---|---|
+| 0 | u8 1, u8 1, u16 0 (all resources) |
+| 4 | u32 0 or 1, not identified |
+| 8 | u32 0, 2 or 3 |
+| 12 | u32 UID of a raw data object (class 0x129), or 0 |
+
+**Embedded links.** A link is embedded (`StoredState="Embedded"`) when its
+resource names a raw data object at offset 12. That object holds the
+linked file's bytes, which IDML writes as the graphic's `Contents`.
+
+Evidence:
+
+- In the 245 distinct little-endian files there are 883 link resources.
+  The field at offset 8 is 2 in 123 of them, and exactly those 123 name a
+  raw data object at offset 12. The other 760 have 0 at offset 12 (742
+  with 0 at offset 8, 18 with 3; no pair shows what 3 means).
+- In the corpus pairs, all 10 resources of embedded links (12 links) name
+  a raw data object, and none of the 369 resources of normal links do.
+- For all 12 embedded links, the raw data object's bytes equal the
+  base64-decoded `Contents` of the IDML graphic (JPEG, PNG, PDF, EPS and
+  SVG files, 2 KB to 11 MB).
+
+## Graphics pasted without a link
+
+A graphic with no link (its chunk 0x8CBC names no link) can hold its file
+itself:
+
+| Class | Chunk | Contents |
+|---|---|---|
+| Image (0x1702) | 0x8C23 | u32 raw data object (0 = none) |
+| PDF (0x2501) | 0x2521 | u32 raw data object (0 = none) |
+
+Evidence from the corpus pairs: the raw data object equals the IDML
+`Contents` for 124 of 124 PDFs and 2 of 2 images without a link. One
+more image without a link has 0x8C23 = 0; its IDML `Contents` equals the
+preview data described below, which the converter does not use. In the
+whole corpus, two linked and embedded PDFs also have a 0x2521 object,
+different from the link resource's; with no pair to compare, the
+converter uses the link resource's.
+
+## Graphic previews
+
+Placed graphics also have chunk 0x170D, the UID of an object of class
+0x1708, whose chunk 0x119 names a raw data object. In the 245 distinct
+little-endian files, these objects are TIFF (613), JPEG (411), PNG (307),
+GIF (27) and one other. In the same-version pairs they equal the IDML
+`Contents` for only 3 of 109 embedded or pasted graphics, so they are
+most likely screen previews. The converter does not use them.
+
+## Embedded data in IDML
+
+The reference IDML files write `Contents` inside the graphic's
+`Properties` as base64 (with `=` padding) in lines of 76 characters joined
+by a line feed, with no line feed at the end. The text is split into
+CDATA sections of 262,144 characters. The converter writes the same form.
 
 ## Stories (0x201)
 

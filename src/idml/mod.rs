@@ -162,6 +162,42 @@ fn matrix(m: &Matrix) -> String {
     nums(&m.0)
 }
 
+/// Characters per CDATA section of embedded file data, as in InDesign's
+/// IDML export.
+const CDATA_SECTION: usize = 262_144;
+
+/// Base64 (RFC 4648, with padding) in lines of 76 characters separated by
+/// line feeds, as IDML writes embedded file data.
+fn base64_lines(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const LINE: usize = 76;
+    let encoded_len = data.len().div_ceil(3) * 4;
+    let mut out = String::with_capacity(encoded_len + encoded_len / LINE);
+    let mut column = 0;
+    for group in data.chunks(3) {
+        let b = [
+            group[0],
+            group.get(1).copied().unwrap_or(0),
+            group.get(2).copied().unwrap_or(0),
+        ];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        if column == LINE {
+            out.push('\n');
+            column = 0;
+        }
+        for i in 0..4 {
+            let c = if i <= group.len() {
+                ALPHABET[(n >> (18 - 6 * i) & 0x3F) as usize] as char
+            } else {
+                '='
+            };
+            out.push(c);
+        }
+        column += 4;
+    }
+    out
+}
+
 fn uref(uid: Option<u32>) -> String {
     uid.map_or("n".into(), |u| format!("u{u:x}"))
 }
@@ -723,6 +759,11 @@ impl Writer<'_> {
             .attr("Self", uref(Some(g.uid)))
             .attr("ItemTransform", matrix(&g.transform));
         x.start("Properties");
+        if let Some(data) = &g.contents {
+            x.start("Contents")
+                .cdata(&base64_lines(data), CDATA_SECTION)
+                .end();
+        }
         x.empty(
             "GraphicBounds",
             &[
@@ -739,7 +780,10 @@ impl Writer<'_> {
                 &[
                     ("Self", uref(Some(link.uid))),
                     ("LinkResourceURI", link.uri.clone()),
-                    ("StoredState", "Normal".into()),
+                    (
+                        "StoredState",
+                        if link.embedded { "Embedded" } else { "Normal" }.into(),
+                    ),
                 ],
             );
         }
@@ -1080,5 +1124,26 @@ mod tests {
         assert_eq!(num(-0.0), "-0");
         assert_eq!(num(1.0), "1");
         assert_eq!(num(-89.99999999999999), "-89.99999999999999");
+    }
+
+    #[test]
+    fn encodes_base64_in_lines() {
+        assert_eq!(base64_lines(b""), "");
+        assert_eq!(base64_lines(b"f"), "Zg==");
+        assert_eq!(base64_lines(b"fo"), "Zm8=");
+        assert_eq!(base64_lines(b"foobar"), "Zm9vYmFy");
+        let lines = base64_lines(&[0xFF; 58]);
+        assert_eq!(lines.split('\n').map(str::len).collect::<Vec<_>>(), [76, 4]);
+        assert!(base64_lines(&[0xFF; 57]).find('\n').is_none());
+    }
+
+    #[test]
+    fn splits_cdata_sections() {
+        let mut x = Xml::new();
+        x.start("Contents").cdata("abcde", 2).end();
+        assert!(
+            x.finish()
+                .ends_with("\n<Contents><![CDATA[ab]]><![CDATA[cd]]><![CDATA[e]]></Contents>")
+        );
     }
 }

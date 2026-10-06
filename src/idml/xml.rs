@@ -109,6 +109,23 @@ impl Xml {
         self
     }
 
+    /// Text content as CDATA sections of at most `section` characters
+    /// each. `s` must not contain `]]>`.
+    pub fn cdata(&mut self, s: &str, section: usize) -> &mut Self {
+        self.close_start();
+        self.inline = true;
+        let mut rest = s;
+        while !rest.is_empty() {
+            let mut n = section.min(rest.len());
+            while !rest.is_char_boundary(n) {
+                n -= 1;
+            }
+            let _ = write!(self.out, "<![CDATA[{}]]>", &rest[..n]);
+            rest = &rest[n..];
+        }
+        self
+    }
+
     pub fn end(&mut self) -> &mut Self {
         let name = self.stack.pop().expect("end without start");
         if self.open {
