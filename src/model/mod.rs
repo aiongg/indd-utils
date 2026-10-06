@@ -4,6 +4,7 @@
 pub mod attrs;
 pub mod color;
 pub mod font;
+pub mod hyperlink;
 pub mod table;
 pub mod variable;
 
@@ -12,6 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 pub use attrs::{Attrs, Value};
 pub use color::{Color, Gradient};
 pub use font::{Font, FontFamily};
+pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
 pub use table::{Cell, Table};
 pub use variable::TextVariable;
 
@@ -339,6 +341,8 @@ pub struct Story {
     pub tables: BTreeMap<usize, Table>,
     /// Text variable instances, by UTF-16 offset of their U+0018.
     pub text_variables: BTreeMap<usize, variable::Instance>,
+    /// Hyperlink text sources, sorted by start.
+    pub sources: Vec<SourceRange>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -364,6 +368,12 @@ pub struct Document {
     pub object_styles: BTreeMap<u32, ObjectStyle>,
     pub sections: Vec<Section>,
     pub text_variables: Vec<TextVariable>,
+    pub hyperlinks: Vec<Hyperlink>,
+    pub text_sources: BTreeMap<u32, TextSource>,
+    pub destinations: Vec<Destination>,
+    pub bookmarks: BTreeMap<u32, Bookmark>,
+    /// All bookmarks in document order (document chunk 0x13501).
+    pub bookmark_order: Vec<u32>,
     /// Problems that did not stop the conversion (content left out).
     pub warnings: Vec<String>,
     pub preferences: Option<DocumentPreferences>,
@@ -537,6 +547,10 @@ impl<'a> Reader<'a> {
         let mut style_groups = BTreeMap::new();
         let mut object_styles = BTreeMap::new();
         let mut text_variables = Vec::new();
+        let mut hyperlinks = Vec::new();
+        let mut text_sources = BTreeMap::new();
+        let mut destinations = Vec::new();
+        let mut bookmarks = BTreeMap::new();
         for &(uid, cls) in self.db.classes() {
             if self.db.object(uid)?.is_none() {
                 continue;
@@ -648,6 +662,26 @@ impl<'a> Reader<'a> {
                         text_variables.push(v);
                     }
                 }
+                hyperlink::class::HYPERLINK => {
+                    if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?)? {
+                        hyperlinks.push(h);
+                    }
+                }
+                hyperlink::class::TEXT_SOURCE => {
+                    if let Some(s) = TextSource::read(uid, &*self.object(uid)?)? {
+                        text_sources.insert(uid, s);
+                    }
+                }
+                hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
+                    if let Some(d) = Destination::read(uid, cls, &*self.object(uid)?)? {
+                        destinations.push(d);
+                    }
+                }
+                hyperlink::class::BOOKMARK => {
+                    if let Some(b) = Bookmark::read(uid, &*self.object(uid)?)? {
+                        bookmarks.insert(uid, b);
+                    }
+                }
                 class::LANGUAGE => {
                     if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
                         && d.len() > 1
@@ -679,6 +713,14 @@ impl<'a> Reader<'a> {
                 .map(|uid| self.section(uid))
                 .collect::<Result<Vec<_>, _>>()?,
             text_variables,
+            hyperlinks,
+            text_sources,
+            destinations,
+            bookmarks,
+            bookmark_order: match self.chunk(doc, hyperlink::chunk::DOCUMENT_LISTS)? {
+                Some(d) => hyperlink::document_bookmarks(&d)?,
+                None => Vec::new(),
+            },
             warnings: self.warnings.borrow().clone(),
             preferences: self.document_preferences()?,
         })
@@ -1240,7 +1282,19 @@ impl<'a> Reader<'a> {
         let mut owned: Vec<(usize, u32, u32)> = Vec::new();
         // (start, length, owner, cell) for each stretch of text.
         let mut owners: Vec<(usize, usize, u32, u32)> = Vec::new();
+        let mut sources = Vec::new();
         for strand in strands {
+            if self.class(strand) == Some(hyperlink::class::RANGE_STRAND)
+                && let Some(tree) = self.chunk(strand, hyperlink::chunk::RANGE_TREE)?
+                && tree.len() >= 4
+            {
+                let first = u32::from_le_bytes(tree[..4].try_into().unwrap());
+                let pages = |uid| self.chunk(uid, hyperlink::chunk::RANGE_PAGE);
+                match hyperlink::source_ranges(first, pages) {
+                    Ok(r) => sources.extend(r),
+                    Err(e) => self.warn(format!("story {uid}: hyperlink sources left out: {e}")),
+                }
+            }
             let Some(list) = self.chunk(strand, chunk::STRAND_DATA)? else {
                 continue;
             };
@@ -1349,12 +1403,36 @@ impl<'a> Reader<'a> {
                 _ => runs.push(run),
             }
         }
+        // IDML writes a text source inside one character range; keep the
+        // sources that lie within one run.
+        sources.sort_by_key(|r| r.start);
+        let cell_runs = tables
+            .values()
+            .flat_map(|t| t.cells.iter().flat_map(|c| &c.runs));
+        let spans: Vec<(usize, usize)> = runs
+            .iter()
+            .chain(cell_runs)
+            .map(|r| (r.start, r.start + r.text.encode_utf16().count()))
+            .collect();
+        sources.retain(|r| {
+            let inside = spans
+                .iter()
+                .any(|&(a, b)| r.start >= a && r.start + r.len <= b);
+            if !inside && r.len > 0 {
+                self.warn(format!(
+                    "story {uid}: hyperlink source {} spans several text ranges; left out",
+                    r.source
+                ));
+            }
+            inside && r.len > 0
+        });
         Ok(Story {
             uid,
             runs,
             anchors,
             tables,
             text_variables,
+            sources,
         })
     }
 }

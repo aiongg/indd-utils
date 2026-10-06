@@ -9,7 +9,8 @@ use std::collections::BTreeMap;
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Page, PageItem, Path, Section,
     Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextVariable,
-    TextWrap, Value, numbering, root_kind, variable::Instance, wrap_mode,
+    TextWrap, Value, hyperlink::DestinationKind, numbering, root_kind, variable::Instance,
+    wrap_mode,
 };
 
 #[derive(Clone, Copy)]
@@ -820,8 +821,112 @@ impl Writer<'_> {
                 &[("src", format!("Stories/Story_u{:x}.xml", s.uid))],
             );
         }
+        self.hyperlinks(&mut x);
         x.end();
         x.finish()
+    }
+
+    /// Hyperlink text sources written in the stories.
+    fn written_sources(&self) -> std::collections::HashSet<u32> {
+        self.doc
+            .stories
+            .iter()
+            .flat_map(|s| &s.sources)
+            .map(|r| r.source)
+            .filter(|u| self.doc.text_sources.contains_key(u))
+            .collect()
+    }
+
+    /// Destinations, hyperlinks and bookmarks, in schema order. See
+    /// docs/format/hyperlinks.md.
+    fn hyperlinks(&self, x: &mut Xml) {
+        let doc = self.doc;
+        let mut dests: Vec<_> = doc.destinations.iter().collect();
+        dests.sort_by_key(|d| (matches!(d.kind, DestinationKind::Url { .. }), d.key));
+        for d in &dests {
+            match &d.kind {
+                DestinationKind::Page { page, zoom, view } => {
+                    x.start("HyperlinkPageDestination")
+                        .attr("Self", d.reference())
+                        .attr("Name", &d.name)
+                        .attr("DestinationPage", uref(Some(*page)));
+                    if *view == 1 {
+                        x.attr("ViewSetting", "FitWindow");
+                    }
+                    x.attr("ViewPercentage", num(zoom * 100.0));
+                }
+                DestinationKind::Url { url } => {
+                    x.start("HyperlinkURLDestination")
+                        .attr("Self", d.reference())
+                        .attr("Name", &d.name)
+                        .attr("DestinationURL", url);
+                }
+            }
+            x.attr("Hidden", d.hidden.to_string())
+                .attr("DestinationUniqueKey", d.key.to_string())
+                .end();
+        }
+        let sources = self.written_sources();
+        let mut links: Vec<_> = doc.hyperlinks.iter().collect();
+        links.sort_by_key(|h| h.uid);
+        for h in links {
+            let Some(dest) = dests.iter().find(|d| d.key == h.key) else {
+                continue;
+            };
+            if !sources.contains(&h.source) {
+                continue;
+            }
+            x.start("Hyperlink")
+                .attr("Self", uref(Some(h.uid)))
+                .attr("Name", &h.name)
+                .attr("Source", uref(Some(h.source)));
+            // One value in every corpus pair; see the format notes.
+            if h.as_in_samples {
+                x.attr("Visible", "false")
+                    .attr("Highlight", "None")
+                    .attr("Width", "Thin")
+                    .attr("BorderStyle", "Solid");
+            }
+            x.attr("Hidden", h.hidden.to_string())
+                .attr("DestinationUniqueKey", h.key.to_string());
+            x.start("Properties");
+            if h.as_in_samples {
+                x.start("BorderColor")
+                    .attr("type", "enumeration")
+                    .text("Black")
+                    .end();
+            }
+            x.start("Destination")
+                .attr("type", "object")
+                .text(&dest.reference())
+                .end();
+            x.end().end();
+        }
+        let top = doc
+            .bookmark_order
+            .iter()
+            .filter_map(|u| doc.bookmarks.get(u))
+            .filter(|b| !doc.bookmarks.contains_key(&b.parent));
+        for b in top {
+            self.bookmark(x, b, 0);
+        }
+    }
+
+    fn bookmark(&self, x: &mut Xml, b: &crate::model::Bookmark, depth: usize) {
+        let doc = self.doc;
+        let Some(dest) = doc.destinations.iter().find(|d| d.uid == b.destination) else {
+            return;
+        };
+        x.start("Bookmark")
+            .attr("Self", uref(Some(b.uid)))
+            .attr("Name", &b.name)
+            .attr("Destination", dest.reference());
+        if depth < 64 {
+            for c in b.children.iter().filter_map(|u| doc.bookmarks.get(u)) {
+                self.bookmark(x, c, depth + 1);
+            }
+        }
+        x.end();
     }
 
     /// `TextVariable` elements, sorted by name as in every corpus IDML.
@@ -1903,7 +2008,43 @@ impl Writer<'_> {
             }
         };
         let mut pos = offset;
+        // End offset of the open hyperlink text source.
+        let mut open: Option<usize> = None;
         for ch in text.chars() {
+            if open == Some(pos) {
+                flush(x, &mut buf);
+                x.end();
+                open = None;
+            }
+            if open.is_none()
+                && let Some(r) = story.sources.iter().find(|r| r.start == pos)
+                && let Some(src) = self.doc.text_sources.get(&r.source)
+            {
+                flush(x, &mut buf);
+                x.start("HyperlinkTextSource")
+                    .attr("Self", uref(Some(src.uid)))
+                    .attr("Name", &src.name)
+                    .attr("Hidden", src.hidden.to_string())
+                    .attr(
+                        "AppliedCharacterStyle",
+                        match src.character_style {
+                            Some(c) => self.style_ref(Some(c), false),
+                            None => "n".into(),
+                        },
+                    );
+                if src.toc_anchor {
+                    x.start("Properties")
+                        .start("AlternativeDestination")
+                        .attr("Type", "TocTextAnchor")
+                        .attr("IndexMarkerId", "0")
+                        .attr("TextAnchorName", "")
+                        .attr("TocEntryPageNumberString", "")
+                        .attr("TocEntryLevel", "0")
+                        .end()
+                        .end();
+                }
+                open = Some(r.start + r.len);
+            }
             match ch {
                 '\r' => {
                     flush(x, &mut buf);
@@ -1930,6 +2071,9 @@ impl Writer<'_> {
             pos += ch.len_utf16();
         }
         flush(x, &mut buf);
+        if open.is_some() {
+            x.end();
+        }
     }
 
     fn table(&self, x: &mut Xml, t: &Table, story: &Story, scope: &str) {
