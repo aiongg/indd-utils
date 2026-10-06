@@ -3,8 +3,10 @@
 //! The format is undocumented. Everything this crate knows about it is
 //! recorded in `docs/format/`; see `CLEANROOM.md` for how it was learned.
 
+pub mod container;
 pub mod header;
 
+pub use container::{Container, ContigObject, MasterPage};
 pub use header::{ByteOrder, Header, Version};
 
 #[derive(Debug)]
@@ -17,6 +19,10 @@ pub enum Error {
         got: usize,
     },
     UnknownByteOrder(u8),
+    /// A contiguous object's trailer does not match its header.
+    BadContigObject {
+        offset: usize,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -28,6 +34,12 @@ impl std::fmt::Display for Error {
                 write!(f, "file too short: need {needed} bytes, got {got}")
             }
             Error::UnknownByteOrder(b) => write!(f, "unknown byte-order flag {b:#04x}"),
+            Error::BadContigObject { offset } => {
+                write!(
+                    f,
+                    "contiguous object at {offset:#x} has no matching trailer"
+                )
+            }
         }
     }
 }

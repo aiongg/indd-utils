@@ -9,6 +9,7 @@ local, git-ignored `corpus/` directory.
 | `opf-neddy-flyer` | `Neddy_Flyer_HeatherRyan.indd`, `.pdf` | 3.0 (big-endian) | CC0, Heather Ryan (waiver in the `.rtf` README) | [openpreserve/format-corpus](https://github.com/openpreserve/format-corpus/tree/master/desktop-publishing/InDesign) |
 | `lizdenys-minizine` | `indesign-minizine-template.indd` | 20.3 | CC0, Liz Denys | [lizdenys.com](https://lizdenys.com/journal/articles/indesign-minizine-template.html) |
 | `bootstrap3-template` | `bootstrap3-indesign-template.indd` | 9.2 | MIT, © 2014 Miix (see `LICENSE`) | [jeffing/bootstrap3-indesign-template](https://github.com/jeffing/bootstrap3-indesign-template) @ `59a7d9fbe360` |
+| `xmp-toolkit-bluesquare` | `BlueSquare.indd` | 4.0 (big-endian) | BSD 3-Clause, © Adobe (see `LICENSE`) | [adobe/XMP-Toolkit-SDK](https://github.com/adobe/XMP-Toolkit-SDK/tree/main/samples/testfiles) @ `7093513bd3ca` |
 | `scml-template` | `scml.indt` | 7.5 | MIT, © 2014 Scribe, Inc. (see `LICENSE`) | [scribenet/scr-scml-indesign-templates](https://github.com/scribenet/scr-scml-indesign-templates) @ `556f09acc5ab` |
 
 None of these has a matching IDML file. Use them for parser smoke tests:

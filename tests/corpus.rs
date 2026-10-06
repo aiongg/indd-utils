@@ -54,3 +54,33 @@ fn every_corpus_header_parses() {
         failures.join("\n")
     );
 }
+
+#[test]
+fn every_corpus_container_has_xmp() {
+    let Some(root) = corpus_root() else {
+        eprintln!("corpus/ not present; skipping");
+        return;
+    };
+    let mut files = Vec::new();
+    indd_files(&root, &mut files);
+
+    let failures: Vec<String> = files
+        .iter()
+        .filter_map(|p| {
+            let bytes = std::fs::read(p).ok()?;
+            let result = indd::Container::parse(&bytes).and_then(|c| c.xmp());
+            match result {
+                Ok(Some(_)) => None,
+                Ok(None) => Some(format!("{}: no XMP", p.display())),
+                Err(e) => Some(format!("{}: {e}", p.display())),
+            }
+        })
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "{} of {} failed:\n{}",
+        failures.len(),
+        files.len(),
+        failures.join("\n")
+    );
+}
