@@ -124,14 +124,27 @@ def norm(v):
     return " ".join(fix(t) for t in v.split(" "))
 
 
+def canon(el):
+    """A structured property (TabList, AllNestedStyles, ...) as one string:
+    each leaf as tag=text with numbers normalised, in document order."""
+    if len(el) == 0 and el.get("type") != "list":
+        return f"{el.tag}={norm(el.text or '')}"
+    return el.tag + "[" + ",".join(canon(c) for c in el) + "]"
+
+
 def props(el):
     """Attributes plus <Properties> children (as P.Name)."""
     a = dict(el.attrib)
     p = el.find("Properties")
     if p is not None:
         for c in p:
-            if len(c) == 0:
+            if c.get("type") == "list":
+                a["P." + c.tag] = canon(c)
+            elif len(c) == 0:
                 text = c.text or ""
+                extra = sorted((k, v) for k, v in c.attrib.items() if k != "type")
+                if extra:
+                    text = " ".join(f"{k}={v}" for k, v in extra)
                 if c.tag == "Contents":
                     n = norm(text)
                     text = f"md5:{hashlib.md5(n.encode()).hexdigest()} {len(n)}"
