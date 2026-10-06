@@ -69,6 +69,71 @@ spread. Chunk 0x302: u32 document layer UID, u16 1 for the layer's guide
 part. Chunk 0x303: u32 spread, u32 spread, UID list of children. Pages are
 children of the spread layer for the internal pages layer.
 
+## Guides (0x3301)
+
+Ruler guides are objects of class 0x3301. They are children of a spread
+layer (listed in its chunk 0x303), like page items, and their chunk 0x15B
+names the spread and the spread layer. The spread layer's document layer
+is IDML `ItemLayer`. IDML writes a guide as a `Guide` element inside a
+`Page` element. Chunk 0x3308 (52 bytes):
+
+| Offset | Contents | IDML |
+|---|---|---|
+| 0 | f64 position in spread coordinates: y for a horizontal guide, x for a vertical one | `Location` (below) |
+| 8 | u32 owner: a page of the spread, or the spread itself | the `Page` element the guide is in |
+| 12 | u16 orientation: 1 horizontal, 0 vertical | `Orientation` |
+| 14 | f64, 0.05 in every sample | `ViewThreshold="5"` in every sample |
+| 22 | u32, 6 in every sample | `GuideColor` `Cyan` in every sample |
+| 26 | u16 fit to page: 1 true, 0 false | `FitToPage` |
+| 28 | f64, not identified | |
+| 36 | u32, not identified (24, 25, 30 or 31) | |
+| 40 | u32 guide type: 0 ruler, 1 liquid | `GuideType` (`Ruler`, `Liquid`) |
+| 44 | f64, 1 in every sample | |
+
+**Evidence.** The 137 distinct little-endian files hold 847 guides; 815
+have this 52-byte record. The other 32 are in one InDesign 7.0 file with
+no IDML and have a 40-byte record; the converter leaves them out with a
+warning. In the corpus pairs, 71 IDML guides in 33 distinct files have an
+INDD object with the same UID. Two more pairs have the same number of
+guides on both sides but different UIDs (the IDML was exported from
+another save) and are not used. For the 71:
+
+- `Orientation`: 71 of 71 (50 horizontal, 21 vertical).
+- `FitToPage`: 71 of 71 (49 true, 22 false).
+- `GuideType`: 71 of 71 (59 ruler, 12 liquid).
+- `ItemLayer`: 71 of 71.
+- Owner: the 49 guides owned by a page are in that page's element, the
+  22 owned by the spread are in the spread's first page (71 of 71). All
+  22 spread guides have `FitToPage="false"` and all 49 page guides
+  `FitToPage="true"`.
+- The view threshold and colour have one value each in the INDD and in
+  IDML, so the fields are not proven. The converter writes
+  `ViewThreshold="5"` only for 0.05 and `GuideColor` `Cyan` only for 6.
+
+**Location.** IDML measures `Location` from the ruler origin in
+`ViewPreference` (`RulerOrigin`). With `SpreadOrigin`, it is the stored
+position minus the top edge (horizontal guides) or the left edge
+(vertical guides) of the spread's pages, each page's edge being its
+`GeometricBounds` corner mapped by its `ItemTransform`. This holds for
+66 of 66 guides in files with `SpreadOrigin`, including pages whose
+bounds do not start at 0 and two-page spreads. One file has
+`SpineOrigin`: its vertical guides on a two-page spread are measured
+from the spine (x = 0) instead (2 guides), its other 3 guides agree with
+the rule above.
+
+The ruler origin was not found in the INDD: 235 of the 240 corpus IDML
+files have `SpreadOrigin`, one `SpineOrigin` and four `PageOrigin`, and
+no field separates them in the objects searched (every class with at most
+40 objects in a file, apart from page items and text). The converter writes
+`ViewPreference` with `RulerOrigin="SpreadOrigin"` and measures guide
+locations from the spread, so the two agree.
+
+**Not converted.** `Locked` (false for all 81 IDML guides),
+`GuideZone` (1) and `OverriddenPageItemProps` (empty) have no identified
+field. `PageIndex` is 0 for all 22 spread guides and the page's position
+in the spread plus 1 for 46 of the 49 page guides; the other 3 do not
+follow from the owner, so it is left out.
+
 ## Layers (0x302)
 
 Chunk 0x304: u16 locked, u16 visible, then fields not yet identified, then

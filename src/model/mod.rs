@@ -49,6 +49,7 @@ pub mod class {
     pub const TABLE_STYLE_ROOT_GROUP: u32 = 0x1044F;
     /// Document-wide preferences.
     pub const PREFERENCES: u32 = 0x2202;
+    pub const GUIDE: u32 = 0x3301;
 }
 
 /// Chunk IDs.
@@ -105,6 +106,7 @@ pub mod chunk {
     pub const SWATCH_NAME: u32 = 0x1F30;
     pub const TEXT_WRAP: u32 = 0x3703;
     pub const CONTOUR_OPTION: u32 = 0x373D;
+    pub const GUIDE: u32 = 0x3308;
 }
 
 /// Kinds of strand run data (first u32 of chunk 0x262).
@@ -273,6 +275,28 @@ pub struct Spread {
     pub binding_location: u32,
     pub pages: Vec<Page>,
     pub items: Vec<PageItem>,
+    pub guides: Vec<Guide>,
+}
+
+/// A ruler guide (class 0x3301, chunk 0x3308). See `docs/format/objects.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Guide {
+    pub uid: u32,
+    pub horizontal: bool,
+    /// Position in spread coordinates: y for a horizontal guide, x for a
+    /// vertical one.
+    pub position: f64,
+    /// The page the guide belongs to, or the spread.
+    pub owner: u32,
+    pub fit_to_page: bool,
+    /// Stored view threshold (0.05 in every sample).
+    pub view_threshold: f64,
+    /// Colour code (6 in every sample).
+    pub color: u32,
+    /// 0 ruler guide, 1 liquid guide.
+    pub guide_type: u32,
+    /// Document layer.
+    pub layer: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -759,6 +783,7 @@ impl<'a> Reader<'a> {
         let spread_layers = c.u32_list()?;
         let mut pages = Vec::new();
         let mut items = Vec::new();
+        let mut guides = Vec::new();
         for sl in spread_layers {
             let layer = match self.chunk(sl, chunk::SPREAD_LAYER_LAYER)? {
                 Some(d) => Cursor::new(&d).u32()?,
@@ -767,6 +792,7 @@ impl<'a> Reader<'a> {
             for child in self.children(sl, chunk::SPREAD_LAYER_CHILDREN)? {
                 match self.class(child) {
                     Some(class::PAGE) => pages.push(self.page(child)?),
+                    Some(class::GUIDE) => guides.extend(self.guide(child, layer)?),
                     _ => {
                         if let Some(item) = self.page_item(child, Some(layer))? {
                             items.push(item);
@@ -782,7 +808,38 @@ impl<'a> Reader<'a> {
             binding_location,
             pages,
             items,
+            guides,
         })
+    }
+
+    /// A ruler guide from chunk 0x3308: f64 position, u32 owner (page or
+    /// spread), u16 orientation (1 horizontal), f64 view threshold, u32
+    /// colour, u16 fit to page, f64, u32, u32 guide type, f64.
+    fn guide(&self, uid: u32, layer: u32) -> Result<Option<Guide>, Error> {
+        let Some(d) = self.chunk(uid, chunk::GUIDE)? else {
+            return Ok(None);
+        };
+        if d.len() < 52 {
+            self.warn(format!(
+                "guide {uid}: guide record of {} bytes is not known; left out",
+                d.len()
+            ));
+            return Ok(None);
+        }
+        let f = |o: usize| Cursor::new(&d[o..]).f64();
+        let u = |o: usize| Cursor::new(&d[o..]).u32();
+        let h = |o: usize| Cursor::new(&d[o..]).u16();
+        Ok(Some(Guide {
+            uid,
+            position: f(0)?,
+            owner: u(8)?,
+            horizontal: h(12)? == 1,
+            view_threshold: f(14)?,
+            color: u(22)?,
+            fit_to_page: h(26)? == 1,
+            guide_type: u(40)?,
+            layer,
+        }))
     }
 
     /// Children listed in a hierarchy chunk: parent, owner, then a u32 list.

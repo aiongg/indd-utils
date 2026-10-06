@@ -7,8 +7,8 @@ pub mod zip;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Section, Shape,
-    Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextWrap, Value,
+    Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Page, PageItem, Path, Section,
+    Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextWrap, Value,
     numbering, root_kind, wrap_mode,
 };
 
@@ -479,6 +479,19 @@ fn style_name(s: &Style) -> String {
 /// Escape a style name for use in a `Self` reference (`:` separates groups).
 fn self_name(name: &str) -> String {
     name.replace('%', "%25").replace(':', "%3a")
+}
+
+/// The top-left corner of a spread's pages in spread coordinates: the
+/// smallest left and top edge of any page (0, 0 without pages).
+fn spread_origin(pages: &[Page]) -> (f64, f64) {
+    let corners = pages.iter().map(|p| {
+        let [a, b, c, d, tx, ty] = p.transform.0;
+        let (l, t) = (p.bounds[0], p.bounds[1]);
+        (a * l + c * t + tx, b * l + d * t + ty)
+    });
+    corners
+        .reduce(|(l0, t0), (l1, t1)| (l0.min(l1), t0.min(t1)))
+        .unwrap_or((0.0, 0.0))
 }
 
 /// UIDs of the document pages, in order.
@@ -1077,6 +1090,9 @@ impl Writer<'_> {
             }
             x.end();
         }
+        // Guide locations are written measured from the spread (see
+        // `guide`), so the ruler origin is stated rather than read.
+        x.empty("ViewPreference", &[("RulerOrigin", "SpreadOrigin".into())]);
         x.end();
         x.finish()
     }
@@ -1476,6 +1492,51 @@ impl Writer<'_> {
         x.end();
     }
 
+    /// A ruler guide. `origin` is the top-left corner of the spread's
+    /// pages, from which IDML measures `Location` with the ruler origin
+    /// `SpreadOrigin`. See `docs/format/objects.md`.
+    fn guide(x: &mut Xml, g: &Guide, origin: (f64, f64)) {
+        let (left, top) = origin;
+        x.start("Guide")
+            .attr("Self", uref(Some(g.uid)))
+            .attr(
+                "Orientation",
+                if g.horizontal {
+                    "Horizontal"
+                } else {
+                    "Vertical"
+                },
+            )
+            .attr(
+                "Location",
+                num(g.position - if g.horizontal { top } else { left }),
+            )
+            .attr("FitToPage", g.fit_to_page.to_string());
+        // The only stored value in the samples, with the only IDML value.
+        if g.view_threshold == 0.05 {
+            x.attr("ViewThreshold", "5");
+        }
+        if g.layer != 0 {
+            x.attr("ItemLayer", uref(Some(g.layer)));
+        }
+        match g.guide_type {
+            0 => {
+                x.attr("GuideType", "Ruler");
+            }
+            1 => {
+                x.attr("GuideType", "Liquid");
+            }
+            _ => {}
+        }
+        if g.color == 6 {
+            Self::properties(
+                x,
+                &[("GuideColor", "enumeration", "Cyan".to_string().into())],
+            );
+        }
+        x.end();
+    }
+
     /// `page_index` counts the document pages written so far; `names`
     /// gives each document page its name (see `page_names`).
     fn spread(&self, s: &Spread, master: bool, page_index: &mut usize, names: &[String]) -> String {
@@ -1485,6 +1546,7 @@ impl Writer<'_> {
         x.start(kind)
             .attr("Self", uref(Some(s.uid)))
             .attr("PageCount", s.pages.len().to_string());
+        let origin = spread_origin(&s.pages);
         if !master {
             x.attr("BindingLocation", s.binding_location.to_string());
         }
@@ -1517,6 +1579,15 @@ impl Writer<'_> {
                 // A master page can itself be based on a master.
                 .attr("AppliedMaster", uref(p.master))
                 .attr("MasterPageTransform", matrix(&p.master_transform));
+            // A guide belongs to a page, or to the spread; IDML writes a
+            // spread's guides in its first page.
+            let first = p.uid == s.pages[0].uid;
+            for g in &s.guides {
+                let own_page = s.pages.iter().any(|q| q.uid == g.owner);
+                if g.owner == p.uid || (first && !own_page) {
+                    Self::guide(&mut x, g, origin);
+                }
+            }
             x.end();
         }
         for item in &s.items {
@@ -1769,6 +1840,7 @@ mod tests {
                 binding_location: 0,
                 pages: (10..16).map(page).collect(),
                 items: Vec::new(),
+                guides: Vec::new(),
             }],
             // Listed out of page order, as in some samples.
             sections: vec![
@@ -1801,6 +1873,51 @@ mod tests {
         let out = x.finish();
         assert!(out.contains("TextWrapMode=\"BoundingBoxTextWrap\""));
         assert!(out.contains("<TextWrapOffset Top=\"2\" Left=\"1\" Bottom=\"4\" Right=\"3\" />"));
+    }
+
+    #[test]
+    fn measures_guides_from_spread_origin() {
+        use crate::model::Page;
+        let page = |uid, tx| Page {
+            uid,
+            bounds: [0.0, 0.0, 612.0, 792.0],
+            transform: Matrix([1.0, 0.0, 0.0, 1.0, tx, -396.0]),
+            master: None,
+            master_transform: Matrix::IDENTITY,
+        };
+        let origin = spread_origin(&[page(1, -612.0), page(2, 0.0)]);
+        assert_eq!(origin, (-612.0, -396.0));
+        let guide = Guide {
+            uid: 0x2299,
+            horizontal: true,
+            position: 339.5,
+            owner: 2,
+            fit_to_page: true,
+            view_threshold: 0.05,
+            color: 6,
+            guide_type: 0,
+            layer: 0xcc,
+        };
+        let mut x = Xml::new();
+        Writer::guide(&mut x, &guide, origin);
+        let out = x.finish();
+        assert!(
+            out.contains("Orientation=\"Horizontal\" Location=\"735.5\""),
+            "{out}"
+        );
+        assert!(
+            out.contains("ItemLayer=\"ucc\" GuideType=\"Ruler\""),
+            "{out}"
+        );
+        assert!(out.contains("<GuideColor type=\"enumeration\">Cyan</GuideColor>"));
+        let vertical = Guide {
+            horizontal: false,
+            position: 28.0,
+            ..guide
+        };
+        let mut x = Xml::new();
+        Writer::guide(&mut x, &vertical, origin);
+        assert!(x.finish().contains("Location=\"640\""));
     }
 
     #[test]
