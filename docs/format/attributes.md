@@ -49,6 +49,9 @@ list and absent from the IDML.
 | 0x6E6E | `StrokeType` (built-in stroke style code, below) | 51 of 51 items, 576 of 576 object styles |
 | 0x6E8C | `StrokeAlignment`: 0 `CenterAlignment`, 1 `InsideAlignment` (below) | 1 item, 576 object styles |
 
+Transparency attributes (IDs 0x108xx and 0x1EBxx) are described in
+`transparency.md`.
+
 ### Strokes
 
 Object styles (class 0x1B901) hold a full page item attribute list in

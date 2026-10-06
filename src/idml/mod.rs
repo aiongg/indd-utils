@@ -1,5 +1,6 @@
 //! IDML package writer.
 
+mod transparency;
 mod values;
 mod xml;
 pub mod zip;
@@ -1848,6 +1849,7 @@ impl Writer<'_> {
             Self::text_frame_preference(x, p);
         }
         Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
+        transparency::write(x, &item.attrs, &uref(Some(item.uid)), &self.doc.swatches);
         for child in &item.children {
             self.page_item(x, child);
         }
