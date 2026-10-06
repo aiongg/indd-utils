@@ -37,6 +37,7 @@ pub mod class {
     /// A plain byte stream, such as the file of an embedded graphic.
     pub const RAW_DATA: u32 = 0x129;
     pub const FONT_FAMILY: u32 = 0x3E03;
+    pub const LANGUAGE: u32 = 0x2D07;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
@@ -79,6 +80,7 @@ pub mod chunk {
     pub const ITEM_ATTRS: u32 = 0x6E03;
     pub const STYLE_ATTRS: u32 = 0x23F;
     pub const FONT_FAMILY: u32 = 0x3E05;
+    pub const LANGUAGE_NAME: u32 = 0x2D0F;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
     pub const MASTER_NAME: u32 = 0x1402;
     pub const STYLE_ROOT_CHILDREN: u32 = 0x28DC;
@@ -327,6 +329,9 @@ pub struct Document {
     pub swatches: BTreeMap<u32, String>,
     /// Font family name for each font family UID.
     pub fonts: BTreeMap<u32, String>,
+    /// Language name (IDML `AppliedLanguage` without `$ID/`) for each
+    /// language UID.
+    pub languages: BTreeMap<u32, String>,
     /// Style groups, including the root groups (empty name).
     pub style_groups: BTreeMap<u32, StyleGroup>,
     pub object_styles: BTreeMap<u32, ObjectStyle>,
@@ -500,6 +505,7 @@ impl<'a> Reader<'a> {
         let mut gradients = Vec::new();
         let mut swatches = BTreeMap::new();
         let mut fonts = BTreeMap::new();
+        let mut languages = BTreeMap::new();
         let mut style_groups = BTreeMap::new();
         let mut object_styles = BTreeMap::new();
         for &(uid, cls) in self.db.classes() {
@@ -592,6 +598,13 @@ impl<'a> Reader<'a> {
                         fonts.insert(uid, find_string(&d, 0)?);
                     }
                 }
+                class::LANGUAGE => {
+                    if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
+                        && d.len() > 1
+                    {
+                        languages.insert(uid, Cursor::new(&d[1..]).string()?);
+                    }
+                }
                 _ => {}
             }
         }
@@ -607,6 +620,7 @@ impl<'a> Reader<'a> {
             gradients,
             swatches,
             fonts,
+            languages,
             style_groups,
             object_styles,
             sections: self

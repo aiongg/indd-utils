@@ -35,6 +35,25 @@ enum TextKind {
     Font,
     FontStyle,
     Leading,
+    /// A language object, written as `$ID/<name>`.
+    Language,
+    /// The given value is written as the enumeration value, others as
+    /// numbers of the given IDML type.
+    NumberOr(f64, &'static str, &'static str),
+    /// Two f64 (a point).
+    Point,
+    /// A list of tab stops (`TabList`).
+    TabList,
+    /// A list of nested styles (`AllNestedStyles`).
+    NestedStyles,
+    /// A character style reference.
+    CharacterStyle,
+    /// A font family, or 0 for none (`$ID/`).
+    FontOrNone,
+    /// A string, or the empty string for `Nothing`.
+    StringOrNothing,
+    /// u32 bullet character type and u32 character value (`BulletChar`).
+    BulletChar,
 }
 
 /// Text attributes: ID, IDML name, kind, written in `<Properties>`.
@@ -65,6 +84,7 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
     ),
     (0x1B0D, "DropCapCharacters", TextKind::Number, false),
     (0x1B0E, "DropCapLines", TextKind::Number, false),
+    (0x1B10, "BaselineShift", TextKind::Number, false),
     (
         0x1B11,
         "Capitalization",
@@ -77,16 +97,31 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
         false,
     ),
     (0x1B12, "StrokeColor", TextKind::Swatch, false),
+    (0x1B15, "VerticalScale", TextKind::Percent, false),
     (0x1B16, "LeftIndent", TextKind::Number, false),
+    (0x1B17, "RightIndent", TextKind::Number, false),
     (0x1B18, "FirstLineIndent", TextKind::Number, false),
     (0x1B1A, "AutoLeading", TextKind::Percent, false),
     (0x1B1B, "Leading", TextKind::Leading, true),
+    (0x1B1D, "AppliedLanguage", TextKind::Language, false),
     (0x1B1F, "Hyphenation", TextKind::Bool(3), false),
+    (0x1B24, "NoBreak", TextKind::Bool(1), false),
     (0x1B25, "HyphenationZone", TextKind::Number, false),
     (0x1B26, "SpaceBefore", TextKind::Number, false),
     (0x1B27, "SpaceAfter", TextKind::Number, false),
+    (0x1B29, "TabList", TextKind::TabList, true),
     (0x1B2A, "Underline", TextKind::Bool(1), false),
     (0x1B2B, "AppliedFont", TextKind::Font, true),
+    (
+        0x1B2C,
+        "OTFFigureStyle",
+        TextKind::Enum(&[
+            (1, "ProportionalOldstyle"),
+            (2, "ProportionalLining"),
+            (4, "Default"),
+        ]),
+        false,
+    ),
     (0x1B2E, "MaximumWordSpacing", TextKind::Percent, false),
     (0x1B2F, "MinimumWordSpacing", TextKind::Percent, false),
     (0x1B31, "MaximumLetterSpacing", TextKind::Percent, false),
@@ -97,12 +132,45 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
         TextKind::Enum(&[(0, "Anywhere"), (2, "NextPage")]),
         false,
     ),
+    (
+        0x1B3C,
+        "Position",
+        TextKind::Enum(&[(0, "Normal"), (5, "OTNumerator")]),
+        false,
+    ),
+    (0x1B40, "KeepLinesTogether", TextKind::Bool(1), false),
     (0x1B42, "FillTint", TextKind::Number, false),
+    (0x1B46, "GradientFillAngle", TextKind::Number, false),
+    (0x1B48, "GradientFillLength", TextKind::Number, false),
+    (0x1B4A, "GradientFillStart", TextKind::Point, false),
     (0x1B4D, "RuleAboveLineWeight", TextKind::Number, false),
     (0x1B4F, "RuleAboveOffset", TextKind::Number, false),
+    (0x1B50, "RuleAboveLeftIndent", TextKind::Number, false),
+    (0x1B51, "RuleAboveRightIndent", TextKind::Number, false),
+    (
+        0x1B52,
+        "RuleAboveWidth",
+        TextKind::Enum(&[(1, "ColumnWidth"), (2, "TextWidth")]),
+        false,
+    ),
+    (0x1B53, "RuleBelowColor", TextKind::SwatchOrText, true),
     (0x1B54, "RuleBelowLineWeight", TextKind::Number, false),
     (0x1B55, "RuleBelowTint", TextKind::Number, false),
     (0x1B56, "RuleBelowOffset", TextKind::Number, false),
+    (0x1B5D, "RuleBelow", TextKind::Bool(1), false),
+    (
+        0x1B6A,
+        "ParagraphBreakType",
+        TextKind::Enum(&[(0, "Anywhere"), (1, "NextColumn")]),
+        false,
+    ),
+    (
+        0x1B6B,
+        "SingleWordJustification",
+        TextKind::Enum(&[(0, "LeftAlign"), (3, "FullyJustified")]),
+        false,
+    ),
+    (0x1B75, "AllNestedStyles", TextKind::NestedStyles, true),
     (
         0x1B7E,
         "Justification",
@@ -121,19 +189,103 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
     (0x1B91, "UnderlineOffset", TextKind::Number, false),
     (0x1B94, "UnderlineWeight", TextKind::Number, false),
     (0x1BB7, "MiterLimit", TextKind::Number, false),
+    (
+        0x1BB9,
+        "EndJoin",
+        TextKind::Enum(&[(0, "MiterEndJoin"), (1, "RoundEndJoin")]),
+        false,
+    ),
+    (
+        0x1BBD,
+        "SpanColumnType",
+        TextKind::Enum(&[(0, "SingleColumn"), (1, "SpanColumns")]),
+        false,
+    ),
+    (
+        0x1BBE,
+        "SpanSplitColumnCount",
+        TextKind::NumberOr(1.0, "All", "short"),
+        true,
+    ),
     (0x1BBF, "SplitColumnInsideGutter", TextKind::Number, false),
+    (0x1BC4, "SpanColumnMinSpaceAfter", TextKind::Number, false),
     (0x1BD2, "ParagraphShadingColor", TextKind::Swatch, true),
     (0x1BD3, "ParagraphShadingTint", TextKind::Number, false),
+    (0x1BD6, "ParagraphShadingOn", TextKind::Bool(1), false),
+    (0x1BDB, "ParagraphShadingTopOffset", TextKind::Number, false),
+    (
+        0x1BDC,
+        "ParagraphShadingBottomOffset",
+        TextKind::Number,
+        false,
+    ),
+    (0x1BF6, "ParagraphBorderColor", TextKind::Swatch, true),
+    (0x1BF9, "ParagraphBorderOn", TextKind::Bool(1), false),
+    (0x1DF03, "ParagraphBorderTopOffset", TextKind::Number, false),
+    (
+        0x1DF04,
+        "ParagraphBorderBottomOffset",
+        TextKind::Number,
+        false,
+    ),
+    (
+        0x1DF21,
+        "SameParaStyleSpacing",
+        TextKind::NumberOr(-1.0, "SetIgnore", "unit"),
+        true,
+    ),
+    (0x4265, "GridAlignFirstLineOnly", TextKind::Bool(1), false),
+    (
+        0x4266,
+        "GridAlignment",
+        TextKind::Enum(&[(0, "None"), (1, "AlignBaseline")]),
+        false,
+    ),
     (
         0x1A401,
         "BulletsAndNumberingListType",
         TextKind::Enum(&[(0, "NoList"), (1, "BulletList")]),
         false,
     ),
+    (0x1A406, "BulletChar", TextKind::BulletChar, true),
+    (0x1A413, "BulletsFont", TextKind::FontOrNone, true),
+    (0x1A414, "BulletsFontStyle", TextKind::StringOrNothing, true),
+    (0x1A419, "NumberingContinue", TextKind::Bool(1), false),
+    (
+        0x1A41F,
+        "BulletsCharacterStyle",
+        TextKind::CharacterStyle,
+        true,
+    ),
+    (
+        0x1A420,
+        "NumberingCharacterStyle",
+        TextKind::CharacterStyle,
+        true,
+    ),
+    (0x1A423, "NumberingExpression", TextKind::FontStyle, false),
 ];
 
-/// An attribute written as a `<Properties>` child: name, type, text.
-type Property = (&'static str, &'static str, String);
+/// An attribute written as a `<Properties>` child: name, type, value.
+type Property = (&'static str, &'static str, PropValue);
+
+/// One field of a record in a list property: name, type, text.
+type Field = (&'static str, &'static str, String);
+
+/// The value of a `<Properties>` child.
+enum PropValue {
+    Text(String),
+    /// Records, each written as a `ListItem` (type `list`).
+    List(Vec<Vec<Field>>),
+    /// An empty element with these attributes and no `type`.
+    Attributes(Vec<(&'static str, String)>),
+}
+
+impl From<String> for PropValue {
+    fn from(s: String) -> PropValue {
+        PropValue::Text(s)
+    }
+}
 
 /// Page item attributes: attribute-list ID, IDML name, value kind.
 /// See `docs/format/attributes.md` for the evidence behind each entry.
@@ -155,6 +307,101 @@ const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
     (0x5526, "GradientStrokeStart", AttrKind::Point),
 ];
 use xml::Xml;
+
+use crate::object::Cursor;
+
+/// The bytes of a value as stored: list values of two, four or eight bytes
+/// are decoded as numbers by the attribute reader.
+fn raw_bytes(v: &Value) -> Vec<u8> {
+    match v {
+        Value::Double(f) => f.to_le_bytes().to_vec(),
+        Value::Int(i) => i.to_le_bytes().to_vec(),
+        Value::Enum(e) => e.to_le_bytes().to_vec(),
+        Value::Ref(r) => r.to_le_bytes().to_vec(),
+        Value::Point(a, b) => [a.to_le_bytes(), b.to_le_bytes()].concat(),
+        Value::Other(_, b) => b.clone(),
+    }
+}
+
+/// Records of a `TabList`: u16 count, then per stop f64 position, u16
+/// alignment, u16 leader length and the leader in UTF-16 code units. See
+/// `docs/format/attributes.md`. `None` for an unknown alignment code.
+fn tab_list(data: &[u8]) -> Option<Vec<Vec<Field>>> {
+    let mut c = Cursor::new(data);
+    let n = c.u16().ok()?;
+    let mut out = Vec::new();
+    for _ in 0..n {
+        let position = c.f64().ok()?;
+        let alignment = match c.u16().ok()? {
+            0 => "LeftAlign",
+            2 => "RightAlign",
+            _ => return None,
+        };
+        let len = c.u16().ok()? as usize;
+        let units = (0..len)
+            .map(|_| c.u16())
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        out.push(vec![
+            ("Alignment", "enumeration", alignment.to_string()),
+            ("AlignmentCharacter", "string", ".".to_string()),
+            ("Leader", "string", String::from_utf16_lossy(&units)),
+            ("Position", "unit", num(position)),
+        ]);
+    }
+    (c.remaining() == 0).then_some(out)
+}
+
+/// `BulletChar` attributes: u32 character type, u32 character value.
+/// See `docs/format/attributes.md`.
+fn bullet_char(data: &[u8]) -> Option<PropValue> {
+    let mut c = Cursor::new(data);
+    let kind = match c.u32().ok()? {
+        0 => "UnicodeOnly",
+        1 => "UnicodeWithFont",
+        2 => "GlyphWithFont",
+        _ => return None,
+    };
+    let value = c.u32().ok()?;
+    (c.remaining() == 0).then(|| {
+        PropValue::Attributes(vec![
+            ("BulletCharacterType", kind.into()),
+            ("BulletCharacterValue", value.to_string()),
+        ])
+    })
+}
+
+/// Delimiter field, repetition and inclusiveness of a nested style's
+/// delimiter code (`^c`, or `(d)` / `[d]` followed by an optional count).
+/// See `docs/format/attributes.md`.
+fn nested_delimiter(code: &str) -> Option<(Field, u32, bool)> {
+    let enumeration = |v: &str| ("Delimiter", "enumeration", v.to_string());
+    if code == "^c" {
+        return Some((enumeration("Dropcap"), 1, true));
+    }
+    let (inclusive, close) = match code.chars().next()? {
+        '(' => (true, ')'),
+        '[' => (false, ']'),
+        _ => return None,
+    };
+    let end = code.rfind(close)?;
+    let inner = &code[1..end];
+    let count = &code[end + 1..];
+    let repetition = if count.is_empty() {
+        1
+    } else {
+        count.parse().ok()?
+    };
+    let delimiter = match inner {
+        "^w" => enumeration("AnyWord"),
+        "^?" => enumeration("AnyCharacter"),
+        _ if inner.chars().count() == 1 && inner != "^" => {
+            ("Delimiter", "string", inner.to_string())
+        }
+        _ => return None,
+    };
+    Some((delimiter, repetition, inclusive))
+}
 
 const PACKAGING_NS: &str = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging";
 const MIMETYPE: &str = "application/vnd.adobe.indesign-idml-package";
@@ -563,39 +810,18 @@ impl Writer<'_> {
         let mut props = Vec::new();
         for &(id, name, kind, in_props) in TEXT_ATTRS {
             let Some(v) = attrs.get(id) else { continue };
-            let swatch = |u: u32| self.doc.swatches.get(&u).cloned();
-            let out: Option<(&'static str, String)> = match kind {
-                TextKind::Number => v.as_f64().map(|f| ("unit", num(f))),
-                TextKind::Percent => v.as_f64().map(|f| ("unit", num(round(f * 100.0)))),
-                TextKind::Scale(k) => v.as_f64().map(|f| ("unit", num(round(f * k)))),
-                TextKind::Bool(t) => v.as_u32().map(|u| ("boolean", (u == t).to_string())),
-                TextKind::Enum(map) => v
-                    .as_u32()
-                    .and_then(|u| map.iter().find(|(k, _)| *k == u))
-                    .map(|(_, n)| ("enumeration", n.to_string())),
-                TextKind::Swatch => v.as_u32().and_then(swatch).map(|s| ("object", s)),
-                TextKind::SwatchOrText => match v.as_u32() {
-                    Some(0) => Some(("string", "Text Color".into())),
-                    Some(u) => swatch(u).map(|s| ("object", s)),
-                    None => None,
-                },
-                TextKind::Font => v
-                    .as_u32()
-                    .and_then(|u| self.doc.fonts.get(&u).cloned())
-                    .map(|f| ("string", f)),
-                TextKind::FontStyle => v.as_string().map(|s| ("string", s)),
-                TextKind::Leading => v.as_f64().map(|f| {
-                    if f < 0.0 {
-                        ("enumeration", "Auto".into())
-                    } else {
-                        ("unit", num(f))
-                    }
-                }),
+            let out: Option<(&'static str, PropValue)> = match kind {
+                TextKind::TabList => tab_list(&raw_bytes(v)).map(|l| ("list", PropValue::List(l))),
+                TextKind::NestedStyles => self
+                    .nested_styles(&raw_bytes(v))
+                    .map(|l| ("list", PropValue::List(l))),
+                TextKind::BulletChar => bullet_char(&raw_bytes(v)).map(|a| ("", a)),
+                _ => self.text_value(kind, v).map(|(t, s)| (t, s.into())),
             };
-            if let Some((ty, text)) = out {
+            if let Some((ty, value)) = out {
                 if in_props {
-                    props.push((name, ty, text));
-                } else {
+                    props.push((name, ty, value));
+                } else if let PropValue::Text(text) = value {
                     plain.push((name, text));
                 }
             }
@@ -603,13 +829,134 @@ impl Writer<'_> {
         (plain, props)
     }
 
+    /// IDML type and text of a single-valued text attribute.
+    fn text_value(&self, kind: TextKind, v: &Value) -> Option<(&'static str, String)> {
+        let swatch = |u: u32| self.doc.swatches.get(&u).cloned();
+        match kind {
+            TextKind::Number => v
+                .as_f64()
+                .or(v.as_u32().map(f64::from))
+                .map(|f| ("unit", num(f))),
+            TextKind::Point => match raw_bytes(v).as_slice() {
+                b if b.len() == 16 => {
+                    let f = |o: usize| f64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+                    Some(("unit", nums(&[f(0), f(8)])))
+                }
+                _ => None,
+            },
+            TextKind::Percent => v.as_f64().map(|f| ("unit", num(round(f * 100.0)))),
+            TextKind::Scale(k) => v.as_f64().map(|f| ("unit", num(round(f * k)))),
+            TextKind::Bool(t) => v.as_u32().map(|u| ("boolean", (u == t).to_string())),
+            TextKind::Enum(map) => v
+                .as_u32()
+                .and_then(|u| map.iter().find(|(k, _)| *k == u))
+                .map(|(_, n)| ("enumeration", n.to_string())),
+            TextKind::Swatch => v.as_u32().and_then(swatch).map(|s| ("object", s)),
+            TextKind::SwatchOrText => match v.as_u32() {
+                Some(0) => Some(("string", "Text Color".into())),
+                Some(u) => swatch(u).map(|s| ("object", s)),
+                None => None,
+            },
+            TextKind::Font => v
+                .as_u32()
+                .and_then(|u| self.doc.fonts.get(&u).cloned())
+                .map(|f| ("string", f)),
+            TextKind::FontStyle => v.as_string().map(|s| ("string", s)),
+            TextKind::Leading => v.as_f64().map(|f| {
+                if f < 0.0 {
+                    ("enumeration", "Auto".into())
+                } else {
+                    ("unit", num(f))
+                }
+            }),
+            TextKind::Language => v
+                .as_u32()
+                .and_then(|u| self.doc.languages.get(&u))
+                .map(|l| ("string", format!("$ID/{l}"))),
+            TextKind::NumberOr(code, name, ty) => v.as_f64().map(|f| {
+                if f == code {
+                    ("enumeration", name.to_string())
+                } else {
+                    (ty, num(f))
+                }
+            }),
+            TextKind::CharacterStyle => v
+                .as_u32()
+                .map(|u| ("object", self.style_ref(Some(u).filter(|&u| u != 0), false))),
+            TextKind::FontOrNone => match v.as_u32() {
+                Some(0) => Some(("string", "$ID/".into())),
+                Some(u) => self.doc.fonts.get(&u).map(|f| ("string", f.clone())),
+                None => None,
+            },
+            TextKind::StringOrNothing => v.as_string().map(|s| {
+                if s.is_empty() {
+                    ("enumeration", "Nothing".into())
+                } else {
+                    ("string", s)
+                }
+            }),
+            TextKind::TabList | TextKind::NestedStyles | TextKind::BulletChar => None,
+        }
+    }
+
+    /// Records of an `AllNestedStyles` list. See `docs/format/attributes.md`.
+    fn nested_styles(&self, data: &[u8]) -> Option<Vec<Vec<Field>>> {
+        let mut c = Cursor::new(data);
+        let n = c.u32().ok()?;
+        let mut out = Vec::new();
+        for _ in 0..n {
+            let style = c.u32().ok()?;
+            let len = c.u32().ok()? as usize;
+            let code = if len == 0 {
+                String::new()
+            } else {
+                c.segments(len).ok()?
+            };
+            let (delimiter, repetition, inclusive) = nested_delimiter(&code)?;
+            out.push(vec![
+                (
+                    "AppliedCharacterStyle",
+                    "object",
+                    self.style_ref(Some(style).filter(|&u| u != 0), false),
+                ),
+                delimiter,
+                ("Repetition", "long", repetition.to_string()),
+                ("Inclusive", "boolean", inclusive.to_string()),
+            ]);
+        }
+        (c.remaining() == 0).then_some(out)
+    }
+
     fn properties(x: &mut Xml, props: &[Property]) {
         if props.is_empty() {
             return;
         }
         x.start("Properties");
-        for (name, ty, text) in props {
-            x.start(name).attr("type", *ty).text(text).end();
+        for (name, ty, value) in props {
+            x.start(name);
+            if !ty.is_empty() {
+                x.attr("type", *ty);
+            }
+            match value {
+                PropValue::Attributes(attrs) => {
+                    for (k, v) in attrs {
+                        x.attr(k, v);
+                    }
+                }
+                PropValue::Text(text) => {
+                    x.text(text);
+                }
+                PropValue::List(items) => {
+                    for item in items {
+                        x.start("ListItem").attr("type", "record");
+                        for (field, ty, text) in item {
+                            x.start(field).attr("type", *ty).text(text).end();
+                        }
+                        x.end();
+                    }
+                }
+            }
+            x.end();
         }
         x.end();
     }
@@ -734,12 +1081,12 @@ impl Writer<'_> {
                 };
                 // The root "[None]" is written as a string.
                 let prop = if base.builtin && base.name == "[None]" {
-                    ("BasedOn", "string", base_name)
+                    ("BasedOn", "string", base_name.into())
                 } else {
                     (
                         "BasedOn",
                         "object",
-                        format!("ObjectStyle/{}", self_name(&base_name)),
+                        format!("ObjectStyle/{}", self_name(&base_name)).into(),
                     )
                 };
                 Self::properties(&mut x, &[prop]);
@@ -795,14 +1142,14 @@ impl Writer<'_> {
             // The root "[No ... style]" is written as a string.
             let root = base.builtin && base.name.starts_with("[No ");
             if root {
-                props.insert(0, ("BasedOn", "string", style_name(base)));
+                props.insert(0, ("BasedOn", "string", style_name(base).into()));
             } else {
                 props.insert(
                     0,
                     (
                         "BasedOn",
                         "object",
-                        self.style_ref(Some(base.uid), paragraph),
+                        self.style_ref(Some(base.uid), paragraph).into(),
                     ),
                 );
             }
@@ -1388,5 +1735,54 @@ mod tests {
             x.finish()
                 .ends_with("\n<Contents><![CDATA[ab]]><![CDATA[cd]]><![CDATA[e]]></Contents>")
         );
+    }
+
+    #[test]
+    fn decodes_tab_stops() {
+        // Two stops: 12 pt left aligned, 237.5 pt right aligned with "." leader.
+        let mut b = 2u16.to_le_bytes().to_vec();
+        b.extend(12f64.to_le_bytes());
+        b.extend([0, 0, 0, 0]);
+        b.extend(237.5f64.to_le_bytes());
+        b.extend([2, 0, 1, 0, b'.', 0]);
+        let stops = tab_list(&b).unwrap();
+        assert_eq!(stops.len(), 2);
+        assert_eq!(stops[0][0].2, "LeftAlign");
+        assert_eq!(stops[0][3].2, "12");
+        assert_eq!(stops[1][0].2, "RightAlign");
+        assert_eq!(stops[1][2].2, ".");
+        assert_eq!(stops[1][3].2, "237.5");
+        assert_eq!(tab_list(&[0, 0]).unwrap().len(), 0);
+        // Unknown alignment code.
+        let mut b = 1u16.to_le_bytes().to_vec();
+        b.extend(12f64.to_le_bytes());
+        b.extend([1, 0, 0, 0]);
+        assert!(tab_list(&b).is_none());
+    }
+
+    #[test]
+    fn decodes_nested_style_delimiters() {
+        let d = |c| nested_delimiter(c).map(|(f, r, i)| (f.1, f.2, r, i));
+        assert_eq!(d("^c"), Some(("enumeration", "Dropcap".into(), 1, true)));
+        assert_eq!(d("[.]"), Some(("string", ".".into(), 1, false)));
+        assert_eq!(d("(:)"), Some(("string", ":".into(), 1, true)));
+        assert_eq!(d("(^w)5"), Some(("enumeration", "AnyWord".into(), 5, true)));
+        assert_eq!(
+            d("(^?)"),
+            Some(("enumeration", "AnyCharacter".into(), 1, true))
+        );
+        assert_eq!(d("(^x)"), None);
+        assert_eq!(d("^t"), None);
+    }
+
+    #[test]
+    fn decodes_bullet_char() {
+        let b = [0, 0, 0, 0, 0x22, 0x20, 0, 0];
+        let Some(PropValue::Attributes(a)) = bullet_char(&b) else {
+            panic!("not decoded");
+        };
+        assert_eq!(a[0].1, "UnicodeOnly");
+        assert_eq!(a[1].1, "8226");
+        assert!(bullet_char(&[3, 0, 0, 0, 0x22, 0x20, 0, 0]).is_none());
     }
 }
