@@ -28,6 +28,10 @@ pub mod class {
     pub const STORY: u32 = 0x201;
     pub const STYLE: u32 = 0x205;
     pub const SECTION: u32 = 0x4C01;
+    pub const IMAGE: u32 = 0x1702;
+    pub const PDF: u32 = 0x2501;
+    pub const EPS: u32 = 0x6601;
+    pub const SVG: u32 = 0x6639;
     pub const FONT_FAMILY: u32 = 0x3E03;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
@@ -63,6 +67,10 @@ pub mod chunk {
     pub const STYLE_ATTRS: u32 = 0x23F;
     pub const FONT_FAMILY: u32 = 0x3E05;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
+    pub const GRAPHIC_BOUNDS: u32 = 0x1633;
+    pub const GRAPHIC_LINK: u32 = 0x8CBC;
+    pub const LINK_INFO: u32 = 0x8C9B;
+    pub const LINK_RESOURCE_URI: u32 = 0x8C92;
     pub const SWATCH_NAME: u32 = 0x1F30;
 }
 
@@ -148,6 +156,8 @@ pub enum ItemKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PageItem {
     pub uid: u32,
+    /// Placed graphics (images, PDF, EPS, SVG) inside a frame.
+    pub graphics: Vec<Graphic>,
     pub kind: ItemKind,
     pub transform: Matrix,
     pub paths: Vec<Path>,
@@ -156,6 +166,31 @@ pub struct PageItem {
     /// Local formatting (fill, stroke, corners, ...).
     pub attrs: Attrs,
     pub children: Vec<PageItem>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphicKind {
+    Image,
+    Pdf,
+    Eps,
+    Svg,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Link {
+    pub uid: u32,
+    /// `LinkResourceURI`, for example `file:/Users/me/image.jpg`.
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Graphic {
+    pub uid: u32,
+    pub kind: GraphicKind,
+    pub transform: Matrix,
+    /// Left, top, right, bottom in the graphic's own coordinates.
+    pub bounds: [f64; 4],
+    pub link: Option<Link>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -488,9 +523,12 @@ impl<'a> Reader<'a> {
         };
         let child_uids = self.children(uid, chunk::ITEM_HIERARCHY)?;
         let mut children = Vec::new();
+        let mut graphics = Vec::new();
         let mut text_column = None;
         for &child in &child_uids {
-            if self.class(child) == Some(class::MULTI_COLUMN_FRAME) {
+            if let Some(g) = self.graphic(child)? {
+                graphics.push(g);
+            } else if self.class(child) == Some(class::MULTI_COLUMN_FRAME) {
                 text_column = self
                     .children(child, chunk::ITEM_HIERARCHY)?
                     .into_iter()
@@ -513,6 +551,7 @@ impl<'a> Reader<'a> {
         };
         Ok(Some(PageItem {
             uid,
+            graphics,
             kind,
             transform,
             paths,
@@ -520,6 +559,62 @@ impl<'a> Reader<'a> {
             attrs,
             children,
         }))
+    }
+
+    fn graphic(&self, uid: u32) -> Result<Option<Graphic>, Error> {
+        let kind = match self.class(uid) {
+            Some(class::IMAGE) => GraphicKind::Image,
+            Some(class::PDF) => GraphicKind::Pdf,
+            Some(class::EPS) => GraphicKind::Eps,
+            Some(class::SVG) => GraphicKind::Svg,
+            _ => return Ok(None),
+        };
+        let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
+            Some(d) => Matrix::read(&mut Cursor::new(&d))?,
+            None => Matrix::IDENTITY,
+        };
+        let bounds = match self.chunk(uid, chunk::GRAPHIC_BOUNDS)? {
+            Some(d) => {
+                let mut c = Cursor::new(&d);
+                [c.f64()?, c.f64()?, c.f64()?, c.f64()?]
+            }
+            None => [0.0; 4],
+        };
+        let link = match self.chunk(uid, chunk::GRAPHIC_LINK)? {
+            Some(d) if d.len() >= 12 => self.link(Cursor::new(&d[8..]).u32()?)?,
+            _ => None,
+        };
+        Ok(Some(Graphic {
+            uid,
+            kind,
+            transform,
+            bounds,
+            link,
+        }))
+    }
+
+    /// A link and the URI of its resource.
+    fn link(&self, uid: u32) -> Result<Option<Link>, Error> {
+        if uid == 0 || self.db.object(uid)?.is_none() {
+            return Ok(None);
+        }
+        let Some(info) = self.chunk(uid, chunk::LINK_INFO)? else {
+            return Ok(None);
+        };
+        if info.len() < 12 {
+            return Ok(None);
+        }
+        let resource = Cursor::new(&info[8..]).u32()?;
+        let uri = match self.chunk(resource, chunk::LINK_RESOURCE_URI)? {
+            Some(d) if d.len() >= 5 => {
+                let mut c = Cursor::new(&d);
+                c.u8()?;
+                let n = c.u32()? as usize;
+                String::from_utf8_lossy(c.bytes(n.min(c.remaining()))?).into_owned()
+            }
+            _ => String::new(),
+        };
+        Ok(Some(Link { uid, uri }))
     }
 
     /// Story and threading of the text frame owning `column`.

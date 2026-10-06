@@ -6,7 +6,8 @@ pub mod zip;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    Attrs, Document, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story, Style,
+    Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story,
+    Style,
 };
 
 #[derive(Clone, Copy)]
@@ -483,6 +484,41 @@ impl Writer<'_> {
         x.end().end();
     }
 
+    fn placed_graphic(x: &mut Xml, g: &Graphic) {
+        let tag = match g.kind {
+            GraphicKind::Image => "Image",
+            GraphicKind::Pdf => "PDF",
+            GraphicKind::Eps => "EPS",
+            GraphicKind::Svg => "SVG",
+        };
+        let [left, top, right, bottom] = g.bounds;
+        x.start(tag)
+            .attr("Self", uref(Some(g.uid)))
+            .attr("ItemTransform", matrix(&g.transform));
+        x.start("Properties");
+        x.empty(
+            "GraphicBounds",
+            &[
+                ("Left", num(left)),
+                ("Top", num(top)),
+                ("Right", num(right)),
+                ("Bottom", num(bottom)),
+            ],
+        );
+        x.end();
+        if let Some(link) = &g.link {
+            x.empty(
+                "Link",
+                &[
+                    ("Self", uref(Some(link.uid))),
+                    ("LinkResourceURI", link.uri.clone()),
+                    ("StoredState", "Normal".into()),
+                ],
+            );
+        }
+        x.end();
+    }
+
     fn page_item(&self, x: &mut Xml, item: &PageItem) {
         let tag = match &item.kind {
             ItemKind::TextFrame { .. } => "TextFrame",
@@ -503,6 +539,13 @@ impl Writer<'_> {
                 .attr("PreviousTextFrame", uref(*previous))
                 .attr("NextTextFrame", uref(*next))
                 .attr("ContentType", "TextType");
+        } else if let ItemKind::Shape(_) = item.kind {
+            let content = if item.graphics.is_empty() {
+                "Unassigned"
+            } else {
+                "GraphicType"
+            };
+            x.attr("ContentType", content);
         }
         self.item_attrs(x, &item.attrs);
         if let Some(layer) = item.layer {
@@ -512,6 +555,9 @@ impl Writer<'_> {
         Self::path_geometry(x, &item.paths);
         for child in &item.children {
             self.page_item(x, child);
+        }
+        for g in &item.graphics {
+            Self::placed_graphic(x, g);
         }
         x.end();
     }

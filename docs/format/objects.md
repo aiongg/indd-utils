@@ -114,6 +114,27 @@ frame list (class 0x228). Its chunk 0x205: u32 story, then a UID list of
 the columns of all threaded frames in order, which gives
 `PreviousTextFrame` and `NextTextFrame`.
 
+## Placed graphics
+
+Images (0x1702), PDF (0x2501), EPS (0x6601) and SVG (0x6639) are children
+of a frame (in its 0x15B list) and share these chunks:
+
+| Chunk | Contents |
+|---|---|
+| 0x151 | Matrix: `ItemTransform` (437/437 match) |
+| 0x1633 | Four f64: `GraphicBounds` left, top, right, bottom |
+| 0x8CBC | u32, u32, u32 link UID |
+
+**Links (0x8C42).** Chunk 0x8C9B: u32 0, u32, u32 link resource UID, u32,
+u32 graphic UID, fields, then the import stamp as a u32 length and text
+segments, then two 8-byte timestamps. **Link resources (0x8C41)**: chunk
+0x8C92 is a flag byte, u32 length, then the URI as bytes
+(`LinkResourceURI`; 335/340 match, the rest were relinked after export).
+
+Not yet identified: what marks a link as embedded (`StoredState=
+"Embedded"`, 12 of 340 links). The second u32 of the resource's chunk
+0x15A09 is 0 for all embedded links but also for 23 normal ones.
+
 ## Stories (0x201)
 
 Chunk 0x223: u32 length, u16, u32 first strand, UID list of more strands,
