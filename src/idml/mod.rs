@@ -705,9 +705,11 @@ impl Writer<'_> {
         self.package_root(&mut x, kind);
         x.start(kind)
             .attr("Self", uref(Some(s.uid)))
-            .attr("PageCount", s.pages.len().to_string())
-            .attr("BindingLocation", s.binding_location.to_string())
-            .attr("ItemTransform", matrix(&s.transform));
+            .attr("PageCount", s.pages.len().to_string());
+        if !master {
+            x.attr("BindingLocation", s.binding_location.to_string());
+        }
+        x.attr("ItemTransform", matrix(&s.transform));
         let (prefix, base) = s
             .master_name
             .clone()

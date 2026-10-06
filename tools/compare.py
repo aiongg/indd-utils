@@ -8,7 +8,9 @@ we produce (matched by Self), and per attribute how often our value
 matches. Also reports story text agreement.
 
 Usage: python3 -I tools/compare.py [--limit N] [--detail TAG] [--file SUBSTR]
-Run from the repository root after `cargo build --release`.
+                                   [--schemas DIR --jing DIR]
+Run from the repository root after `cargo build --release`. With --schemas
+and --jing, also validates every output with tools/validate.sh.
 """
 
 import argparse
@@ -127,6 +129,8 @@ def main():
     ap.add_argument("--detail", help="print attribute table for this tag")
     ap.add_argument("--file", help="only pairs whose path contains this")
     ap.add_argument("--show", type=int, default=0, help="show N mismatches per attribute")
+    ap.add_argument("--schemas", help="IDML RelaxNG schema directory (validate output)")
+    ap.add_argument("--jing", help="directory with jing.jar, isorelax.jar, saxon.jar")
     args = ap.parse_args()
 
     found = Counter()
@@ -135,6 +139,7 @@ def main():
     examples = defaultdict(list)
     story_ok = Counter()
     failures = []
+    invalid = []
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out.idml"
         for indd, idml in pairs(args.limit, args.file):
@@ -142,6 +147,12 @@ def main():
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
+            if args.schemas and args.jing:
+                v = subprocess.run(
+                    [ROOT / "tools" / "validate.sh", out, args.schemas, args.jing],
+                    capture_output=True, text=True)
+                if v.returncode != 0:
+                    invalid.append((indd.name, v.stdout.strip().splitlines()[:3]))
             ref_el, ref_st, ref_rg = load(idml)
             our_el, our_st, our_rg = load(out)
             for (tag, s), el in ref_el.items():
@@ -194,6 +205,10 @@ def main():
     print(f"conversion failures: {len(failures)}")
     for name, err in failures[:10]:
         print(f"  {name}: {err}")
+    if args.schemas:
+        print(f"schema validation failures: {len(invalid)}")
+        for name, errs in invalid[:10]:
+            print(f"  {name}: {errs}")
     st = sum(story_ok.values())
     print(f"story text: {story_ok['ok']}/{st} exact, {story_ok['wrong']} differ, {story_ok['missing']} missing")
     print("\nelements (produced / in reference):")
