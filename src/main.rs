@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 const USAGE: &str = "usage:
   indd info <file.indd>...         header, master page and container summary
-  indd objects <file.indd>         one line per object: UID, length, first bytes
+  indd objects <file.indd>         one line per object: UID, class, length, first bytes
   indd object <file.indd> <uid>    write one object's bytes to stdout";
 
 fn main() -> ExitCode {
@@ -77,7 +77,8 @@ fn objects(path: &str) -> CliResult {
     for uid in db.uids() {
         let data = db.object(uid)?.unwrap_or_default();
         let head: Vec<String> = data.iter().take(24).map(|b| format!("{b:02x}")).collect();
-        writeln!(out, "{uid}\t{}\t{}", data.len(), head.join(" "))?;
+        let class = db.class_of(uid).map_or("-".into(), |c| format!("{c:#x}"));
+        writeln!(out, "{uid}\t{class}\t{}\t{}", data.len(), head.join(" "))?;
     }
     Ok(())
 }

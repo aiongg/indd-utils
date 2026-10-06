@@ -28,8 +28,10 @@ const SLOT_FOOTER: usize = 0xFDC;
 
 // Fields of the active master page.
 const MASTER_LOGICAL_DIR: usize = 0x3A8;
-const MASTER_TREE_ROOT: usize = 0xB7C;
-const MASTER_TREE_ENTRIES: usize = 0xB88;
+/// Three u32 tree roots (logical pages): objects, classes, unclassed UIDs.
+const MASTER_TREE_ROOTS: usize = 0xB7C;
+/// Three u64 entry counts, in the same order as the roots.
+const MASTER_TREE_COUNTS: usize = 0xB88;
 
 /// Largest segment stored on a data page.
 pub const SEGMENT_MAX: u32 = 0xF70;
@@ -70,6 +72,10 @@ pub struct Database<'a> {
     bytes: &'a [u8],
     logical: BTreeMap<u32, u32>,
     entries: Vec<Entry>,
+    /// (UID, class ID), sorted by UID.
+    classes: Vec<(u32, u32)>,
+    /// UIDs listed in the third tree. They have no class entry.
+    unclassed: Vec<u32>,
 }
 
 fn corrupt(msg: impl Into<String>) -> Error {
@@ -86,17 +92,26 @@ impl<'a> Database<'a> {
             bytes: container.bytes,
             logical: BTreeMap::new(),
             entries: Vec::new(),
+            classes: Vec::new(),
+            unclassed: Vec::new(),
         };
         db.read_logical_table(db.u32(master + MASTER_LOGICAL_DIR)?)?;
-        let root = db.u32(master + MASTER_TREE_ROOT)?;
-        let expected = db.u32(master + MASTER_TREE_ENTRIES)? as usize;
-        db.walk(root, 0)?;
-        if db.entries.len() != expected {
-            return Err(corrupt(format!(
-                "object tree has {} entries, master page says {expected}",
-                db.entries.len()
-            )));
+        let mut trees: [Vec<Entry>; 3] = Default::default();
+        for (i, tree) in trees.iter_mut().enumerate() {
+            let root = db.u32(master + MASTER_TREE_ROOTS + 4 * i)?;
+            let expected = db.u32(master + MASTER_TREE_COUNTS + 8 * i)? as usize;
+            db.walk(root, 0, tree)?;
+            if tree.len() != expected {
+                return Err(corrupt(format!(
+                    "tree {i} has {} entries, master page says {expected}",
+                    tree.len()
+                )));
+            }
         }
+        let [entries, classes, unclassed] = trees;
+        db.entries = entries;
+        db.classes = classes.iter().map(|e| (e.uid, e.length)).collect();
+        db.unclassed = unclassed.iter().map(|e| e.uid).collect();
         Ok(db)
     }
 
@@ -155,7 +170,7 @@ impl<'a> Database<'a> {
             .ok_or_else(|| corrupt(format!("logical page {logical} is not mapped")))
     }
 
-    fn walk(&mut self, logical: u32, depth: usize) -> Result<(), Error> {
+    fn walk(&self, logical: u32, depth: usize, out: &mut Vec<Entry>) -> Result<(), Error> {
         if depth > 32 {
             return Err(corrupt("object tree is too deep"));
         }
@@ -166,7 +181,7 @@ impl<'a> Database<'a> {
             page_type::TREE_LEAF => {
                 for i in 0..count {
                     let o = base + 4 + 16 * i;
-                    self.entries.push(Entry {
+                    out.push(Entry {
                         segment: self.u32(o)?,
                         uid: self.u32(o + 4)?,
                         length: self.u32(o + 8)?,
@@ -181,11 +196,11 @@ impl<'a> Database<'a> {
                     children.push(self.u32(base + 4 + 12 * i)?);
                 }
                 for child in children {
-                    self.walk(child, depth + 1)?;
+                    self.walk(child, depth + 1, out)?;
                 }
             }
             other => {
-                return Err(corrupt(format!("object tree page {page} has type {other}")));
+                return Err(corrupt(format!("tree page {page} has type {other}")));
             }
         }
         Ok(())
@@ -194,6 +209,24 @@ impl<'a> Database<'a> {
     /// Leaf entries in (UID, segment) order.
     pub fn entries(&self) -> &[Entry] {
         &self.entries
+    }
+
+    /// Class ID of object `uid`.
+    pub fn class_of(&self, uid: u32) -> Option<u32> {
+        self.classes
+            .binary_search_by_key(&uid, |&(u, _)| u)
+            .ok()
+            .map(|i| self.classes[i].1)
+    }
+
+    /// All (UID, class ID) pairs, sorted by UID.
+    pub fn classes(&self) -> &[(u32, u32)] {
+        &self.classes
+    }
+
+    /// UIDs that have no class (listed in the third tree).
+    pub fn unclassed(&self) -> &[u32] {
+        &self.unclassed
     }
 
     fn read_slotted(

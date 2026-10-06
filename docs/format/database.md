@@ -50,9 +50,14 @@ other members.
 |---|---|
 | 0x160 | Physical page of the allocation directory (type 2) |
 | 0x3A8 | Physical page of the logical page directory (type 4) |
-| 0xB7C | Logical page of the object tree root |
-| 0xB80 | Object tree depth (2 in the blank document: root plus leaves) |
-| 0xB88 | Number of object tree leaf entries |
+| 0xB7C | Root (logical page) of the object tree |
+| 0xB80 | Root of the class tree |
+| 0xB84 | Root of the unclassed-UID tree |
+| 0xB88 | u64: entries in the object tree |
+| 0xB90 | u64: entries in the class tree |
+| 0xB98 | u64: entries in the unclassed-UID tree |
+| 0x130 | Number of object segments on data pages (185 in the blank document, equal to the count of such leaf entries) |
+| 0x134 | Total bytes of those segments (≈ 3940 × the count above in 8 sampled files) |
 
 Other fields at 0x100–0x3A8 and 0xB78–0xBAC are not yet identified. 0xBAC
 holds the document's `xmp.did:` identifier as a NUL-terminated string.
@@ -113,6 +118,20 @@ order.
 - **Length field ≥ 0x10000:** the segment is a record in a slotted page.
   The high 16 bits are the slot number, the low 16 bits the byte count, and
   *page* is a logical page number.
+
+## Class tree and unclassed-UID tree
+
+Two more B+ trees use the same page types and leaf layout as the object
+tree. In both, the segment and page fields are 0.
+
+- **Class tree:** the length field holds the object's class ID. Sorted by
+  UID, one entry per UID. In the blank document, UID 1 has class 0xE01.
+- **Unclassed-UID tree:** lists UIDs with no class entry; the length field
+  is 0. Empty in 288 of 351 files.
+
+In all 351 files, every object with data is in exactly one of the two
+trees. Some UIDs in either tree have no data: 215 class-tree entries in
+total, and unclassed entries in 34 files.
 
 ## Slotted pages (type 9)
 
