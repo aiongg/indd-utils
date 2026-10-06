@@ -933,8 +933,8 @@ impl Writer<'_> {
             },
             TextKind::Font => v
                 .as_u32()
-                .and_then(|u| self.doc.fonts.get(&u).cloned())
-                .map(|f| ("string", f)),
+                .and_then(|u| self.doc.fonts.get(&u))
+                .map(|f| ("string", f.name.clone())),
             TextKind::FontStyle => v.as_string().map(|s| ("string", s)),
             TextKind::Leading => v.as_f64().map(|f| {
                 if f < 0.0 {
@@ -959,7 +959,7 @@ impl Writer<'_> {
                 .map(|u| ("object", self.style_ref(Some(u).filter(|&u| u != 0), false))),
             TextKind::FontOrNone => match v.as_u32() {
                 Some(0) => Some(("string", "$ID/".into())),
-                Some(u) => self.doc.fonts.get(&u).map(|f| ("string", f.clone())),
+                Some(u) => self.doc.fonts.get(&u).map(|f| ("string", f.name.clone())),
                 None => None,
             },
             TextKind::StringOrNothing => v.as_string().map(|s| {
@@ -1119,9 +1119,41 @@ impl Writer<'_> {
         }
     }
 
+    /// Font families and their fonts. See docs/format/fonts.md.
     fn fonts(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Fonts");
+        for f in self.doc.fonts.values() {
+            let id = format!("di{:x}", f.uid);
+            x.start("FontFamily")
+                .attr("Self", &id)
+                .attr("Name", &f.name);
+            for font in &f.fonts {
+                let name = format!("{} {}", f.name, font.style);
+                x.start("Font")
+                    .attr("Self", format!("{id}Fontn{name}"))
+                    .attr("FontFamily", &f.name)
+                    .attr("Name", &name)
+                    .attr("PostScriptName", &font.postscript_name)
+                    .attr("FontStyleName", &font.style);
+                if let Some(t) = font.type_name() {
+                    x.attr("FontType", t);
+                }
+                x.attr("WritingScript", f.writing_script.to_string())
+                    .attr("FullName", &font.full_name)
+                    .attr("FullNameNative", &font.full_name_native)
+                    .attr("FontStyleNameNative", &font.style_native)
+                    // `$ID/` in every Font of the corpus IDML files.
+                    .attr("PlatformName", "$ID/")
+                    .attr("Version", &font.version);
+                // IDML from InDesign 7 has no TypekitID.
+                if self.doc.version.major >= 12 {
+                    x.attr("TypekitID", &font.typekit_id);
+                }
+                x.end();
+            }
+            x.end();
+        }
         x.end();
         x.finish()
     }

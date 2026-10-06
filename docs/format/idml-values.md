@@ -95,6 +95,11 @@ All 240 corpus IDML files list the same 18 `StrokeStyle` elements in
 writes the same list, so every `StrokeType` it writes refers to an
 element in the package.
 
+## Font platform name
+
+`PlatformName` is `$ID/` in all 4,464 `Font` elements of the corpus IDML
+files (`fonts.md`). The converter writes that value on every font.
+
 ## Not yet written
 
 `Resources/Preferences.xml` has more elements that every corpus IDML has

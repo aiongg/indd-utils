@@ -3,12 +3,14 @@
 
 pub mod attrs;
 pub mod color;
+pub mod font;
 pub mod table;
 
 use std::collections::{BTreeMap, HashMap};
 
 pub use attrs::{Attrs, Value};
 pub use color::{Color, Gradient};
+pub use font::{Font, FontFamily};
 pub use table::{Cell, Table};
 
 use crate::object::{Cursor, Object};
@@ -80,7 +82,6 @@ pub mod chunk {
     pub const STYLE_INFO: u32 = 0x230;
     pub const ITEM_ATTRS: u32 = 0x6E03;
     pub const STYLE_ATTRS: u32 = 0x23F;
-    pub const FONT_FAMILY: u32 = 0x3E05;
     pub const LANGUAGE_NAME: u32 = 0x2D0F;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
     pub const MASTER_NAME: u32 = 0x1402;
@@ -351,8 +352,8 @@ pub struct Document {
     pub gradients: Vec<Gradient>,
     /// IDML reference (`Color/...`, `Swatch/None`) for each swatch UID.
     pub swatches: BTreeMap<u32, String>,
-    /// Font family name for each font family UID.
-    pub fonts: BTreeMap<u32, String>,
+    /// Font families by UID.
+    pub fonts: BTreeMap<u32, FontFamily>,
     /// Language name (IDML `AppliedLanguage` without `$ID/`) for each
     /// language UID.
     pub languages: BTreeMap<u32, String>,
@@ -617,11 +618,27 @@ impl<'a> Reader<'a> {
                         gradients.push(g);
                     }
                 }
-                class::FONT_FAMILY => {
-                    if let Some(d) = self.chunk(uid, chunk::FONT_FAMILY)? {
-                        fonts.insert(uid, find_string(&d, 0)?);
+                class::FONT_FAMILY => match FontFamily::read(uid, &*self.object(uid)?) {
+                    Ok(Some(f)) => {
+                        fonts.insert(uid, f);
                     }
-                }
+                    Ok(None) => {}
+                    // Keep the name, which text formatting refers to.
+                    Err(e) => {
+                        self.warn(format!("font family {uid}: fonts left out: {e}"));
+                        if let Some(d) = self.chunk(uid, font::chunk::FAMILY)? {
+                            fonts.insert(
+                                uid,
+                                FontFamily {
+                                    uid,
+                                    name: find_string(&d, 0)?,
+                                    fonts: Vec::new(),
+                                    writing_script: 0,
+                                },
+                            );
+                        }
+                    }
+                },
                 class::LANGUAGE => {
                     if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
                         && d.len() > 1

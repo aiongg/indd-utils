@@ -408,8 +408,5 @@ styles:
 `OTFFigureStyle` code 3 and `ParagraphBreakType` code 2 occur only in
 a sample without IDML; the converter leaves them out.
 
-**Font family names.** Font families are class 0x3E03; chunk 0x3E05 holds
-a flag byte, u16, then the family name as an in-object string. IDML
-`Fonts.xml` names a family `di<UID hex>`. In 7 of 362 families IDML adds a
-technology suffix (`Montserrat (OTF)`, `Times (TT)`) that the INDD data
-does not determine; the converter writes the plain name.
+**Font family names.** `AppliedFont` and `BulletsFont` name a font family
+(class 0x3E03), and IDML writes the family's name. See `fonts.md`.
