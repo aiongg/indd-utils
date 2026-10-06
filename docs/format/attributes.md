@@ -235,16 +235,15 @@ stored as text segments (see `objects.md`). The code gives `Delimiter`,
 The public pair has only single-character literals and repetition 1. The
 last three rows rest on a sample and its print PDF:
 
-- [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  [detail of a non-public sample removed]
-  number.
+- A sample has nested items with `(^?)` and with `(^w)` followed by a
+  number, the latter applying a character style with Capitalization
+  code 3 (`CapToSmallCap`, see below).
 - In the PDF, capitals in the first words of paragraphs in those styles
   are set at small-cap height (ink height measured on the rendered
   page), and capitals later in the same lines at full height. Small
   capitals reach at most one word past the number, and capitals a few
-  words further on are at full height, so the number is the repetition. Of the counting delimiters in the IDML
-  schema, only `AnyWord` gives a stretch of several words: `AnyCharacter`,
+  words further on are at full height, so the number is the repetition.
+  Of the counting delimiters in the IDML schema, only `AnyWord` gives a stretch of several words: `AnyCharacter`,
   `Letters` and `Digits` would end within the first word, and `Sentence`
   would run past sentence ends, which the PDF does not show.
 - A paragraph-level override has `(^?)` followed by a number *n*, then
