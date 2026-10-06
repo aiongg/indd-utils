@@ -14,6 +14,8 @@ pub mod ty {
     pub const ENUM: u32 = 0x6E65;
     pub const POINT: u32 = 0x6E69;
     pub const REF: u32 = 0x117;
+    /// A built-in item code, the second value after a reference of 0.
+    pub const CODE: u32 = 0x6E64;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +25,9 @@ pub enum Value {
     Enum(u16),
     Ref(u32),
     Point(f64, f64),
+    /// A reference followed by a built-in code (value type 0x6E64), as in
+    /// a stroke type: the reference is 0 for a built-in style.
+    RefOrCode(u32, u32),
     Other(u32, Vec<u8>),
 }
 
@@ -91,12 +96,17 @@ impl Attrs {
             let mut p = Cursor::new(c.bytes(size)?);
             let count = p.u16()?;
             let mut first = None;
-            for _ in 0..count {
+            for i in 0..count {
                 let t = p.u32()?;
                 let len = p.u16()? as usize;
                 let data = p.bytes(len)?;
-                if first.is_none() {
-                    first = Some(decode(t, data));
+                match (i, &first) {
+                    (0, _) => first = Some(decode(t, data)),
+                    (1, Some(Value::Ref(r))) if t == ty::CODE && len == 4 => {
+                        let code = u32::from_le_bytes(data.try_into().unwrap());
+                        first = Some(Value::RefOrCode(*r, code));
+                    }
+                    _ => {}
                 }
             }
             if let Some(v) = first {
@@ -150,5 +160,24 @@ mod tests {
         d.extend_from_slice(&[0; 6]);
         let a = Attrs::parse(&d).unwrap();
         assert_eq!(a.get(0x6E65), Some(&Value::Double(0.25)));
+    }
+
+    #[test]
+    fn parses_a_stroke_type_code() {
+        // 0x6E6E: reference 0, code 0x5A39, then the 6-byte trailer value.
+        let mut d = 1u32.to_le_bytes().to_vec();
+        d.extend_from_slice(&0x6E6Eu32.to_le_bytes());
+        d.extend_from_slice(&34u16.to_le_bytes());
+        d.extend_from_slice(&3u16.to_le_bytes());
+        for (t, v) in [(ty::REF, 0u32), (ty::CODE, 0x5A39)] {
+            d.extend_from_slice(&t.to_le_bytes());
+            d.extend_from_slice(&4u16.to_le_bytes());
+            d.extend_from_slice(&v.to_le_bytes());
+        }
+        d.extend_from_slice(&0x6E63u32.to_le_bytes());
+        d.extend_from_slice(&6u16.to_le_bytes());
+        d.extend_from_slice(&[0; 6]);
+        let a = Attrs::parse(&d).unwrap();
+        assert_eq!(a.get(0x6E6E), Some(&Value::RefOrCode(0, 0x5A39)));
     }
 }

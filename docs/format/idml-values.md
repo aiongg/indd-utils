@@ -87,6 +87,14 @@ attributes: `Name="$ID/[Default]"`,
 `ContinueNumbersAcrossDocuments="false"`. The converter writes it after
 `idPkg:Styles`, where the IDML schema puts it.
 
+## Built-in stroke styles
+
+All 240 corpus IDML files list the same 18 `StrokeStyle` elements in
+`Resources/Graphic.xml`, in the same order, each with only `Self` and
+`Name` (`StrokeStyle/$ID/Solid`, `$ID/Solid`, and so on). The converter
+writes the same list, so every `StrokeType` it writes refers to an
+element in the package.
+
 ## Not yet written
 
 `Resources/Preferences.xml` has more elements that every corpus IDML has

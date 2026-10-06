@@ -18,7 +18,42 @@ enum AttrKind {
     Swatch,
     Point,
     Enum(&'static [(u32, &'static str)]),
+    /// A built-in style named by its code (reference 0), written as
+    /// `<prefix><name>`.
+    Builtin(&'static str, &'static [(u32, &'static str)]),
 }
+
+/// Codes of built-in stroke styles. See `docs/format/attributes.md`.
+const STROKE_TYPES: &[(u32, &str)] = &[
+    (0x5A29, "Solid"),
+    (0x5A38, "Canned Dashed 3x2"),
+    (0x5A39, "Canned Dotted"),
+    (0xB004, "ThinThin"),
+    (0xB01A, "Triple_Stroke"),
+];
+
+/// The stroke styles every corpus IDML lists in `Graphic.xml`, in order.
+/// See `docs/format/idml-values.md`.
+const BUILTIN_STROKE_STYLES: &[&str] = &[
+    "Triple_Stroke",
+    "ThickThinThick",
+    "ThinThickThin",
+    "ThickThick",
+    "ThickThin",
+    "ThinThick",
+    "ThinThin",
+    "Japanese Dots",
+    "White Diamond",
+    "Left Slant Hash",
+    "Right Slant Hash",
+    "Straight Hash",
+    "Wavy",
+    "Canned Dotted",
+    "Canned Dashed 3x2",
+    "Canned Dashed 4x4",
+    "Dashed",
+    "Solid",
+];
 
 #[derive(Clone, Copy)]
 enum TextKind {
@@ -306,6 +341,16 @@ const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
     (0x5520, "GradientFillStart", AttrKind::Point),
     (0x5525, "GradientStrokeLength", AttrKind::Number),
     (0x5526, "GradientStrokeStart", AttrKind::Point),
+    (
+        0x6E6E,
+        "StrokeType",
+        AttrKind::Builtin("StrokeStyle/$ID/", STROKE_TYPES),
+    ),
+    (
+        0x6E8C,
+        "StrokeAlignment",
+        AttrKind::Enum(&[(0, "CenterAlignment"), (1, "InsideAlignment")]),
+    ),
 ];
 use values::Node;
 use xml::Xml;
@@ -321,6 +366,7 @@ fn raw_bytes(v: &Value) -> Vec<u8> {
         Value::Enum(e) => e.to_le_bytes().to_vec(),
         Value::Ref(r) => r.to_le_bytes().to_vec(),
         Value::Point(a, b) => [a.to_le_bytes(), b.to_le_bytes()].concat(),
+        Value::RefOrCode(r, _) => r.to_le_bytes().to_vec(),
         Value::Other(_, b) => b.clone(),
     }
 }
@@ -819,13 +865,15 @@ impl Writer<'_> {
             }
             x.end();
         }
-        x.empty(
-            "StrokeStyle",
-            &[
-                ("Self", "StrokeStyle/$ID/Solid".into()),
-                ("Name", "$ID/Solid".into()),
-            ],
-        );
+        for name in BUILTIN_STROKE_STYLES {
+            x.empty(
+                "StrokeStyle",
+                &[
+                    ("Self", format!("StrokeStyle/$ID/{name}")),
+                    ("Name", format!("$ID/{name}")),
+                ],
+            );
+        }
         x.end();
         x.finish()
     }
@@ -1057,6 +1105,13 @@ impl Writer<'_> {
                     .as_u32()
                     .and_then(|u| map.iter().find(|(k, _)| *k == u))
                     .map(|(_, n)| n.to_string()),
+                AttrKind::Builtin(prefix, map) => match v {
+                    Value::RefOrCode(0, code) => map
+                        .iter()
+                        .find(|(k, _)| k == code)
+                        .map(|(_, n)| format!("{prefix}{n}")),
+                    _ => None,
+                },
             };
             if let Some(t) = text {
                 x.attr(name, t);
