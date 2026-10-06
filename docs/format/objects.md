@@ -247,3 +247,9 @@ the pairs match on `Model`, `Space`, `ColorValue`, `ColorOverride`,
 `Name` and the three flags.
 
 The `None` swatch is class 0x6E0B (name in chunk 0x1F30).
+
+**Gradients (0x5503).** Chunk 0x5503: u16 stop count *n*, *n* u32 stop
+colour UIDs, *n* f64 locations (0–1), *n* f64 midpoints (the midpoint
+between stops i and i+1 is stored with stop i), u32 type (1 linear).
+Chunk 0x5505: flag byte, name, u32 flags as for colours. All 99 gradients
+and 198 stops in the pairs match.

@@ -6,6 +6,7 @@ use crate::object::Cursor;
 pub mod class {
     pub const COLOR: u32 = 0x1F05;
     pub const SWATCH_NONE: u32 = 0x6E0B;
+    pub const GRADIENT: u32 = 0x5503;
 }
 
 pub mod chunk {
@@ -13,6 +14,86 @@ pub mod chunk {
     pub const COLOR_MODEL: u32 = 0x1F09;
     pub const COLOR_NAME: u32 = 0x1F10;
     pub const COLOR_OVERRIDE: u32 = 0x1F24;
+    pub const GRADIENT_STOPS: u32 = 0x5503;
+    pub const GRADIENT_NAME: u32 = 0x5505;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GradientStop {
+    pub color: u32,
+    /// 0–1.
+    pub location: f64,
+    /// 0–1, between this stop and the next one.
+    pub midpoint: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Gradient {
+    pub uid: u32,
+    pub name: String,
+    pub builtin_name: bool,
+    /// 1 linear, 2 radial.
+    pub kind: u32,
+    pub stops: Vec<GradientStop>,
+    pub editable: bool,
+    pub removable: bool,
+    pub visible: bool,
+}
+
+impl Gradient {
+    pub fn reference(&self) -> String {
+        if self.name.is_empty() {
+            format!("Gradient/u{:x}", self.uid)
+        } else {
+            format!(
+                "Gradient/{}",
+                self.name.replace('%', "%25").replace(':', "%3a")
+            )
+        }
+    }
+
+    pub fn idml_name(&self) -> String {
+        if self.builtin_name {
+            format!("$ID/{}", self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+
+    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Gradient>, Error> {
+        let (Some(stops), Some(name)) = (
+            obj.chunk(chunk::GRADIENT_STOPS),
+            obj.chunk(chunk::GRADIENT_NAME),
+        ) else {
+            return Ok(None);
+        };
+        let mut c = Cursor::new(stops);
+        let n = c.u16()? as usize;
+        let colors = (0..n).map(|_| c.u32()).collect::<Result<Vec<_>, _>>()?;
+        let locations = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
+        let midpoints = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
+        let kind = c.u32()?;
+        let mut nc = Cursor::new(name);
+        let builtin_name = nc.u8()? == 1;
+        let name = nc.string()?;
+        let flags = nc.u32()?;
+        Ok(Some(Gradient {
+            uid,
+            name,
+            builtin_name,
+            kind,
+            stops: (0..n)
+                .map(|i| GradientStop {
+                    color: colors[i],
+                    location: locations[i],
+                    midpoint: midpoints[i],
+                })
+                .collect(),
+            removable: flags & 1 != 0,
+            visible: flags & 2 != 0,
+            editable: flags & 4 != 0,
+        }))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

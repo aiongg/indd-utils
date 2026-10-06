@@ -124,6 +124,9 @@ fn decode(t: u32, data: &[u8]) -> Value {
         (ty::ENUM, 2) => Value::Enum(u16::from_le_bytes(data.try_into().unwrap())),
         (ty::REF, 4) => Value::Ref(u32::from_le_bytes(data.try_into().unwrap())),
         (ty::POINT, 16) => Value::Point(f64_at(0), f64_at(8)),
+        // Other 4-byte types are references or codes (for example a
+        // corner effect ID); keep the number.
+        (_, 4) => Value::Ref(u32::from_le_bytes(data.try_into().unwrap())),
         _ => Value::Other(t, data.to_vec()),
     }
 }

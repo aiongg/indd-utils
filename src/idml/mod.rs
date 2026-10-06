@@ -7,13 +7,15 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story,
-    Style, StyleGroup, Table, TextFramePreferences, TextRun, root_kind,
+    Style, StyleGroup, Table, TextFramePreferences, TextRun, Value, root_kind,
 };
 
 #[derive(Clone, Copy)]
 enum AttrKind {
     Number,
     Swatch,
+    Point,
+    Enum(&'static [(u32, &'static str)]),
 }
 
 #[derive(Clone, Copy)]
@@ -125,6 +127,16 @@ const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
     (0x6E64, "StrokeColor", AttrKind::Swatch),
     (0x6E65, "StrokeWeight", AttrKind::Number),
     (0x6E6D, "MiterLimit", AttrKind::Number),
+    (
+        0x6E6F,
+        "CornerOption",
+        AttrKind::Enum(&[(0x5A15, "RoundedCorner")]),
+    ),
+    (0x6E70, "CornerRadius", AttrKind::Number),
+    (0x551F, "GradientFillLength", AttrKind::Number),
+    (0x5520, "GradientFillStart", AttrKind::Point),
+    (0x5525, "GradientStrokeLength", AttrKind::Number),
+    (0x5526, "GradientStrokeStart", AttrKind::Point),
 ];
 use xml::Xml;
 
@@ -342,6 +354,34 @@ impl Writer<'_> {
                 ("Visible", "true".into()),
             ],
         );
+        // The schema requires gradients after the swatches.
+        for g in &self.doc.gradients {
+            x.start("Gradient")
+                .attr("Self", g.reference())
+                .attr("Type", if g.kind == 2 { "Radial" } else { "Linear" })
+                .attr("Name", g.idml_name())
+                .attr("ColorEditable", g.editable.to_string())
+                .attr("ColorRemovable", g.removable.to_string())
+                .attr("Visible", g.visible.to_string());
+            for (i, stop) in g.stops.iter().enumerate() {
+                let color = self
+                    .doc
+                    .swatches
+                    .get(&stop.color)
+                    .cloned()
+                    .unwrap_or_else(|| "Color/Black".into());
+                x.start("GradientStop")
+                    .attr("Self", format!("{}GradientStop{i}", uref(Some(g.uid))))
+                    .attr("StopColor", color)
+                    .attr("Location", num(round(stop.location * 100.0)));
+                // The midpoint between stops i-1 and i is stored with stop i-1.
+                if i > 0 {
+                    x.attr("Midpoint", num(round(g.stops[i - 1].midpoint * 100.0)));
+                }
+                x.end();
+            }
+            x.end();
+        }
         x.empty(
             "StrokeStyle",
             &[
@@ -417,6 +457,14 @@ impl Writer<'_> {
             let text = match kind {
                 AttrKind::Number => v.as_f64().map(num),
                 AttrKind::Swatch => v.as_ref().and_then(|u| self.doc.swatches.get(&u).cloned()),
+                AttrKind::Point => match v {
+                    Value::Point(x, y) => Some(nums(&[*x, *y])),
+                    _ => None,
+                },
+                AttrKind::Enum(map) => v
+                    .as_u32()
+                    .and_then(|u| map.iter().find(|(k, _)| *k == u))
+                    .map(|(_, n)| n.to_string()),
             };
             if let Some(t) = text {
                 x.attr(name, t);

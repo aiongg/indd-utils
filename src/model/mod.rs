@@ -8,7 +8,7 @@ pub mod table;
 use std::collections::{BTreeMap, HashMap};
 
 pub use attrs::{Attrs, Value};
-pub use color::Color;
+pub use color::{Color, Gradient};
 pub use table::{Cell, Table};
 
 use crate::object::{Cursor, Object};
@@ -280,6 +280,7 @@ pub struct Document {
     pub stories: Vec<Story>,
     pub styles: BTreeMap<u32, Style>,
     pub colors: Vec<Color>,
+    pub gradients: Vec<Gradient>,
     /// IDML reference (`Color/...`, `Swatch/None`) for each swatch UID.
     pub swatches: BTreeMap<u32, String>,
     /// Font family name for each font family UID.
@@ -440,6 +441,7 @@ impl<'a> Reader<'a> {
             .collect::<Result<Vec<_>, _>>()?;
         let mut styles = BTreeMap::new();
         let mut colors = Vec::new();
+        let mut gradients = Vec::new();
         let mut swatches = BTreeMap::new();
         let mut fonts = BTreeMap::new();
         let mut style_groups = BTreeMap::new();
@@ -523,6 +525,12 @@ impl<'a> Reader<'a> {
                 color::class::SWATCH_NONE => {
                     swatches.insert(uid, "Swatch/None".into());
                 }
+                color::class::GRADIENT => {
+                    if let Some(g) = Gradient::read(uid, &*self.object(uid)?)? {
+                        swatches.insert(uid, g.reference());
+                        gradients.push(g);
+                    }
+                }
                 class::FONT_FAMILY => {
                     if let Some(d) = self.chunk(uid, chunk::FONT_FAMILY)? {
                         fonts.insert(uid, find_string(&d, 0)?);
@@ -540,6 +548,7 @@ impl<'a> Reader<'a> {
             stories,
             styles,
             colors,
+            gradients,
             swatches,
             fonts,
             style_groups,
