@@ -208,6 +208,31 @@ Section chunk 0x4C02: u8, string, u8, string, u32, u32 page number start,
 u32, u32 continue numbering (1 = true). All 73 sections match. Every
 section in the corpus uses Arabic numbering.
 
+## Document preferences (class 0x2202)
+
+One object of class 0x2202 holds document-wide preferences. Chunk 0x533
+(`DocumentPreference`): f64 page width at 0, f64 page height at 8, byte 58
+2 for facing pages and 1 otherwise, four f64 bleeds from offset 70, u32
+intent at 142 (0 print, 1 web, 2 mobile). All values match the 75 pairs.
+The four bleeds are equal in every sample, so their order (written as top,
+bottom, inside, outside) is not verified.
+
+## Text frame preferences
+
+From the frame's multi-column frame object (class 0x263):
+
+| Chunk | Offset | `TextFramePreference` attribute |
+|---|---|---|
+| 0x2D1 | u32 0 | `TextColumnCount` (1,052/1,052) |
+| 0x2D1 | f64 4 | `TextColumnGutter` (93/93) |
+| 0x2D1 | f64 14 | `TextColumnFixedWidth` (1,045/1,045) |
+| 0x2CE | u16 2 | `VerticalJustification`: 0 Top, 1 Center, 2 Bottom, 3 Justify (350/350) |
+| 0x2CE | u16 20 | `VerticalBalanceColumns` (18/18) |
+| 0x2CE | u16 22 | `AutoSizingType`: 0 Off, 1 HeightOnly, 2 WidthOnly, 3 HeightAndWidth (61/61) |
+| 0x2CE | u32 24 | `AutoSizingReferencePoint`: 0–8, top-left to bottom-right by rows (58/58) |
+
+Inset spacing is 0 in every sample and not located.
+
 ## Colours (0x1F05)
 
 | Chunk | Contents |

@@ -84,6 +84,14 @@ def load(path):
             s = el.get("Self")
             if s is not None:
                 elements.setdefault((el.tag, s), el)
+                # Children without Self (TextFramePreference, ...) are
+                # compared as "<parent tag>/<child tag>" of the parent.
+                for ch in el:
+                    if ch.get("Self") is None and ch.tag not in ("Properties",) and len(ch.attrib):
+                        elements.setdefault((f"{el.tag}/{ch.tag}", s), ch)
+        if name == "Resources/Preferences.xml":
+            for el in root:
+                elements.setdefault((el.tag, "Preferences"), el)
         if name.startswith("Stories/"):
             for st in root.iter("Story"):
                 stories[st.get("Self")] = story_text(st)

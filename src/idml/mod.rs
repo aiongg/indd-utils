@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story,
-    Style, StyleGroup, Table, TextRun, root_kind,
+    Style, StyleGroup, Table, TextFramePreferences, TextRun, root_kind,
 };
 
 #[derive(Clone, Copy)]
@@ -434,6 +434,22 @@ impl Writer<'_> {
     fn preferences(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Preferences");
+        if let Some(p) = &self.doc.preferences {
+            const INTENT: [&str; 3] = ["PrintIntent", "WebIntent", "MobileIntent"];
+            let [top, bottom, inside, outside] = p.bleed;
+            x.start("DocumentPreference")
+                .attr("PageHeight", num(p.page_height))
+                .attr("PageWidth", num(p.page_width))
+                .attr("FacingPages", p.facing_pages.to_string())
+                .attr("DocumentBleedTopOffset", num(top))
+                .attr("DocumentBleedBottomOffset", num(bottom))
+                .attr("DocumentBleedInsideOrLeftOffset", num(inside))
+                .attr("DocumentBleedOutsideOrRightOffset", num(outside));
+            if let Some(i) = INTENT.get(p.intent as usize) {
+                x.attr("Intent", *i);
+            }
+            x.end();
+        }
         x.end();
         x.finish()
     }
@@ -607,6 +623,46 @@ impl Writer<'_> {
         x.end().end();
     }
 
+    fn text_frame_preference(x: &mut Xml, p: &TextFramePreferences) {
+        const POINTS: [&str; 9] = [
+            "TopLeftPoint",
+            "TopCenterPoint",
+            "TopRightPoint",
+            "LeftCenterPoint",
+            "CenterPoint",
+            "RightCenterPoint",
+            "BottomLeftPoint",
+            "BottomCenterPoint",
+            "BottomRightPoint",
+        ];
+        const JUSTIFY: [&str; 4] = ["TopAlign", "CenterAlign", "BottomAlign", "JustifyAlign"];
+        const SIZING: [&str; 5] = [
+            "Off",
+            "HeightOnly",
+            "WidthOnly",
+            "HeightAndWidth",
+            "HeightAndWidthProportionally",
+        ];
+        x.start("TextFramePreference")
+            .attr("TextColumnCount", p.column_count.to_string())
+            .attr("TextColumnGutter", num(p.column_gutter))
+            .attr("TextColumnFixedWidth", num(p.column_fixed_width));
+        if let Some(v) = JUSTIFY.get(p.vertical_justification as usize) {
+            x.attr("VerticalJustification", *v);
+        }
+        x.attr(
+            "VerticalBalanceColumns",
+            p.vertical_balance_columns.to_string(),
+        );
+        if let Some(v) = SIZING.get(p.auto_sizing_type as usize) {
+            x.attr("AutoSizingType", *v);
+        }
+        if let Some(v) = POINTS.get(p.auto_sizing_reference_point as usize) {
+            x.attr("AutoSizingReferencePoint", *v);
+        }
+        x.end();
+    }
+
     fn placed_graphic(x: &mut Xml, g: &Graphic) {
         let tag = match g.kind {
             GraphicKind::Image => "Image",
@@ -656,6 +712,7 @@ impl Writer<'_> {
             story,
             previous,
             next,
+            ..
         } = &item.kind
         {
             x.attr("ParentStory", uref(*story))
@@ -690,6 +747,13 @@ impl Writer<'_> {
         }
         x.attr("ItemTransform", matrix(&item.transform));
         Self::path_geometry(x, &item.paths);
+        if let ItemKind::TextFrame {
+            preferences: Some(p),
+            ..
+        } = &item.kind
+        {
+            Self::text_frame_preference(x, p);
+        }
         for child in &item.children {
             self.page_item(x, child);
         }

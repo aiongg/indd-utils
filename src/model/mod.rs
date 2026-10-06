@@ -43,6 +43,8 @@ pub mod class {
     pub const OBJECT_STYLE_ROOT_GROUP: u32 = 0x1B972;
     pub const CELL_STYLE_ROOT_GROUP: u32 = 0x20241;
     pub const TABLE_STYLE_ROOT_GROUP: u32 = 0x1044F;
+    /// Document-wide preferences.
+    pub const PREFERENCES: u32 = 0x2202;
 }
 
 /// Chunk IDs.
@@ -84,6 +86,9 @@ pub mod chunk {
     pub const ITEM_OBJECT_STYLE: u32 = 0x1B916;
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
+    pub const DOCUMENT_PREFERENCES: u32 = 0x533;
+    pub const FRAME_COLUMNS: u32 = 0x2D1;
+    pub const FRAME_JUSTIFICATION: u32 = 0x2CE;
     pub const GRAPHIC_BOUNDS: u32 = 0x1633;
     pub const GRAPHIC_LINK: u32 = 0x8CBC;
     pub const LINK_INFO: u32 = 0x8C9B;
@@ -167,6 +172,7 @@ pub enum ItemKind {
         story: Option<u32>,
         previous: Option<u32>,
         next: Option<u32>,
+        preferences: Option<TextFramePreferences>,
     },
     Shape(Shape),
     Group,
@@ -280,6 +286,31 @@ pub struct Document {
     pub sections: Vec<Section>,
     /// Problems that did not stop the conversion (content left out).
     pub warnings: Vec<String>,
+    pub preferences: Option<DocumentPreferences>,
+}
+
+/// Document setup, from chunk 0x533 of the preferences object.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentPreferences {
+    pub page_width: f64,
+    pub page_height: f64,
+    pub facing_pages: bool,
+    /// Top, bottom, inside, outside (order not verified: equal in all samples).
+    pub bleed: [f64; 4],
+    /// 0 print, 1 web, 2 mobile.
+    pub intent: u32,
+}
+
+/// Text frame settings, from the frame's multi-column frame object.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextFramePreferences {
+    pub column_count: u32,
+    pub column_gutter: f64,
+    pub column_fixed_width: f64,
+    pub vertical_justification: u16,
+    pub vertical_balance_columns: bool,
+    pub auto_sizing_type: u16,
+    pub auto_sizing_reference_point: u32,
 }
 
 /// A style group: a root group of styles, or a named group in it.
@@ -515,7 +546,55 @@ impl<'a> Reader<'a> {
                 .map(|uid| self.section(uid))
                 .collect::<Result<Vec<_>, _>>()?,
             warnings: self.warnings.borrow().clone(),
+            preferences: self.document_preferences()?,
         })
+    }
+
+    fn document_preferences(&self) -> Result<Option<DocumentPreferences>, Error> {
+        let Some(&(uid, _)) = self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::PREFERENCES)
+        else {
+            return Ok(None);
+        };
+        let Some(d) = self.chunk(uid, chunk::DOCUMENT_PREFERENCES)? else {
+            return Ok(None);
+        };
+        if d.len() < 146 {
+            return Ok(None);
+        }
+        let f = |o: usize| Cursor::new(&d[o..]).f64();
+        let u = |o: usize| Cursor::new(&d[o..]).u32();
+        Ok(Some(DocumentPreferences {
+            page_width: f(0)?,
+            page_height: f(8)?,
+            facing_pages: d[58] == 2,
+            bleed: [f(70)?, f(78)?, f(86)?, f(94)?],
+            intent: u(142)?,
+        }))
+    }
+
+    fn text_frame_preferences(&self, mcf: u32) -> Result<Option<TextFramePreferences>, Error> {
+        let (Some(cols), Some(just)) = (
+            self.chunk(mcf, chunk::FRAME_COLUMNS)?,
+            self.chunk(mcf, chunk::FRAME_JUSTIFICATION)?,
+        ) else {
+            return Ok(None);
+        };
+        if cols.len() < 22 || just.len() < 28 {
+            return Ok(None);
+        }
+        Ok(Some(TextFramePreferences {
+            column_count: Cursor::new(&cols).u32()?,
+            column_gutter: Cursor::new(&cols[4..]).f64()?,
+            column_fixed_width: Cursor::new(&cols[14..]).f64()?,
+            vertical_justification: Cursor::new(&just[2..]).u16()?,
+            vertical_balance_columns: Cursor::new(&just[20..]).u16()? != 0,
+            auto_sizing_type: Cursor::new(&just[22..]).u16()?,
+            auto_sizing_reference_point: Cursor::new(&just[24..]).u32()?,
+        }))
     }
 
     fn section(&self, uid: u32) -> Result<Section, Error> {
@@ -709,10 +788,12 @@ impl<'a> Reader<'a> {
         let mut children = Vec::new();
         let mut graphics = Vec::new();
         let mut text_column = None;
+        let mut frame_prefs = None;
         for &child in &child_uids {
             if let Some(g) = self.graphic(child)? {
                 graphics.push(g);
             } else if self.class(child) == Some(class::MULTI_COLUMN_FRAME) {
+                frame_prefs = self.text_frame_preferences(child)?;
                 text_column = self
                     .children(child, chunk::ITEM_HIERARCHY)?
                     .into_iter()
@@ -733,7 +814,11 @@ impl<'a> Reader<'a> {
         let kind = if cls == Some(class::GROUP) {
             ItemKind::Group
         } else if let Some(column) = text_column {
-            self.text_frame_links(column)?
+            let mut kind = self.text_frame_links(column)?;
+            if let ItemKind::TextFrame { preferences, .. } = &mut kind {
+                *preferences = frame_prefs;
+            }
+            kind
         } else {
             ItemKind::Shape(classify(&paths))
         };
@@ -812,6 +897,7 @@ impl<'a> Reader<'a> {
             story: None,
             previous: None,
             next: None,
+            preferences: None,
         };
         let Some(d) = self.chunk(column, chunk::COLUMN_FRAME_LIST)? else {
             return Ok(none);
@@ -848,6 +934,7 @@ impl<'a> Reader<'a> {
             story,
             previous: pos.and_then(|i| i.checked_sub(1)).map(|i| frames[i]),
             next: pos.and_then(|i| frames.get(i + 1).copied()),
+            preferences: None,
         })
     }
 
