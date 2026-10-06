@@ -40,3 +40,80 @@ list and absent from the IDML.
 | 0x6E64 | `StrokeColor` (swatch UID) | 78 of 82 |
 | 0x6E65 | `StrokeWeight` | 171 of 171 |
 | 0x6E6D | `MiterLimit` | 778 of 778 |
+
+## Text attribute lists
+
+Text formatting uses the same record layout with a **u16** count. It
+appears in:
+
+- **Styles:** chunk 0x23F of a style object (u16 count, records).
+- **Story runs:** each paragraph-style or character-style run record
+  (chunk 0x262, see `objects.md`) continues after the style UID with a u16
+  count and records. These are the run's local overrides.
+
+Value types are specific to each attribute (for example 0x1B05 for swatch
+references, 0x1B28 for point size), so the converter decodes text values
+by length: 8 bytes f64, 4 bytes u32, 2 bytes u16, other lengths raw.
+String values (`FontStyle`) are a flag byte followed by an in-object
+string.
+
+### Mapping and evidence
+
+Found by aligning IDML `ParagraphStyleRange` and `CharacterStyleRange`
+elements with INDD runs at the same text offset (1,562 ranges), and IDML
+styles with INDD styles of the same name (486 styles), then checked with
+`tools/compare.py`. Counts are matches/total in the current comparison
+(ranges + paragraph styles + character styles where present).
+
+| ID | IDML attribute | Encoding | Evidence |
+|---|---|---|---|
+| 0x1B01 | `FillColor` | swatch UID | 354/354 ranges, 226/226 styles |
+| 0x1B02 | `FontStyle` | flag + string | 474/474 ranges, 202/202 styles |
+| 0x1B03 | `PointSize` | f64 | 1,090/1,090 ranges |
+| 0x1B06 | `HorizontalScale` | fraction ×100 | 2/2 ranges, 75/75 styles |
+| 0x1B07 | `KerningMethod` | code: 15972 Metrics, 79875 Optical | 20/20 ranges, 81/81 styles |
+| 0x1B08 | `Ligatures` | 1 = true | 201/201 ranges |
+| 0x1B0A | `StrokeWeight` | f64 | 241/241 ranges |
+| 0x1B0B | `Tracking` | thousandths of an em ×1000 | 49/49 ranges, 94/94 styles |
+| 0x1B0C | `Composer` | code: 0x2001 HL Single, 0x2002 HL Composer, 0x2078 HL Composer Optyca | 4/4 ranges, 114/114 styles |
+| 0x1B11 | `Capitalization` | 0 Normal, 2 AllCaps | 77/77 styles |
+| 0x1B12 | `StrokeColor` | swatch UID | 75/75 styles |
+| 0x1B16 | `LeftIndent` | f64 | 22/22 ranges |
+| 0x1B18 | `FirstLineIndent` | f64 | 12/12 ranges |
+| 0x1B1A | `AutoLeading` | fraction ×100 | 75/75 styles |
+| 0x1B1B | `Leading` (Properties) | f64; negative = Auto | 43/43 ranges, 137/137 styles |
+| 0x1B1F | `Hyphenation` | 3 = true, 0 = false | 204/204 ranges |
+| 0x1B25 | `HyphenationZone` | f64 | 155/155 ranges |
+| 0x1B26 | `SpaceBefore` | f64 | 13/13 ranges |
+| 0x1B27 | `SpaceAfter` | f64 | 42/42 ranges |
+| 0x1B2A | `Underline` | 1 = true | 81/81 ranges |
+| 0x1B2B | `AppliedFont` (Properties) | font family UID | 1,071/1,071 ranges, 236/247 styles |
+| 0x1B2E | `MaximumWordSpacing` | fraction ×100 | 77/77 styles |
+| 0x1B2F | `MinimumWordSpacing` | fraction ×100 | 77/77 styles |
+| 0x1B42 | `FillTint` | f64 | 24/24 ranges |
+| 0x1B4D | `RuleAboveLineWeight` | f64 | 155/155 ranges |
+| 0x1B4F | `RuleAboveOffset` | f64 | 78/78 styles |
+| 0x1B54 | `RuleBelowLineWeight` | f64 | 155/155 ranges |
+| 0x1B55 | `RuleBelowTint` | f64 | 78/78 styles |
+| 0x1B56 | `RuleBelowOffset` | f64 | 78/78 styles |
+| 0x1B7E | `Justification` | 0 LeftAlign, 1 CenterAlign, 2 RightAlign, 4 LeftJustified, 5 CenterJustified | 70/70 ranges |
+| 0x1B80 | `DropcapDetail` | u32 | styles only |
+| 0x1B8C | `OTFContextualAlternate` | 1 = true | 220/220 ranges |
+| 0x1B8D | `UnderlineColor` (Properties) | swatch UID, 0 = "Text Color" | 81/81 ranges |
+| 0x1B91 | `UnderlineOffset` | f64 | 81/81 ranges |
+| 0x1B94 | `UnderlineWeight` | f64 | 81/81 ranges |
+| 0x1BB7 | `MiterLimit` | f64 | 161/161 ranges |
+| 0x1BBF | `SplitColumnInsideGutter` | f64 | 155/155 ranges |
+| 0x1BD2 | `ParagraphShadingColor` (Properties) | swatch UID | 25/25 ranges |
+| 0x1BD3 | `ParagraphShadingTint` | f64 | 79/79 styles |
+| 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
+
+Attributes whose value never varies in the corpus (for example
+`BaselineShift`, `RightIndent`) cannot be located this way and are not
+written; InDesign then uses its defaults.
+
+**Font family names.** Font families are class 0x3E03; chunk 0x3E05 holds
+a flag byte, u16, then the family name as an in-object string. IDML
+`Fonts.xml` names a family `di<UID hex>`. In 7 of 362 families IDML adds a
+technology suffix (`Montserrat (OTF)`, `Times (TT)`) that the INDD data
+does not determine; the converter writes the plain name.

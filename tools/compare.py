@@ -45,11 +45,32 @@ def pairs(limit, substr):
     return out[:limit] if limit else out
 
 
+def text_ranges(story):
+    """Map text offset -> attributes of the paragraph and character range
+    starting there, with keys prefixed PSR. and CSR."""
+    out = {}
+    pos = 0
+    for psr in story.findall("ParagraphStyleRange"):
+        pa = {"PSR." + k: v for k, v in props(psr).items()}
+        for csr in psr.findall("CharacterStyleRange"):
+            start = pos
+            for el in csr:
+                if el.tag == "Content":
+                    pos += len((el.text or "").encode("utf-16-le")) // 2
+                elif el.tag != "Properties":
+                    pos += 1
+            if pos > start:
+                ca = {"CSR." + k: v for k, v in props(csr).items()}
+                out[start] = {**pa, **ca}
+    return out
+
+
 def load(path):
     """Map Self -> element, plus story texts, from an IDML package."""
     z = zipfile.ZipFile(path)
     elements = {}
     stories = {}
+    ranges = {}
     for name in z.namelist():
         if not name.endswith(".xml"):
             continue
@@ -64,7 +85,8 @@ def load(path):
         if name.startswith("Stories/"):
             for st in root.iter("Story"):
                 stories[st.get("Self")] = story_text(st)
-    return elements, stories
+                ranges[st.get("Self")] = text_ranges(st)
+    return elements, stories, ranges
 
 
 def story_text(story):
@@ -120,8 +142,8 @@ def main():
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
-            ref_el, ref_st = load(idml)
-            our_el, our_st = load(out)
+            ref_el, ref_st, ref_rg = load(idml)
+            our_el, our_st, our_rg = load(out)
             for (tag, s), el in ref_el.items():
                 total[tag] += 1
                 mine = our_el.get((tag, s))
@@ -140,6 +162,25 @@ def main():
                         attr_ok[(tag, k)]["wrong"] += 1
                         if len(examples[(tag, k)]) < args.show:
                             examples[(tag, k)].append((indd.name, s, v, ours[k]))
+            for sid, rgs in ref_rg.items():
+                if our_st.get(sid) != ref_st.get(sid):
+                    continue
+                mine = our_rg.get(sid, {})
+                for start, attrs in rgs.items():
+                    total["TextRange"] += 1
+                    if start not in mine:
+                        continue
+                    found["TextRange"] += 1
+                    for k, v in attrs.items():
+                        o = mine[start].get(k)
+                        if o is None:
+                            attr_ok[("TextRange", k)]["missing"] += 1
+                        elif norm(o) == norm(v):
+                            attr_ok[("TextRange", k)]["ok"] += 1
+                        else:
+                            attr_ok[("TextRange", k)]["wrong"] += 1
+                            if len(examples[("TextRange", k)]) < args.show:
+                                examples[("TextRange", k)].append((indd.name, sid, start, v, o))
             for sid, text in ref_st.items():
                 if sid not in our_st:
                     story_ok["missing"] += 1

@@ -15,6 +15,107 @@ enum AttrKind {
     Swatch,
 }
 
+#[derive(Clone, Copy)]
+enum TextKind {
+    Number,
+    /// Stored as a fraction, written as a percentage.
+    Percent,
+    /// Multiplied by the factor when written.
+    Scale(f64),
+    /// True when the value equals the given code.
+    Bool(u32),
+    Enum(&'static [(u32, &'static str)]),
+    Swatch,
+    /// A swatch, or 0 for "Text Color" (written in Properties).
+    SwatchOrText,
+    Font,
+    FontStyle,
+    Leading,
+}
+
+/// Text attributes: ID, IDML name, kind, written in `<Properties>`.
+/// See `docs/format/attributes.md` for the evidence behind each entry.
+const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
+    (0x1B01, "FillColor", TextKind::Swatch, false),
+    (0x1B02, "FontStyle", TextKind::FontStyle, false),
+    (0x1B03, "PointSize", TextKind::Number, false),
+    (0x1B06, "HorizontalScale", TextKind::Percent, false),
+    (0x1B08, "Ligatures", TextKind::Bool(1), false),
+    (
+        0x1B07,
+        "KerningMethod",
+        TextKind::Enum(&[(15972, "$ID/Metrics"), (79875, "$ID/Optical")]),
+        false,
+    ),
+    (0x1B0A, "StrokeWeight", TextKind::Number, false),
+    (0x1B0B, "Tracking", TextKind::Scale(1000.0), false),
+    (
+        0x1B0C,
+        "Composer",
+        TextKind::Enum(&[
+            (0x2001, "HL Single"),
+            (0x2002, "HL Composer"),
+            (0x2078, "HL Composer Optyca"),
+        ]),
+        false,
+    ),
+    (
+        0x1B11,
+        "Capitalization",
+        TextKind::Enum(&[(0, "Normal"), (2, "AllCaps")]),
+        false,
+    ),
+    (0x1B12, "StrokeColor", TextKind::Swatch, false),
+    (0x1B16, "LeftIndent", TextKind::Number, false),
+    (0x1B18, "FirstLineIndent", TextKind::Number, false),
+    (0x1B1A, "AutoLeading", TextKind::Percent, false),
+    (0x1B1B, "Leading", TextKind::Leading, true),
+    (0x1B1F, "Hyphenation", TextKind::Bool(3), false),
+    (0x1B25, "HyphenationZone", TextKind::Number, false),
+    (0x1B26, "SpaceBefore", TextKind::Number, false),
+    (0x1B27, "SpaceAfter", TextKind::Number, false),
+    (0x1B2A, "Underline", TextKind::Bool(1), false),
+    (0x1B2B, "AppliedFont", TextKind::Font, true),
+    (0x1B2E, "MaximumWordSpacing", TextKind::Percent, false),
+    (0x1B2F, "MinimumWordSpacing", TextKind::Percent, false),
+    (0x1B42, "FillTint", TextKind::Number, false),
+    (0x1B4D, "RuleAboveLineWeight", TextKind::Number, false),
+    (0x1B4F, "RuleAboveOffset", TextKind::Number, false),
+    (0x1B54, "RuleBelowLineWeight", TextKind::Number, false),
+    (0x1B55, "RuleBelowTint", TextKind::Number, false),
+    (0x1B56, "RuleBelowOffset", TextKind::Number, false),
+    (
+        0x1B7E,
+        "Justification",
+        TextKind::Enum(&[
+            (0, "LeftAlign"),
+            (1, "CenterAlign"),
+            (2, "RightAlign"),
+            (4, "LeftJustified"),
+            (5, "CenterJustified"),
+        ]),
+        false,
+    ),
+    (0x1B80, "DropcapDetail", TextKind::Number, false),
+    (0x1B8C, "OTFContextualAlternate", TextKind::Bool(1), false),
+    (0x1B8D, "UnderlineColor", TextKind::SwatchOrText, true),
+    (0x1B91, "UnderlineOffset", TextKind::Number, false),
+    (0x1B94, "UnderlineWeight", TextKind::Number, false),
+    (0x1BB7, "MiterLimit", TextKind::Number, false),
+    (0x1BBF, "SplitColumnInsideGutter", TextKind::Number, false),
+    (0x1BD2, "ParagraphShadingColor", TextKind::Swatch, true),
+    (0x1BD3, "ParagraphShadingTint", TextKind::Number, false),
+    (
+        0x1A401,
+        "BulletsAndNumberingListType",
+        TextKind::Enum(&[(0, "NoList"), (1, "BulletList")]),
+        false,
+    ),
+];
+
+/// An attribute written as a `<Properties>` child: name, type, text.
+type Property = (&'static str, &'static str, String);
+
 /// Page item attributes: attribute-list ID, IDML name, value kind.
 /// See `docs/format/attributes.md` for the evidence behind each entry.
 const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
@@ -35,6 +136,11 @@ pub fn num(v: f64) -> String {
         return "0".into();
     }
     format!("{v}")
+}
+
+/// Round away binary noise from scaled values (0.8 * 100 = 80.00000000000001).
+fn round(v: f64) -> f64 {
+    (v * 1e9).round() / 1e9
 }
 
 fn nums(v: &[f64]) -> String {
@@ -195,6 +301,63 @@ impl Writer<'_> {
         x.finish()
     }
 
+    /// IDML attributes and properties for a text attribute list.
+    fn text_attrs(&self, attrs: &Attrs) -> (Vec<(&'static str, String)>, Vec<Property>) {
+        let mut plain = Vec::new();
+        let mut props = Vec::new();
+        for &(id, name, kind, in_props) in TEXT_ATTRS {
+            let Some(v) = attrs.get(id) else { continue };
+            let swatch = |u: u32| self.doc.swatches.get(&u).cloned();
+            let out: Option<(&'static str, String)> = match kind {
+                TextKind::Number => v.as_f64().map(|f| ("unit", num(f))),
+                TextKind::Percent => v.as_f64().map(|f| ("unit", num(round(f * 100.0)))),
+                TextKind::Scale(k) => v.as_f64().map(|f| ("unit", num(round(f * k)))),
+                TextKind::Bool(t) => v.as_u32().map(|u| ("boolean", (u == t).to_string())),
+                TextKind::Enum(map) => v
+                    .as_u32()
+                    .and_then(|u| map.iter().find(|(k, _)| *k == u))
+                    .map(|(_, n)| ("enumeration", n.to_string())),
+                TextKind::Swatch => v.as_u32().and_then(swatch).map(|s| ("object", s)),
+                TextKind::SwatchOrText => match v.as_u32() {
+                    Some(0) => Some(("string", "Text Color".into())),
+                    Some(u) => swatch(u).map(|s| ("object", s)),
+                    None => None,
+                },
+                TextKind::Font => v
+                    .as_u32()
+                    .and_then(|u| self.doc.fonts.get(&u).cloned())
+                    .map(|f| ("string", f)),
+                TextKind::FontStyle => v.as_string().map(|s| ("string", s)),
+                TextKind::Leading => v.as_f64().map(|f| {
+                    if f < 0.0 {
+                        ("enumeration", "Auto".into())
+                    } else {
+                        ("unit", num(f))
+                    }
+                }),
+            };
+            if let Some((ty, text)) = out {
+                if in_props {
+                    props.push((name, ty, text));
+                } else {
+                    plain.push((name, text));
+                }
+            }
+        }
+        (plain, props)
+    }
+
+    fn properties(x: &mut Xml, props: &[Property]) {
+        if props.is_empty() {
+            return;
+        }
+        x.start("Properties");
+        for (name, ty, text) in props {
+            x.start(name).attr("type", *ty).text(text).end();
+        }
+        x.end();
+    }
+
     /// Write page item attributes from the item's attribute list.
     fn item_attrs(&self, x: &mut Xml, attrs: &Attrs) {
         for &(id, name, kind) in ITEM_ATTRS {
@@ -244,25 +407,34 @@ impl Writer<'_> {
                 let name = style_name(s);
                 have_default |=
                     name == "$ID/[No paragraph style]" || name == "$ID/[No character style]";
+                let (plain, mut props) = self.text_attrs(&s.attrs);
                 x.start(tag)
                     .attr("Self", format!("{tag}/{}", self_name(&name)))
                     .attr("Name", &name);
                 if paragraph {
                     x.attr("NextStyle", self.style_ref(s.next.or(Some(s.uid)), true));
                 }
+                for (k, v) in &plain {
+                    x.attr(k, v);
+                }
                 if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {
                     // The root "[No ... style]" is written as a string.
                     let base_name = style_name(base);
                     let root = base.builtin && base.name.starts_with("[No ");
-                    let (kind, value) = if root {
-                        ("string", base_name)
+                    if root {
+                        props.insert(0, ("BasedOn", "string", base_name));
                     } else {
-                        ("object", format!("{tag}/{}", self_name(&base_name)))
-                    };
-                    x.start("Properties");
-                    x.start("BasedOn").attr("type", kind).text(&value).end();
-                    x.end();
+                        props.insert(
+                            0,
+                            (
+                                "BasedOn",
+                                "object",
+                                format!("{tag}/{}", self_name(&base_name)),
+                            ),
+                        );
+                    }
                 }
+                Self::properties(&mut x, &props);
                 x.end();
             }
             if !have_default && !paragraph {
@@ -386,28 +558,47 @@ impl Writer<'_> {
         let mut x = Xml::new();
         self.package_root(&mut x, "Story");
         x.start("Story").attr("Self", uref(Some(s.uid)));
-        // Group runs by paragraph style, then emit character runs inside.
-        let mut runs: Vec<_> = s
-            .runs
-            .iter()
-            .map(|r| (r.paragraph_style, r.character_style, r.text.clone()))
-            .collect();
+        let mut runs: Vec<_> = s.runs.iter().collect();
         // The story's final paragraph return is implicit in IDML.
-        if let Some(last) = runs.last_mut()
-            && last.2.ends_with('\r')
+        let mut last_text = None;
+        if let Some(last) = runs.last()
+            && last.text.ends_with('\r')
         {
-            last.2.pop();
+            last_text = Some(last.text[..last.text.len() - 1].to_string());
+            if last_text.as_deref() == Some("") && runs.len() > 1 {
+                runs.pop();
+                last_text = None;
+            }
         }
+        let n = runs.len();
+        let text_of = |i: usize| -> &str {
+            match (&last_text, i + 1 == n) {
+                (Some(t), true) => t,
+                _ => &runs[i].text,
+            }
+        };
         let mut i = 0;
-        while i < runs.len() {
-            let para = runs[i].0;
+        while i < n {
+            let para = (runs[i].paragraph_style, &runs[i].paragraph_attrs);
+            let (plain, props) = self.text_attrs(para.1);
             x.start("ParagraphStyleRange")
-                .attr("AppliedParagraphStyle", self.style_ref(para, true));
-            while i < runs.len() && runs[i].0 == para {
-                let (_, chr, text) = &runs[i];
-                x.start("CharacterStyleRange")
-                    .attr("AppliedCharacterStyle", self.style_ref(*chr, false));
-                let mut parts = text.split('\r').peekable();
+                .attr("AppliedParagraphStyle", self.style_ref(para.0, true));
+            for (k, v) in &plain {
+                x.attr(k, v);
+            }
+            Self::properties(&mut x, &props);
+            while i < n && (runs[i].paragraph_style, &runs[i].paragraph_attrs) == para {
+                let r = runs[i];
+                let (plain, props) = self.text_attrs(&r.character_attrs);
+                x.start("CharacterStyleRange").attr(
+                    "AppliedCharacterStyle",
+                    self.style_ref(r.character_style, false),
+                );
+                for (k, v) in &plain {
+                    x.attr(k, v);
+                }
+                Self::properties(&mut x, &props);
+                let mut parts = text_of(i).split('\r').peekable();
                 while let Some(part) = parts.next() {
                     if !part.is_empty() {
                         // INDD stores a forced line break as LF; IDML as U+2028.

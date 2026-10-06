@@ -42,6 +42,24 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Integer value of a reference, integer or enumeration.
+    pub fn as_u32(&self) -> Option<u32> {
+        match *self {
+            Value::Ref(v) => Some(v),
+            Value::Int(v) => Some(v as u32),
+            Value::Enum(v) => Some(v as u32),
+            _ => None,
+        }
+    }
+
+    /// A string value: a flag byte, then an in-object string.
+    pub fn as_string(&self) -> Option<String> {
+        match self {
+            Value::Other(_, b) if b.len() > 1 => Cursor::new(&b[1..]).string().ok(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -52,10 +70,21 @@ impl Attrs {
         self.0.iter().find(|(a, _)| *a == id).map(|(_, v)| v)
     }
 
+    /// A page item list (chunk 0x6E03): u32 count, then records.
     pub fn parse(data: &[u8]) -> Result<Attrs, Error> {
         let mut c = Cursor::new(data);
-        let n = c.u32()?;
-        let mut out = Vec::with_capacity(n.min(1024) as usize);
+        let n = c.u32()? as usize;
+        Attrs::records(&mut c, n, decode)
+    }
+
+    /// A text attribute list: `count` records at the cursor. Text value
+    /// types differ per attribute, so values are decoded by length.
+    pub fn parse_text(c: &mut Cursor, count: usize) -> Result<Attrs, Error> {
+        Attrs::records(c, count, decode_text)
+    }
+
+    fn records(c: &mut Cursor, n: usize, decode: fn(u32, &[u8]) -> Value) -> Result<Attrs, Error> {
+        let mut out = Vec::with_capacity(n.min(1024));
         for _ in 0..n {
             let id = c.u32()?;
             let size = c.u16()? as usize;
@@ -75,6 +104,15 @@ impl Attrs {
             }
         }
         Ok(Attrs(out))
+    }
+}
+
+fn decode_text(t: u32, data: &[u8]) -> Value {
+    match data.len() {
+        8 => Value::Double(f64::from_le_bytes(data.try_into().unwrap())),
+        4 => Value::Ref(u32::from_le_bytes(data.try_into().unwrap())),
+        2 => Value::Enum(u16::from_le_bytes(data.try_into().unwrap())),
+        _ => Value::Other(t, data.to_vec()),
     }
 }
 

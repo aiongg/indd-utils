@@ -28,6 +28,7 @@ pub mod class {
     pub const STORY: u32 = 0x201;
     pub const STYLE: u32 = 0x205;
     pub const SECTION: u32 = 0x4C01;
+    pub const FONT_FAMILY: u32 = 0x3E03;
 }
 
 /// Chunk IDs.
@@ -57,6 +58,8 @@ pub mod chunk {
     pub const STRAND_RUNS: u32 = 0x262;
     pub const STYLE_INFO: u32 = 0x230;
     pub const ITEM_ATTRS: u32 = 0x6E03;
+    pub const STYLE_ATTRS: u32 = 0x23F;
+    pub const FONT_FAMILY: u32 = 0x3E05;
     pub const SWATCH_NAME: u32 = 0x1F30;
 }
 
@@ -167,6 +170,7 @@ pub struct Style {
     pub paragraph: bool,
     pub based_on: Option<u32>,
     pub next: Option<u32>,
+    pub attrs: Attrs,
 }
 
 /// A stretch of story text with one paragraph style and one character style.
@@ -175,6 +179,10 @@ pub struct TextRun {
     pub text: String,
     pub paragraph_style: Option<u32>,
     pub character_style: Option<u32>,
+    /// Local paragraph formatting.
+    pub paragraph_attrs: Attrs,
+    /// Local character formatting.
+    pub character_attrs: Attrs,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -195,6 +203,8 @@ pub struct Document {
     pub colors: Vec<Color>,
     /// IDML reference (`Color/...`, `Swatch/None`) for each swatch UID.
     pub swatches: BTreeMap<u32, String>,
+    /// Font family name for each font family UID.
+    pub fonts: BTreeMap<u32, String>,
 }
 
 /// Reads typed objects from a database, caching them.
@@ -278,6 +288,7 @@ impl<'a> Reader<'a> {
         let mut styles = BTreeMap::new();
         let mut colors = Vec::new();
         let mut swatches = BTreeMap::new();
+        let mut fonts = BTreeMap::new();
         for &(uid, cls) in self.db.classes() {
             match cls {
                 class::STYLE => {
@@ -297,6 +308,11 @@ impl<'a> Reader<'a> {
                 color::class::SWATCH_NONE => {
                     swatches.insert(uid, "Swatch/None".into());
                 }
+                class::FONT_FAMILY => {
+                    if let Some(d) = self.chunk(uid, chunk::FONT_FAMILY)? {
+                        fonts.insert(uid, find_string(&d, 0)?);
+                    }
+                }
                 _ => {}
             }
         }
@@ -310,6 +326,7 @@ impl<'a> Reader<'a> {
             styles,
             colors,
             swatches,
+            fonts,
         })
     }
 
@@ -560,6 +577,14 @@ impl<'a> Reader<'a> {
         };
         let paragraph = Cursor::new(&data[at - 4..]).u32()? != 0;
         let name = Cursor::new(&data[at + 1..]).string()?;
+        let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {
+            Some(d) if d.len() >= 2 => {
+                let mut c = Cursor::new(&d);
+                let n = c.u16()? as usize;
+                Attrs::parse_text(&mut c, n).unwrap_or_default()
+            }
+            _ => Attrs::default(),
+        };
         Ok(Some(Style {
             uid,
             name,
@@ -567,6 +592,7 @@ impl<'a> Reader<'a> {
             paragraph,
             based_on: uid_or_none(based_on),
             next: uid_or_none(next),
+            attrs,
         }))
     }
 
@@ -577,8 +603,8 @@ impl<'a> Reader<'a> {
         let mut strands = vec![c.u32()?];
         strands.extend(c.u32_list()?);
         let mut text: Vec<u16> = Vec::new();
-        let mut para: Vec<(usize, u32)> = Vec::new();
-        let mut chars: Vec<(usize, u32)> = Vec::new();
+        let mut para: Vec<StyleRun> = Vec::new();
+        let mut chars: Vec<StyleRun> = Vec::new();
         for strand in strands {
             let Some(list) = self.chunk(strand, chunk::STRAND_DATA)? else {
                 continue;
@@ -602,8 +628,17 @@ impl<'a> Reader<'a> {
                         strand::TEXT => {
                             text.extend(rc.segment_units(len)?);
                         }
-                        strand::PARAGRAPH_STYLE => para.push((len, rc.u32()?)),
-                        strand::CHARACTER_STYLE => chars.push((len, rc.u32()?)),
+                        strand::PARAGRAPH_STYLE | strand::CHARACTER_STYLE => {
+                            let style = rc.u32()?;
+                            let n = rc.u16()? as usize;
+                            let attrs = Attrs::parse_text(&mut rc, n).unwrap_or_default();
+                            let list = if kind == strand::PARAGRAPH_STYLE {
+                                &mut para
+                            } else {
+                                &mut chars
+                            };
+                            list.push((len, style, attrs));
+                        }
                         _ => {}
                     }
                 }
@@ -635,22 +670,24 @@ fn find_string(data: &[u8], from: usize) -> Result<String, Error> {
 
 /// Combine text with paragraph-style and character-style run lengths
 /// (counted in UTF-16 code units) into runs with both styles constant.
-fn split_runs(utf16: &[u16], para: &[(usize, u32)], chars: &[(usize, u32)]) -> Vec<TextRun> {
+type StyleRun = (usize, u32, Attrs);
+
+fn split_runs(utf16: &[u16], para: &[StyleRun], chars: &[StyleRun]) -> Vec<TextRun> {
     let mut cuts: Vec<usize> = vec![0, utf16.len()];
     for list in [para, chars] {
         let mut pos = 0;
-        for &(len, _) in list {
+        for (len, _, _) in list {
             pos += len;
             cuts.push(pos.min(utf16.len()));
         }
     }
     cuts.sort_unstable();
     cuts.dedup();
-    let style_at = |list: &[(usize, u32)], at: usize| {
+    let run_at = |list: &[StyleRun], at: usize| -> Option<(Option<u32>, Attrs)> {
         let mut pos = 0;
-        for &(len, style) in list {
+        for (len, style, attrs) in list {
             if at < pos + len {
-                return uid_or_none(style);
+                return Some((uid_or_none(*style), attrs.clone()));
             }
             pos += len;
         }
@@ -658,10 +695,16 @@ fn split_runs(utf16: &[u16], para: &[(usize, u32)], chars: &[(usize, u32)]) -> V
     };
     cuts.windows(2)
         .filter(|w| w[0] < w[1])
-        .map(|w| TextRun {
-            text: String::from_utf16_lossy(&utf16[w[0]..w[1]]),
-            paragraph_style: style_at(para, w[0]),
-            character_style: style_at(chars, w[0]),
+        .map(|w| {
+            let (paragraph_style, paragraph_attrs) = run_at(para, w[0]).unwrap_or_default();
+            let (character_style, character_attrs) = run_at(chars, w[0]).unwrap_or_default();
+            TextRun {
+                text: String::from_utf16_lossy(&utf16[w[0]..w[1]]),
+                paragraph_style,
+                character_style,
+                paragraph_attrs,
+                character_attrs,
+            }
         })
         .collect()
 }
@@ -703,7 +746,12 @@ mod tests {
     #[test]
     fn splits_runs_at_style_boundaries() {
         let text: Vec<u16> = "abcdef".encode_utf16().collect();
-        let runs = split_runs(&text, &[(4, 10), (2, 11)], &[(2, 20), (4, 21)]);
+        let a = Attrs::default;
+        let runs = split_runs(
+            &text,
+            &[(4, 10, a()), (2, 11, a())],
+            &[(2, 20, a()), (4, 21, a())],
+        );
         let texts: Vec<_> = runs.iter().map(|r| r.text.as_str()).collect();
         assert_eq!(texts, ["ab", "cd", "ef"]);
         assert_eq!(runs[1].paragraph_style, Some(10));
