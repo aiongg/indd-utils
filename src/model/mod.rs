@@ -3,11 +3,13 @@
 
 pub mod attrs;
 pub mod color;
+pub mod table;
 
 use std::collections::{BTreeMap, HashMap};
 
 pub use attrs::{Attrs, Value};
 pub use color::Color;
+pub use table::{Cell, Table};
 
 use crate::object::{Cursor, Object};
 use crate::{Database, Error, Version};
@@ -96,6 +98,8 @@ pub mod strand {
     pub const PARAGRAPH_STYLE: u32 = 0x204;
     /// Objects owned by text positions (anchored items, tables, ...).
     pub const OWNED_ITEMS: u32 = 0x209;
+    /// Which object (story, or table and cell) each stretch of text belongs to.
+    pub const TEXT_OWNER: u32 = 0x2A4;
 }
 
 /// A 2D affine transform `[a b c d tx ty]`, as in IDML `ItemTransform`.
@@ -235,6 +239,8 @@ pub struct Style {
 /// A stretch of story text with one paragraph style and one character style.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextRun {
+    /// UTF-16 offset of the run in the story text.
+    pub start: usize,
     pub text: String,
     pub paragraph_style: Option<u32>,
     pub character_style: Option<u32>,
@@ -250,6 +256,8 @@ pub struct Story {
     pub runs: Vec<TextRun>,
     /// Page items anchored in the text, by UTF-16 offset of their U+FFFC.
     pub anchors: BTreeMap<usize, Vec<PageItem>>,
+    /// Tables, by UTF-16 offset of their U+0016.
+    pub tables: BTreeMap<usize, Table>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -270,6 +278,8 @@ pub struct Document {
     pub style_groups: BTreeMap<u32, StyleGroup>,
     pub object_styles: BTreeMap<u32, ObjectStyle>,
     pub sections: Vec<Section>,
+    /// Problems that did not stop the conversion (content left out).
+    pub warnings: Vec<String>,
 }
 
 /// A style group: a root group of styles, or a named group in it.
@@ -312,6 +322,7 @@ pub struct ObjectStyle {
 pub struct Reader<'a> {
     db: &'a Database<'a>,
     cache: std::cell::RefCell<HashMap<u32, std::rc::Rc<Object>>>,
+    warnings: std::cell::RefCell<Vec<String>>,
 }
 
 fn uid_or_none(v: u32) -> Option<u32> {
@@ -323,6 +334,7 @@ impl<'a> Reader<'a> {
         Reader {
             db,
             cache: Default::default(),
+            warnings: Default::default(),
         }
     }
 
@@ -337,6 +349,11 @@ impl<'a> Reader<'a> {
         let obj = std::rc::Rc::new(obj);
         self.cache.borrow_mut().insert(uid, obj.clone());
         Ok(obj)
+    }
+
+    /// Record a problem that does not stop the conversion.
+    pub fn warn(&self, msg: String) {
+        self.warnings.borrow_mut().push(msg);
     }
 
     pub fn class(&self, uid: u32) -> Option<u32> {
@@ -497,6 +514,7 @@ impl<'a> Reader<'a> {
                 .into_iter()
                 .map(|uid| self.section(uid))
                 .collect::<Result<Vec<_>, _>>()?,
+            warnings: self.warnings.borrow().clone(),
         })
     }
 
@@ -880,21 +898,25 @@ impl<'a> Reader<'a> {
         let mut para: Vec<StyleRun> = Vec::new();
         let mut chars: Vec<StyleRun> = Vec::new();
         let mut owned: Vec<(usize, u32, u32)> = Vec::new();
+        // (start, length, owner, cell) for each stretch of text.
+        let mut owners: Vec<(usize, usize, u32, u32)> = Vec::new();
         for strand in strands {
             let Some(list) = self.chunk(strand, chunk::STRAND_DATA)? else {
                 continue;
             };
             let mut c = Cursor::new(&list);
             let n = c.u16()?;
+            let mut base = 0usize;
             for _ in 0..n {
-                let _len = c.u32()?;
+                let data_len = c.u32()? as usize;
                 let data_uid = c.u32()?;
                 let runs = self.required(data_uid, chunk::STRAND_RUNS)?;
                 let mut r = Cursor::new(&runs);
                 let kind = r.u32()?;
                 r.skip(4)?;
                 let count = r.u16()?;
-                let mut pos = 0usize;
+                let mut pos = base;
+                base += data_len;
                 for _ in 0..count {
                     let size = r.u32()? as usize;
                     let rec = r.bytes(size)?;
@@ -914,6 +936,11 @@ impl<'a> Reader<'a> {
                         strand::TEXT => {
                             text.extend(rc.segment_units(len)?);
                         }
+                        strand::TEXT_OWNER => {
+                            let owner = rc.u32()?;
+                            let cell = rc.u32()?;
+                            owners.push((start, len, owner, cell));
+                        }
                         strand::PARAGRAPH_STYLE | strand::CHARACTER_STYLE => {
                             let style = rc.u32()?;
                             let n = rc.u16()? as usize;
@@ -931,20 +958,57 @@ impl<'a> Reader<'a> {
             }
         }
         let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
+        let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
         for (pos, cls, item) in owned {
-            if cls != class::ANCHOR {
-                continue;
-            }
-            for child in self.children(item, chunk::ANCHOR_CHILDREN)? {
-                if let Some(pi) = self.page_item(child, None)? {
-                    anchors.entry(pos).or_default().push(pi);
+            match cls {
+                class::ANCHOR => {
+                    for child in self.children(item, chunk::ANCHOR_CHILDREN)? {
+                        if let Some(pi) = self.page_item(child, None)? {
+                            anchors.entry(pos).or_default().push(pi);
+                        }
+                    }
                 }
+                table::class::TABLE_ANCHOR => {
+                    // A table that cannot be read is left out, with a
+                    // warning, rather than failing the whole document.
+                    match self.table_of_anchor(item) {
+                        Ok(Some(t)) => {
+                            tables.insert(pos, t);
+                        }
+                        Ok(None) => {}
+                        Err(e) => self.warn(format!("story {uid}: table left out: {e}")),
+                    }
+                }
+                _ => {}
+            }
+        }
+        let cuts: Vec<usize> = owners.iter().map(|o| o.0).collect();
+        let all = split_runs(&text, &para, &chars, &cuts);
+        // Text not owned by the story belongs to table cells.
+        let owner_at = |at: usize| {
+            owners
+                .iter()
+                .find(|o| at >= o.0 && at < o.0 + o.1)
+                .map(|o| (o.2, o.3))
+        };
+        let mut runs = Vec::new();
+        for run in all {
+            match owner_at(run.start) {
+                Some((owner, cell)) if owner != uid => {
+                    if let Some(t) = tables.values_mut().find(|t| t.uid == owner)
+                        && let Some(c) = t.cells.iter_mut().find(|c| c.id == cell)
+                    {
+                        c.runs.push(run);
+                    }
+                }
+                _ => runs.push(run),
             }
         }
         Ok(Story {
             uid,
-            runs: split_runs(&text, &para, &chars),
+            runs,
             anchors,
+            tables,
         })
     }
 }
@@ -970,8 +1034,14 @@ fn find_string(data: &[u8], from: usize) -> Result<String, Error> {
 /// (counted in UTF-16 code units) into runs with both styles constant.
 type StyleRun = (usize, u32, Attrs);
 
-fn split_runs(utf16: &[u16], para: &[StyleRun], chars: &[StyleRun]) -> Vec<TextRun> {
+fn split_runs(
+    utf16: &[u16],
+    para: &[StyleRun],
+    chars: &[StyleRun],
+    extra: &[usize],
+) -> Vec<TextRun> {
     let mut cuts: Vec<usize> = vec![0, utf16.len()];
+    cuts.extend(extra.iter().map(|&c| c.min(utf16.len())));
     for list in [para, chars] {
         let mut pos = 0;
         for (len, _, _) in list {
@@ -997,6 +1067,7 @@ fn split_runs(utf16: &[u16], para: &[StyleRun], chars: &[StyleRun]) -> Vec<TextR
             let (paragraph_style, paragraph_attrs) = run_at(para, w[0]).unwrap_or_default();
             let (character_style, character_attrs) = run_at(chars, w[0]).unwrap_or_default();
             TextRun {
+                start: w[0],
                 text: String::from_utf16_lossy(&utf16[w[0]..w[1]]),
                 paragraph_style,
                 character_style,
@@ -1049,6 +1120,7 @@ mod tests {
             &text,
             &[(4, 10, a()), (2, 11, a())],
             &[(2, 20, a()), (4, 21, a())],
+            &[],
         );
         let texts: Vec<_> = runs.iter().map(|r| r.text.as_str()).collect();
         assert_eq!(texts, ["ab", "cd", "ef"]);

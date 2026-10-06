@@ -157,6 +157,8 @@ fn convert(input: &str, output: &str) -> CliResult {
         .file_name()
         .map_or_else(|| input.to_string(), |n| n.to_string_lossy().into_owned());
     let file = std::io::BufWriter::new(std::fs::File::create(output)?);
-    indd::convert(&bytes, &name, file)?;
+    for warning in indd::convert(&bytes, &name, file)? {
+        eprintln!("warning: {warning}");
+    }
     Ok(())
 }

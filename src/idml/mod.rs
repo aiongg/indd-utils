@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, ItemKind, Matrix, PageItem, Path, Shape, Spread, Story,
-    Style, StyleGroup, root_kind,
+    Style, StyleGroup, Table, TextRun, root_kind,
 };
 
 #[derive(Clone, Copy)]
@@ -747,8 +747,18 @@ impl Writer<'_> {
         let mut x = Xml::new();
         self.package_root(&mut x, "Story");
         x.start("Story").attr("Self", uref(Some(s.uid)));
-        let mut runs: Vec<_> = s.runs.iter().collect();
-        // The story's final paragraph return is implicit in IDML.
+        let scope = uref(Some(s.uid));
+        self.text_ranges(&mut x, &s.runs, s, &scope);
+        x.end().end();
+        x.finish()
+    }
+
+    /// Paragraph and character ranges for `runs`. The final paragraph
+    /// return (a story's last, or a table cell's terminator) is not written.
+    /// `scope` is the `Self` of the enclosing story or table cell, which
+    /// prefixes the `Self` of tables inside the text.
+    fn text_ranges(&self, x: &mut Xml, runs: &[TextRun], story: &Story, scope: &str) {
+        let mut runs: Vec<&TextRun> = runs.iter().collect();
         let mut last_text = None;
         if let Some(last) = runs.last()
             && last.text.ends_with('\r')
@@ -766,7 +776,6 @@ impl Writer<'_> {
                 _ => &runs[i].text,
             }
         };
-        let mut offset = 0usize;
         let mut i = 0;
         while i < n {
             let para = (runs[i].paragraph_style, &runs[i].paragraph_attrs);
@@ -776,7 +785,7 @@ impl Writer<'_> {
             for (k, v) in &plain {
                 x.attr(k, v);
             }
-            Self::properties(&mut x, &props);
+            Self::properties(x, &props);
             while i < n && (runs[i].paragraph_style, &runs[i].paragraph_attrs) == para {
                 let r = runs[i];
                 let (plain, props) = self.text_attrs(&r.character_attrs);
@@ -787,27 +796,18 @@ impl Writer<'_> {
                 for (k, v) in &plain {
                     x.attr(k, v);
                 }
-                Self::properties(&mut x, &props);
-                self.run_content(&mut x, text_of(i), offset, &s.anchors);
-                offset += r.text.encode_utf16().count();
+                Self::properties(x, &props);
+                self.run_content(x, text_of(i), r.start, story, scope);
                 x.end();
                 i += 1;
             }
             x.end();
         }
-        x.end().end();
-        x.finish()
     }
 
-    /// Content, line breaks and anchored items of one character range.
-    /// `offset` is the UTF-16 offset of the range in the story.
-    fn run_content(
-        &self,
-        x: &mut Xml,
-        text: &str,
-        offset: usize,
-        anchors: &BTreeMap<usize, Vec<PageItem>>,
-    ) {
+    /// Content, line breaks, anchored items and tables of one character
+    /// range. `offset` is the UTF-16 offset of the range in the story.
+    fn run_content(&self, x: &mut Xml, text: &str, offset: usize, story: &Story, scope: &str) {
         let mut buf = String::new();
         let flush = |x: &mut Xml, buf: &mut String| {
             if !buf.is_empty() {
@@ -825,17 +825,72 @@ impl Writer<'_> {
                     flush(x, &mut buf);
                     x.start("Br").end();
                 }
-                '\u{FFFC}' if anchors.contains_key(&pos) => {
+                '\u{FFFC}' if story.anchors.contains_key(&pos) => {
                     flush(x, &mut buf);
-                    for item in &anchors[&pos] {
+                    for item in &story.anchors[&pos] {
                         self.page_item(x, item);
                     }
                 }
+                '\u{16}' if story.tables.contains_key(&pos) => {
+                    flush(x, &mut buf);
+                    self.table(x, &story.tables[&pos], story, scope);
+                }
+                // Internal table markers that follow U+0016.
+                '\u{17}' => {}
                 c => buf.push(c),
             }
             pos += ch.len_utf16();
         }
         flush(x, &mut buf);
+    }
+
+    fn table(&self, x: &mut Xml, t: &Table, story: &Story, scope: &str) {
+        let id = format!("{scope}i{:x}", t.uid);
+        let rows = t.rows.len() as u32;
+        x.start("Table")
+            .attr("Self", &id)
+            .attr("HeaderRowCount", t.header_rows.to_string())
+            .attr("FooterRowCount", t.footer_rows.to_string())
+            .attr(
+                "BodyRowCount",
+                rows.saturating_sub(t.header_rows + t.footer_rows)
+                    .to_string(),
+            )
+            .attr("ColumnCount", t.columns.len().to_string());
+        for (i, r) in t.rows.iter().enumerate() {
+            x.start("Row")
+                .attr("Self", format!("{id}Row{i}"))
+                .attr("Name", i.to_string());
+            if let Some(h) = r.height {
+                x.attr("SingleRowHeight", num(h));
+            }
+            if let Some(h) = r.min_height {
+                x.attr("MinimumHeight", num(h));
+            }
+            x.end();
+        }
+        for (i, w) in t.columns.iter().enumerate() {
+            x.empty(
+                "Column",
+                &[
+                    ("Self", format!("{id}Column{i}")),
+                    ("Name", i.to_string()),
+                    ("SingleColumnWidth", num(*w)),
+                ],
+            );
+        }
+        for c in &t.cells {
+            let cell_id = format!("{id}i{:x}", c.id);
+            x.start("Cell")
+                .attr("Self", &cell_id)
+                .attr("Name", format!("{}:{}", c.column, c.row))
+                .attr("RowSpan", c.row_span.to_string())
+                .attr("ColumnSpan", c.column_span.to_string())
+                .attr("CellType", "TextTypeCell");
+            self.text_ranges(x, &c.runs, story, &cell_id);
+            x.end();
+        }
+        x.end();
     }
 
     fn backing_story(&self) -> String {
