@@ -1,0 +1,10 @@
+[package]
+name = "indd"
+version = "0.1.0"
+edition = "2024"
+description = "Reader for INDD files and converter to IDML"
+license = "MIT"
+repository = "https://github.com/aiongg/indd-utils"
+publish = false
+
+[dependencies]
