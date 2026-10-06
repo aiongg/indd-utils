@@ -132,6 +132,13 @@ Each record starts with a u32 run length in UTF-16 code units. Text
 records continue with text segments. Style records continue with the
 style UID.
 
+**Owned items (run kind 0x209).** Each record: u32 run length, u16
+count, then that many (u32 class, u32 UID) pairs, the objects owned by
+the text position at the start of the run. An item anchored in text has
+the character U+FFFC at that position and is owned through an object of
+class 0x262, whose chunk 0x2C8 (u32, u32, UID list) lists the anchored page
+item. IDML writes the page item element in place of the U+FFFC.
+
 INDD stores a forced line break as U+000A; IDML writes it as U+2028. The
 last paragraph return of a story is not written to IDML.
 

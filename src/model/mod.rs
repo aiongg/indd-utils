@@ -29,6 +29,8 @@ pub mod class {
     pub const STYLE: u32 = 0x205;
     pub const SECTION: u32 = 0x4C01;
     pub const FONT_FAMILY: u32 = 0x3E03;
+    /// Holds an item anchored in text.
+    pub const ANCHOR: u32 = 0x262;
 }
 
 /// Chunk IDs.
@@ -60,6 +62,7 @@ pub mod chunk {
     pub const ITEM_ATTRS: u32 = 0x6E03;
     pub const STYLE_ATTRS: u32 = 0x23F;
     pub const FONT_FAMILY: u32 = 0x3E05;
+    pub const ANCHOR_CHILDREN: u32 = 0x2C8;
     pub const SWATCH_NAME: u32 = 0x1F30;
 }
 
@@ -68,6 +71,8 @@ pub mod strand {
     pub const TEXT: u32 = 0x202;
     pub const CHARACTER_STYLE: u32 = 0x203;
     pub const PARAGRAPH_STYLE: u32 = 0x204;
+    /// Objects owned by text positions (anchored items, tables, ...).
+    pub const OWNED_ITEMS: u32 = 0x209;
 }
 
 /// A 2D affine transform `[a b c d tx ty]`, as in IDML `ItemTransform`.
@@ -146,7 +151,8 @@ pub struct PageItem {
     pub kind: ItemKind,
     pub transform: Matrix,
     pub paths: Vec<Path>,
-    pub layer: u32,
+    /// Document layer; `None` for items anchored in text.
+    pub layer: Option<u32>,
     /// Local formatting (fill, stroke, corners, ...).
     pub attrs: Attrs,
     pub children: Vec<PageItem>,
@@ -189,6 +195,8 @@ pub struct TextRun {
 pub struct Story {
     pub uid: u32,
     pub runs: Vec<TextRun>,
+    /// Page items anchored in the text, by UTF-16 offset of their U+FFFC.
+    pub anchors: BTreeMap<usize, Vec<PageItem>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -371,7 +379,7 @@ impl<'a> Reader<'a> {
                 match self.class(child) {
                     Some(class::PAGE) => pages.push(self.page(child)?),
                     _ => {
-                        if let Some(item) = self.page_item(child, layer)? {
+                        if let Some(item) = self.page_item(child, Some(layer))? {
                             items.push(item);
                         }
                     }
@@ -469,7 +477,7 @@ impl<'a> Reader<'a> {
         Ok(paths)
     }
 
-    fn page_item(&self, uid: u32, layer: u32) -> Result<Option<PageItem>, Error> {
+    fn page_item(&self, uid: u32, layer: Option<u32>) -> Result<Option<PageItem>, Error> {
         let cls = self.class(uid);
         if cls != Some(class::SPLINE_ITEM) && cls != Some(class::GROUP) {
             return Ok(None);
@@ -605,6 +613,7 @@ impl<'a> Reader<'a> {
         let mut text: Vec<u16> = Vec::new();
         let mut para: Vec<StyleRun> = Vec::new();
         let mut chars: Vec<StyleRun> = Vec::new();
+        let mut owned: Vec<(usize, u32, u32)> = Vec::new();
         for strand in strands {
             let Some(list) = self.chunk(strand, chunk::STRAND_DATA)? else {
                 continue;
@@ -619,12 +628,23 @@ impl<'a> Reader<'a> {
                 let kind = r.u32()?;
                 r.skip(4)?;
                 let count = r.u16()?;
+                let mut pos = 0usize;
                 for _ in 0..count {
                     let size = r.u32()? as usize;
                     let rec = r.bytes(size)?;
                     let mut rc = Cursor::new(rec);
                     let len = rc.u32()? as usize;
+                    let start = pos;
+                    pos += len;
                     match kind {
+                        strand::OWNED_ITEMS => {
+                            let n = rc.u16()?;
+                            for _ in 0..n {
+                                let class = rc.u32()?;
+                                let item = rc.u32()?;
+                                owned.push((start, class, item));
+                            }
+                        }
                         strand::TEXT => {
                             text.extend(rc.segment_units(len)?);
                         }
@@ -644,9 +664,21 @@ impl<'a> Reader<'a> {
                 }
             }
         }
+        let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
+        for (pos, cls, item) in owned {
+            if cls != class::ANCHOR {
+                continue;
+            }
+            for child in self.children(item, chunk::ANCHOR_CHILDREN)? {
+                if let Some(pi) = self.page_item(child, None)? {
+                    anchors.entry(pos).or_default().push(pi);
+                }
+            }
+        }
         Ok(Story {
             uid,
             runs: split_runs(&text, &para, &chars),
+            anchors,
         })
     }
 }

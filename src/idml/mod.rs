@@ -505,8 +505,10 @@ impl Writer<'_> {
                 .attr("ContentType", "TextType");
         }
         self.item_attrs(x, &item.attrs);
-        x.attr("ItemLayer", uref(Some(item.layer)))
-            .attr("ItemTransform", matrix(&item.transform));
+        if let Some(layer) = item.layer {
+            x.attr("ItemLayer", uref(Some(layer)));
+        }
+        x.attr("ItemTransform", matrix(&item.transform));
         Self::path_geometry(x, &item.paths);
         for child in &item.children {
             self.page_item(x, child);
@@ -577,6 +579,7 @@ impl Writer<'_> {
                 _ => &runs[i].text,
             }
         };
+        let mut offset = 0usize;
         let mut i = 0;
         while i < n {
             let para = (runs[i].paragraph_style, &runs[i].paragraph_attrs);
@@ -598,18 +601,8 @@ impl Writer<'_> {
                     x.attr(k, v);
                 }
                 Self::properties(&mut x, &props);
-                let mut parts = text_of(i).split('\r').peekable();
-                while let Some(part) = parts.next() {
-                    if !part.is_empty() {
-                        // INDD stores a forced line break as LF; IDML as U+2028.
-                        x.start("Content")
-                            .text(&part.replace('\n', "\u{2028}"))
-                            .end();
-                    }
-                    if parts.peek().is_some() {
-                        x.start("Br").end();
-                    }
-                }
+                self.run_content(&mut x, text_of(i), offset, &s.anchors);
+                offset += r.text.encode_utf16().count();
                 x.end();
                 i += 1;
             }
@@ -617,6 +610,45 @@ impl Writer<'_> {
         }
         x.end().end();
         x.finish()
+    }
+
+    /// Content, line breaks and anchored items of one character range.
+    /// `offset` is the UTF-16 offset of the range in the story.
+    fn run_content(
+        &self,
+        x: &mut Xml,
+        text: &str,
+        offset: usize,
+        anchors: &BTreeMap<usize, Vec<PageItem>>,
+    ) {
+        let mut buf = String::new();
+        let flush = |x: &mut Xml, buf: &mut String| {
+            if !buf.is_empty() {
+                // INDD stores a forced line break as LF; IDML as U+2028.
+                x.start("Content")
+                    .text(&buf.replace('\n', "\u{2028}"))
+                    .end();
+                buf.clear();
+            }
+        };
+        let mut pos = offset;
+        for ch in text.chars() {
+            match ch {
+                '\r' => {
+                    flush(x, &mut buf);
+                    x.start("Br").end();
+                }
+                '\u{FFFC}' if anchors.contains_key(&pos) => {
+                    flush(x, &mut buf);
+                    for item in &anchors[&pos] {
+                        self.page_item(x, item);
+                    }
+                }
+                c => buf.push(c),
+            }
+            pos += ch.len_utf16();
+        }
+        flush(x, &mut buf);
     }
 
     fn backing_story(&self) -> String {

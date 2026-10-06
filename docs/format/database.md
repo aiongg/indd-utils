@@ -127,7 +127,12 @@ tree. In both, the segment and page fields are 0.
 - **Class tree:** the length field holds the object's class ID. Sorted by
   UID, one entry per UID. In the blank document, UID 1 has class 0xE01.
 - **Unclassed-UID tree:** lists UIDs with no class entry; the length field
-  is 0. Empty in 288 of 351 files.
+  is 0. Empty in 288 of 351 files. These are most likely deleted objects
+  whose data has not been reclaimed yet: across all files, none of the
+  28,521 child references in spread, spread-layer and page-item hierarchy
+  chunks points to one of these UIDs, and in the one case examined, an
+  IDML exported earlier contains the object while the INDD no longer
+  references it. The converter ignores them.
 
 In all 351 files, every object with data is in exactly one of the two
 trees. Some UIDs in either tree have no data: 215 class-tree entries in
