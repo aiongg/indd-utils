@@ -82,7 +82,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B0A | `StrokeWeight` | f64 | 241/241 ranges |
 | 0x1B0B | `Tracking` | thousandths of an em ×1000 | 49/49 ranges, 94/94 styles |
 | 0x1B0C | `Composer` | code: 0x2001 HL Single, 0x2002 HL Composer, 0x2078 HL Composer Optyca | 4/4 ranges, 114/114 styles |
-| 0x1B11 | `Capitalization` | 0 Normal, 2 AllCaps | 77/77 styles |
+| 0x1B11 | `Capitalization` | 0 Normal, 1 SmallCaps, 2 AllCaps, 3 CapToSmallCap | 77/77 styles; codes 1 and 3 below |
 | 0x1B12 | `StrokeColor` | swatch UID | 75/75 styles |
 | 0x1B16 | `LeftIndent` | f64 | 22/22 ranges |
 | 0x1B18 | `FirstLineIndent` | f64 | 12/12 ranges |
@@ -114,9 +114,24 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1BD3 | `ParagraphShadingTint` | f64 | 79/79 styles |
 | 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
 
-`Capitalization` codes other than 0 and 2 have no IDML evidence. Code 1
-occurs in 3 styles of one sample, which has no IDML; the corpus pairs use
-only `Normal` and `AllCaps`. The converter leaves other codes out.
+**`Capitalization` codes 1 and 3.**
+
+- Code 1 is `SmallCaps`. In one pair (InDesign 20.2, IDML from the same
+  version), 8 of 8 paragraph styles with code 1 have
+  `Capitalization="SmallCaps"`. The same pair confirms code 2 (4 of 4
+  styles) and code 0.
+- Code 3 is `CapToSmallCap`. No pair has it. The evidence is a privately
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  rendered pages. So code 3 sets capital letters as small capitals
+  too. Of the values in the IDML schema (`Normal`, `SmallCaps`,
+  `AllCaps`, `CapToSmallCap`, `LowerCase`), only `CapToSmallCap` does
+  that.
+
+The converter leaves out other codes.
 
 Attributes whose value never varies in the corpus (for example
 `BaselineShift`, `RightIndent`) cannot be located this way and are not

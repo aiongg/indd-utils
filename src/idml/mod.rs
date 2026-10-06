@@ -66,7 +66,12 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
     (
         0x1B11,
         "Capitalization",
-        TextKind::Enum(&[(0, "Normal"), (2, "AllCaps")]),
+        TextKind::Enum(&[
+            (0, "Normal"),
+            (1, "SmallCaps"),
+            (2, "AllCaps"),
+            (3, "CapToSmallCap"),
+        ]),
         false,
     ),
     (0x1B12, "StrokeColor", TextKind::Swatch, false),
@@ -253,6 +258,58 @@ fn section_ranges(doc: &Document) -> Vec<(&Section, usize, usize)> {
         .collect()
 }
 
+/// IDML `PageNumberStyle` of a section's style code.
+fn number_style(code: u32) -> Option<&'static str> {
+    match code {
+        numbering::ARABIC => Some("Arabic"),
+        numbering::LOWER_ROMAN => Some("LowerRoman"),
+        _ => None,
+    }
+}
+
+/// Lower-case Roman numeral of `n` (1 or more).
+fn lower_roman(mut n: u32) -> String {
+    const DIGITS: [(u32, &str); 13] = [
+        (1000, "m"),
+        (900, "cm"),
+        (500, "d"),
+        (400, "cd"),
+        (100, "c"),
+        (90, "xc"),
+        (50, "l"),
+        (40, "xl"),
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    ];
+    let mut out = String::new();
+    for (value, digits) in DIGITS {
+        while n >= value {
+            out.push_str(digits);
+            n -= value;
+        }
+    }
+    out
+}
+
+/// The name of each document page: its number (see `page_numbers`) in
+/// its section's style. Styles other than lower-case Roman are written as
+/// Arabic numbers.
+fn page_names(doc: &Document) -> Vec<String> {
+    let numbers = page_numbers(doc);
+    let mut out: Vec<String> = numbers.iter().map(u32::to_string).collect();
+    for (s, first, length) in section_ranges(doc) {
+        if s.style == numbering::LOWER_ROMAN {
+            for i in (first..first + length).filter(|&i| numbers[i] > 0) {
+                out[i] = lower_roman(numbers[i]);
+            }
+        }
+    }
+    out
+}
+
 /// The number shown on each document page, from the sections. Pages
 /// not covered by a section are numbered by their position.
 fn page_numbers(doc: &Document) -> Vec<u32> {
@@ -397,11 +454,11 @@ impl Writer<'_> {
                 x.attr("PageNumberStart", section.start.to_string());
             }
             x.attr("SectionPrefix", "");
-            if section.style == numbering::ARABIC {
+            if let Some(style) = number_style(section.style) {
                 x.start("Properties")
                     .start("PageNumberStyle")
                     .attr("type", "enumeration")
-                    .text("Arabic")
+                    .text(style)
                     .end()
                     .end();
             }
@@ -810,11 +867,13 @@ impl Writer<'_> {
 
     /// `TextWrapPreference` from an item's text wrap chunk. An item without
     /// the chunk has no wrap. Values not identified yet are left out: the
-    /// whole element for an unknown mode, the side and inverse settings
-    /// for flags other than 1, and the offsets unless all are 0.
+    /// whole element for an unknown mode, and the side and inverse settings
+    /// for flags other than 1.
     fn text_wrap_preference(x: &mut Xml, wrap: Option<&TextWrap>, contour_type: Option<u32>) {
         let mode = match wrap.map(|w| w.mode) {
             None | Some(wrap_mode::NONE) => "None",
+            Some(wrap_mode::JUMP_OBJECT) => "JumpObjectTextWrap",
+            Some(wrap_mode::BOUNDING_BOX) => "BoundingBoxTextWrap",
             Some(wrap_mode::CONTOUR) => "Contour",
             Some(_) => return,
         };
@@ -825,18 +884,17 @@ impl Writer<'_> {
                 .attr("TextWrapSide", "BothSides");
         }
         x.attr("TextWrapMode", mode);
-        if wrap.is_none_or(|w| w.offsets == [0.0; 4]) {
-            x.start("Properties").empty(
-                "TextWrapOffset",
-                &[
-                    ("Top", "0".into()),
-                    ("Left", "0".into()),
-                    ("Bottom", "0".into()),
-                    ("Right", "0".into()),
-                ],
-            );
-            x.end();
-        }
+        let [left, top, right, bottom] = wrap.map_or([0.0; 4], |w| w.offsets);
+        x.start("Properties").empty(
+            "TextWrapOffset",
+            &[
+                ("Top", num(top)),
+                ("Left", num(left)),
+                ("Bottom", num(bottom)),
+                ("Right", num(right)),
+            ],
+        );
+        x.end();
         if contour_type == Some(5) {
             x.empty("ContourOption", &[("ContourType", "SameAsClipping".into())]);
         }
@@ -953,9 +1011,9 @@ impl Writer<'_> {
         x.end();
     }
 
-    /// `page_index` counts the document pages written so far; `numbers`
-    /// gives each document page its number (see `page_numbers`).
-    fn spread(&self, s: &Spread, master: bool, page_index: &mut usize, numbers: &[u32]) -> String {
+    /// `page_index` counts the document pages written so far; `names`
+    /// gives each document page its name (see `page_names`).
+    fn spread(&self, s: &Spread, master: bool, page_index: &mut usize, names: &[String]) -> String {
         let mut x = Xml::new();
         let kind = if master { "MasterSpread" } else { "Spread" };
         self.package_root(&mut x, kind);
@@ -980,9 +1038,10 @@ impl Writer<'_> {
                 prefix.clone()
             } else {
                 *page_index += 1;
-                numbers
+                names
                     .get(*page_index - 1)
-                    .map_or_else(|| page_index.to_string(), u32::to_string)
+                    .cloned()
+                    .unwrap_or_else(|| page_index.to_string())
             };
             let [x0, y0, x1, y1] = p.bounds;
             x.start("Page")
@@ -1189,19 +1248,19 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
     files.insert("Resources/Preferences.xml".into(), w.preferences());
     files.insert("XML/BackingStory.xml".into(), w.backing_story());
     files.insert("XML/Tags.xml".into(), w.tags());
-    let numbers = page_numbers(doc);
+    let names = page_names(doc);
     let mut unused = 0;
     for s in &doc.master_spreads {
         files.insert(
             format!("MasterSpreads/MasterSpread_u{:x}.xml", s.uid),
-            w.spread(s, true, &mut unused, &numbers),
+            w.spread(s, true, &mut unused, &names),
         );
     }
     let mut page_index = 0;
     for s in &doc.spreads {
         files.insert(
             format!("Spreads/Spread_u{:x}.xml", s.uid),
-            w.spread(s, false, &mut page_index, &numbers),
+            w.spread(s, false, &mut page_index, &names),
         );
     }
     for s in &doc.stories {
@@ -1260,6 +1319,32 @@ mod tests {
             .map(|(s, first, len)| (s.uid, *first, *len))
             .collect();
         assert_eq!(ranges, [(1, 0, 2), (2, 2, 2), (3, 4, 2)]);
+        let mut doc = doc;
+        doc.sections[0].style = numbering::LOWER_ROMAN;
+        assert_eq!(page_names(&doc), ["i", "ii", "1", "2", "3", "4"]);
+    }
+
+    #[test]
+    fn writes_wrap_offsets_by_side() {
+        let wrap = TextWrap {
+            mode: wrap_mode::BOUNDING_BOX,
+            offsets: [1.0, 2.0, 3.0, 4.0],
+            flags: 1,
+        };
+        let mut x = Xml::new();
+        Writer::text_wrap_preference(&mut x, Some(&wrap), None);
+        let out = x.finish();
+        assert!(out.contains("TextWrapMode=\"BoundingBoxTextWrap\""));
+        assert!(out.contains("<TextWrapOffset Top=\"2\" Left=\"1\" Bottom=\"4\" Right=\"3\" />"));
+    }
+
+    #[test]
+    fn names_pages_in_lower_roman() {
+        assert_eq!(lower_roman(1), "i");
+        assert_eq!(lower_roman(4), "iv");
+        assert_eq!(lower_roman(12), "xii");
+        assert_eq!(lower_roman(49), "xlix");
+        assert_eq!(lower_roman(1994), "mcmxciv");
     }
 
     #[test]

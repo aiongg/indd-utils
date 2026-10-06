@@ -210,7 +210,7 @@ pub struct PageItem {
 pub struct TextWrap {
     /// Wrap mode code (see `wrap_mode`).
     pub mode: u32,
-    /// The four offsets, in stored order (not yet mapped to sides).
+    /// The four offsets: left, top, right, bottom.
     pub offsets: [f64; 4],
     /// The u32 at offset 40; 1 in every sample whose IDML has
     /// `Inverse="false"`, `ApplyToMasterPageOnly="false"` and
@@ -221,6 +221,8 @@ pub struct TextWrap {
 /// Text wrap mode codes.
 pub mod wrap_mode {
     pub const NONE: u32 = 0;
+    pub const JUMP_OBJECT: u32 = 1;
+    pub const BOUNDING_BOX: u32 = 3;
     pub const CONTOUR: u32 = 6;
 }
 
@@ -394,6 +396,7 @@ pub struct Section {
 /// Page number style codes of sections.
 pub mod numbering {
     pub const ARABIC: u32 = 0x4C15;
+    pub const LOWER_ROMAN: u32 = 0x4C17;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -686,7 +689,7 @@ impl<'a> Reader<'a> {
                 section.continue_numbering = cont != 0;
             }
         }
-        if section.style != numbering::ARABIC {
+        if section.style != numbering::ARABIC && section.style != numbering::LOWER_ROMAN {
             self.warn(format!(
                 "section {uid}: page number style {:#x} is not known; left out",
                 section.style
@@ -815,7 +818,10 @@ impl<'a> Reader<'a> {
         c.skip(4)?;
         let offsets = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
         let flags = c.u32()?;
-        if mode != wrap_mode::NONE && mode != wrap_mode::CONTOUR {
+        if !matches!(
+            mode,
+            wrap_mode::NONE | wrap_mode::JUMP_OBJECT | wrap_mode::BOUNDING_BOX | wrap_mode::CONTOUR
+        ) {
             self.warn(format!(
                 "item {uid}: text wrap mode {mode} is not known; left out"
             ));

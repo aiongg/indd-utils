@@ -10,8 +10,8 @@ IDML exported by InDesign names most objects `Self="u<hex>"`, and that hex
 number is the object's UID in the INDD file. So each corpus pair gives, for
 every such IDML element, the INDD object, its class, and the attribute
 values its chunks must encode. Facts below were found by comparing the two,
-and are checked by `tools/compare.py`, which converts every pair (75 unique
-pairs, InDesign 12–21) and compares the output with the reference IDML
+and are checked by `tools/compare.py`, which converts every pair (78 unique
+pairs, InDesign 7.5–21) and compares the output with the reference IDML
 attribute by attribute.
 
 ## Chunks
@@ -131,10 +131,10 @@ chunk 0x3703 (44 bytes):
 
 | Offset | Contents |
 |---|---|
-| 0 | u32 wrap mode: 0 = `None`, 6 = `Contour` |
+| 0 | u32 wrap mode: 0 `None`, 1 `JumpObjectTextWrap`, 3 `BoundingBoxTextWrap`, 6 `Contour` |
 | 4 | u32 UID of the wrap path object (class 0x3702), or 0 |
-| 8 | Four f64 offsets; which side each belongs to is not known |
-| 40 | u32, not identified; 1 in every pair |
+| 8 | Four f64 offsets: left, top, right, bottom (IDML `TextWrapOffset`) |
+| 40 | u32, not fully identified; 1 in all but one element of the pairs |
 
 The wrap path object holds the contour as path geometry (chunk 0x162B,
 as for page items) and names the item in chunk 0x3709.
@@ -142,27 +142,73 @@ as for page items) and names the item in chunk 0x3709.
 Placed graphics also have chunk 0x373D. Its first u32 is the contour
 type: 5 = `SameAsClipping`.
 
-Evidence, from the IDML `TextWrapPreference` of every element with a
-`Self` in the corpus pairs (same-version pairs first, then the pairs
-whose IDML is from an older version):
+**Evidence from the pairs.** For every element with a `Self` in the
+corpus pairs, the IDML `TextWrapPreference` was compared with chunk
+0x3703 of the INDD object with that UID. Same-version pairs first, then
+the pairs whose IDML is from an older version:
 
 | INDD | IDML | Same version | Older IDML |
 |---|---|---|---|
-| Mode 0 | `TextWrapMode="None"` | 2,220 of 2,220 | 615 of 615 |
-| No chunk 0x3703 | `TextWrapMode="None"` | 1,219 of 1,219 | 722 of 722 |
-| Mode 6 | `TextWrapMode="Contour"` | none | 1 of 1 (an image) |
-| Offsets all 0 | `TextWrapOffset` all 0 | 2,220 of 2,220 | 616 of 616 |
-| u32 at 40 = 1 | `Inverse="false"`, `ApplyToMasterPageOnly="false"`, `TextWrapSide="BothSides"` | 2,220 of 2,220 | 616 of 616 |
+| Mode 0 | `TextWrapMode="None"` | 2,625 of 2,625 | 615 of 615 |
+| No chunk 0x3703 | `TextWrapMode="None"` | 1,468 of 1,468 | 873 of 873 |
+| Mode 1 | `TextWrapMode="JumpObjectTextWrap"` | 2 of 2 (one file) | 1, matched by geometry (below) |
+| Mode 3 | `TextWrapMode="BoundingBoxTextWrap"` | 1 of 1 (an image) | none |
+| Mode 6 | `TextWrapMode="Contour"` | 3 of 3 (one file) | 1 of 1 (an image) |
+| Offsets as left, top, right, bottom | `TextWrapOffset` | 2,631 of 2,631 | 616 of 616 |
+| u32 at 40 = 1 | `Inverse="false"`, `ApplyToMasterPageOnly="false"`, `TextWrapSide="BothSides"` | 2,630 of 2,630 | 616 of 616 |
 | 0x373D type 5 | `ContourType="SameAsClipping"` | 224 of 225 (1 has no `ContourOption`) | 75 of 75 |
 
-Every offset in the pairs is 0, so the order of the four offsets is not
-known. Modes 1, 3 and 6 also occur on 10 page items that have no element
-in their pair's IDML (the IDML is from an older version and was probably
-exported before the items were made), so the IDML names of modes 1 and 3
-are not known. The converter
-writes `TextWrapPreference` only for modes 0 and 6, leaves out the
-offsets unless all four are 0, and leaves out the side and inverse
-settings unless the u32 at 40 is 1.
+**Order of the offsets.** Most offsets in the pairs are 0, so the order
+rests on a few elements:
+
+- Offset 24 (third) is `Right`: the bounding-box image has 2.83 there
+  and 0 elsewhere; its IDML has `Right="2.834645669291339"` and 0 for
+  the other sides.
+- Offset 32 (fourth) is `Bottom`: both jump-object frames have 14.17
+  there and 0 elsewhere; their IDML has `Bottom="14.173228346456694"`
+  and 0 for the other sides.
+- Offset 16 (second) is `Top`. In a pair whose IDML is from an older
+  version (IDML 17.0, INDD 18.1), the INDD has one jump-object frame with
+  11.34 at offset 16 and 5.67 at offset 32. Its UID differs from the IDML
+  element's, but its path and `ItemTransform` are identical to those of
+  the IDML's only jump-object frame, which has `Top="11.338582677165356"`
+  and `Bottom="5.669291338582678"`. A privately held sample and its print
+  PDF agree; see below.
+- Offset 8 (first) is therefore `Left`. It is 0 in every sample that
+  has a reference.
+- The two contour frames have the same value at all four offsets, as in
+  their IDML.
+
+**Evidence from a privately held sample and its print PDF.** The sample
+[detail of a non-public sample removed]
+[detail of a non-public sample removed]
+is set beside a frame, and text above the frame must end above the top
+of the wrap area. Text line positions in the PDF were taken from
+pdftotext word boxes and compared with the frame bounds:
+
+- [detail of a non-public sample removed]
+  ends at most 1.5 pt below the frame's top edge.
+- [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  frame's top edge, inside the frame; in each, the overlap is at most
+  [detail of a non-public sample removed]
+  next line position would have ended more than the offset's size plus
+  1.5 pt below the edge, and is empty.
+- [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  frame's top edge.
+
+So the value at offset 16 moves the top edge of the wrap area, and a
+negative value lets text into the frame from above.
+
+**Other values.** One image in the same-version pairs has 0x40001 at
+offset 40 and `TextWrapSide="SideAwayFromSpine"`; no other value is
+shown, so the converter writes the side and inverse settings only when
+the u32 at 40 is 1. Modes other than 0, 1, 3 and 6 have no IDML
+evidence; the converter leaves out `TextWrapPreference` for them.
 
 ## Placed graphics
 
@@ -314,19 +360,20 @@ Section chunk 0x4C02:
 
 | Field | Contents |
 |---|---|
-| u8, string | Not identified (empty in all samples) |
-| u8, string | Not identified (empty in all samples) |
+| u8, string | Not identified; empty in most samples |
+| u8, string | Not identified; empty in most samples |
 | u32 | First page of the section; 0 for the section that starts at the document's first page |
 | u32 | Page number start (`PageNumberStart`) |
-| u32 | Page number style: 0x4C15 = Arabic |
+| u32 | Page number style: 0x4C15 = `Arabic`, 0x4C17 = `LowerRoman` |
 | u32 | Continue numbering (1 = true, `ContinueNumbering`) |
 
 Evidence:
 
-- Every corpus pair has one section, and its IDML `PageStart` is the
-  document's first page. In all of them the first-page field is 0. All 73
-  sections match on `ContinueNumbering` and, where IDML writes it,
-  `PageNumberStart`. IDML writes `PageNumberStart` only for sections with
+- In every corpus pair the first section's IDML `PageStart` is the
+  document's first page, and its first-page field is 0. All but one pair
+  have one section; one has four. All 79 sections that the converter
+  writes match on `PageStart`, `Length`, `ContinueNumbering` and, where
+  IDML writes it, `PageNumberStart`. IDML writes `PageNumberStart` only for sections with
   `ContinueNumbering="false"` (14 of 14); a continuing section can store a
   start number that IDML leaves out.
 - 84 distinct INDD files without an IDML have more than one section (254
@@ -335,13 +382,25 @@ Evidence:
   always in page order, so the converter sorts sections by their first
   page. A section ends where the next one starts; that gives IDML
   `Length`.
-- The style is 0x4C15 in all 415 sections of the 245 distinct
-  little-endian files, and those in the pairs are `Arabic`. No sample
-  shows another style, so the converter writes `PageNumberStyle` only for
-  0x4C15 and leaves it out (with a warning) for other codes.
+- The style is 0x4C15 in all 423 sections of the 250 distinct
+  little-endian files, and those in the pairs are `Arabic`.
+- Style 0x4C17 is lower-case Roman. No pair has it. The evidence is a
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  PDF's page labels (`/PageLabels` in the document catalog) give every
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  [detail of a non-public sample removed]
+  evidence. The
+  converter writes `PageNumberStyle` for 0x4C15 and 0x4C17 and leaves it
+  out (with a warning) for other codes.
 
 The converter names document pages by their number in their section,
-counting on from the previous section when numbering continues.
+counting on from the previous section when numbering continues. In a
+section with style 0x4C17 it writes the number in lower-case Roman (i,
+ii, iii), as in the PDF labels above; no pair shows IDML page names in
+such a section.
 
 ## Document preferences (class 0x2202)
 
