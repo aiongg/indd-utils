@@ -7,10 +7,14 @@ with the sibling. Reports, per element type: how many referenced elements
 we produce (matched by Self), and per attribute how often our value
 matches. Also reports story text agreement.
 
-Usage: python3 -I tools/compare.py [--limit N] [--detail TAG] [--file SUBSTR]
-                                   [--schemas DIR --jing DIR]
+Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
+                                   [--schemas DIR --jing DIR] [--bin PATH]
 Run from the repository root after `cargo build --release`. With --schemas
-and --jing, also validates every output with tools/validate.sh.
+and --jing, also validates every output with tools/validate.sh. --bin runs
+another converter binary, for example a copy of the previous build.
+
+Embedded file data (`Contents`) is compared by digest, so it is reported as
+`md5:<hex> <length>` rather than as the full text.
 """
 
 import argparse
@@ -127,18 +131,24 @@ def props(el):
     if p is not None:
         for c in p:
             if len(c) == 0:
-                a["P." + c.tag] = c.text or ""
+                text = c.text or ""
+                if c.tag == "Contents":
+                    n = norm(text)
+                    text = f"md5:{hashlib.md5(n.encode()).hexdigest()} {len(n)}"
+                a["P." + c.tag] = text
     return a
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--detail", help="print attribute table for this tag")
+    ap.add_argument("--detail", action="append", default=[],
+                    help="print attribute table for this tag (repeatable)")
     ap.add_argument("--file", help="only pairs whose path contains this")
     ap.add_argument("--show", type=int, default=0, help="show N mismatches per attribute")
     ap.add_argument("--schemas", help="IDML RelaxNG schema directory (validate output)")
     ap.add_argument("--jing", help="directory with jing.jar, isorelax.jar, saxon.jar")
+    ap.add_argument("--bin", default=str(BIN), help="converter binary")
     args = ap.parse_args()
 
     found = Counter()
@@ -151,7 +161,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out.idml"
         for indd, idml in pairs(args.limit, args.file):
-            r = subprocess.run([BIN, "convert", indd, out], capture_output=True, text=True)
+            r = subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
@@ -222,12 +232,12 @@ def main():
     print("\nelements (produced / in reference):")
     for tag, n in total.most_common():
         print(f"  {tag:34} {found[tag]:6} / {n:6}")
-    if args.detail:
-        print(f"\nattributes of {args.detail} (ok / wrong / missing):")
-        rows = [(k, c) for (t, k), c in attr_ok.items() if t == args.detail]
+    for tag in args.detail:
+        print(f"\nattributes of {tag} (ok / wrong / missing):")
+        rows = [(k, c) for (t, k), c in attr_ok.items() if t == tag]
         for k, c in sorted(rows, key=lambda kc: -sum(kc[1].values())):
             print(f"  {k:40} {c['ok']:6} {c['wrong']:6} {c['missing']:6}")
-            for ex in examples[(args.detail, k)]:
+            for ex in examples[(tag, k)]:
                 print(f"      {ex}")
     for ex in examples[("Story", "text")]:
         print("  story mismatch:", ex)
