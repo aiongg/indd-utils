@@ -1,5 +1,6 @@
 //! IDML package writer.
 
+mod values;
 mod xml;
 pub mod zip;
 
@@ -306,6 +307,7 @@ const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
     (0x5525, "GradientStrokeLength", AttrKind::Number),
     (0x5526, "GradientStrokeStart", AttrKind::Point),
 ];
+use values::Node;
 use xml::Xml;
 
 use crate::object::Cursor;
@@ -664,6 +666,17 @@ impl Writer<'_> {
         x.empty("idPkg:Graphic", &[("src", "Resources/Graphic.xml".into())]);
         x.empty("idPkg:Fonts", &[("src", "Resources/Fonts.xml".into())]);
         x.empty("idPkg:Styles", &[("src", "Resources/Styles.xml".into())]);
+        // Present, with these values, in every corpus IDML; the root
+        // paragraph style refers to it. See docs/format/idml-values.md.
+        x.empty(
+            "NumberingList",
+            &[
+                ("Self", "NumberingList/$ID/[Default]".into()),
+                ("Name", "$ID/[Default]".into()),
+                ("ContinueNumbersAcrossStories", "false".into()),
+                ("ContinueNumbersAcrossDocuments", "false".into()),
+            ],
+        );
         x.empty(
             "idPkg:Preferences",
             &[("src", "Resources/Preferences.xml".into())],
@@ -928,7 +941,12 @@ impl Writer<'_> {
     }
 
     fn properties(x: &mut Xml, props: &[Property]) {
-        if props.is_empty() {
+        Self::properties_with(x, props, &[]);
+    }
+
+    /// `<Properties>` with `props`, then the elements in `extra`.
+    fn properties_with(x: &mut Xml, props: &[Property], extra: &[Node]) {
+        if props.is_empty() && extra.is_empty() {
             return;
         }
         x.start("Properties");
@@ -957,6 +975,56 @@ impl Writer<'_> {
                 }
             }
             x.end();
+        }
+        for n in extra {
+            n.write(x);
+        }
+        x.end();
+    }
+
+    /// Observed values of a root style (see `values`) that are not in
+    /// `written` (attributes) or `props` (Properties children): attributes,
+    /// Properties children and other child elements.
+    fn root_values(
+        &self,
+        tag: &str,
+        written: &[&str],
+        props: &[Property],
+    ) -> (Vec<(String, String)>, Vec<Node>, Vec<Node>) {
+        let node = values::root_style(tag, self.doc.version.major);
+        let attrs = node
+            .attrs
+            .into_iter()
+            .filter(|(k, _)| !written.contains(&k.as_str()))
+            .collect();
+        let mut extra_props = Vec::new();
+        let mut children = Vec::new();
+        for c in node.children {
+            if c.tag == "Properties" {
+                extra_props.extend(
+                    c.children
+                        .into_iter()
+                        .filter(|p| !props.iter().any(|(n, _, _)| *n == p.tag)),
+                );
+            } else {
+                children.push(c);
+            }
+        }
+        (attrs, extra_props, children)
+    }
+
+    /// A root cell or table style, from observed values only.
+    fn root_table_style(&self, x: &mut Xml, tag: &str, name: &str) {
+        let (attrs, props, children) = self.root_values(tag, &[], &[]);
+        x.start(tag)
+            .attr("Self", format!("{tag}/$ID/{name}"))
+            .attr("Name", format!("$ID/{name}"));
+        for (k, v) in &attrs {
+            x.attr(k, v);
+        }
+        Self::properties_with(x, &[], &props);
+        for c in &children {
+            c.write(x);
         }
         x.end();
     }
@@ -1045,19 +1113,35 @@ impl Writer<'_> {
             if let Some(root) = root {
                 self.style_group_children(&mut x, root, tag, sub_tag, &mut written);
             }
+            // Styles not listed in a group (such as a built-in root
+            // style). Some documents have two style objects with the same
+            // name, which would give two elements with the same `Self`;
+            // the first is written.
+            let mut refs: std::collections::HashSet<String> = written
+                .iter()
+                .map(|&u| self.style_ref(Some(u), paragraph))
+                .collect();
             for s in doc.styles.values().filter(|s| s.paragraph == paragraph) {
-                if !written.contains(&s.uid) {
+                if !written.contains(&s.uid) && refs.insert(self.style_ref(Some(s.uid), paragraph))
+                {
                     self.style_element(&mut x, s, tag);
                 }
             }
             x.end();
         }
-        for (tag, kind) in [
-            ("RootCellStyleGroup", root_kind::CELL),
-            ("RootTableStyleGroup", root_kind::TABLE),
+        for (tag, kind, style, name) in [
+            ("RootCellStyleGroup", root_kind::CELL, "CellStyle", "[None]"),
+            (
+                "RootTableStyleGroup",
+                root_kind::TABLE,
+                "TableStyle",
+                "[No table style]",
+            ),
         ] {
             let id = root_of(kind).map_or(tag.to_string(), |g| uref(Some(g.uid)));
-            x.empty(tag, &[("Self", id)]);
+            x.start(tag).attr("Self", id);
+            self.root_table_style(&mut x, style, name);
+            x.end();
         }
         let object_root = root_of(root_kind::OBJECT);
         x.start("RootObjectStyleGroup").attr(
@@ -1073,7 +1157,16 @@ impl Writer<'_> {
             x.start("ObjectStyle")
                 .attr("Self", format!("ObjectStyle/{}", self_name(&name)))
                 .attr("Name", &name);
-            if let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
+            if os.builtin && os.name == "[None]" && os.based_on.is_none() {
+                let (attrs, props, children) = self.root_values("ObjectStyle", &[], &[]);
+                for (k, v) in &attrs {
+                    x.attr(k, v);
+                }
+                Self::properties_with(&mut x, &[], &props);
+                for c in &children {
+                    c.write(&mut x);
+                }
+            } else if let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
                 let base_name = if base.builtin {
                     format!("$ID/{}", base.name)
                 } else {
@@ -1138,6 +1231,17 @@ impl Writer<'_> {
         for (k, v) in &plain {
             x.attr(k, v);
         }
+        // Root styles also get the values every exported IDML has on them;
+        // values read from the INDD take precedence.
+        let mut extra = Vec::new();
+        if s.builtin && s.based_on.is_none() && s.name.starts_with("[No ") {
+            let written: Vec<&str> = plain.iter().map(|(k, _)| *k).collect();
+            let (attrs, more, _) = self.root_values(tag, &written, &props);
+            for (k, v) in &attrs {
+                x.attr(k, v);
+            }
+            extra = more;
+        }
         if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {
             // The root "[No ... style]" is written as a string.
             let root = base.builtin && base.name.starts_with("[No ");
@@ -1154,7 +1258,7 @@ impl Writer<'_> {
                 );
             }
         }
-        Self::properties(x, &props);
+        Self::properties_with(x, &props, &extra);
         x.end();
     }
 

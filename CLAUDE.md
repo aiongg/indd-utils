@@ -28,6 +28,8 @@ now). Licence: MIT.
 - `tests/fixtures.rs`: smoke tests on committed open-licensed samples.
 - `tests/corpus.rs`: tests over the local `corpus/`; they skip if absent.
 - `tools/inventory.py`: corpus inventory (`python3 -I tools/inventory.py corpus/`).
+- `tools/root_values.py [--write]`: root style values that every corpus IDML
+  has; regenerates `src/idml/root_values.xml` (see `docs/format/idml-values.md`).
 - Analysis scratch scripts go in the session scratchpad, not the repo.
   Anything worth keeping becomes an `indd` subcommand.
 

@@ -336,7 +336,8 @@ One public template without an IDML has a style with code 4; with no
 reference, the converter leaves out codes other than 0 and 2.
 
 Attributes whose value never varies in the corpus cannot be located this
-way and are not written; InDesign then uses its defaults. These include
+way. The converter writes the root styles' values for them from IDML
+observation (`idml-values.md`); styles and ranges inherit them. These include
 `KeepFirstLines`, `KeepLastLines`, `KeepAllLinesTogether`,
 `KeepWithNext`, `KeepWithPrevious`, `Skew`, `StrikeThru`,
 `LastLineIndent`, `RuleAbove`, `RuleAboveColor`, the `RuleBelow` indents
