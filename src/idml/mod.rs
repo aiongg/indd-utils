@@ -811,6 +811,7 @@ impl Writer<'_> {
             }
             x.end();
         }
+        self.cross_reference_formats(&mut x);
         x.empty(
             "idPkg:BackingStory",
             &[("src", "XML/BackingStory.xml".into())],
@@ -824,6 +825,35 @@ impl Writer<'_> {
         self.hyperlinks(&mut x);
         x.end();
         x.finish()
+    }
+
+    /// Cross-reference formats. See docs/format/cross-references.md.
+    fn cross_reference_formats(&self, x: &mut Xml) {
+        for f in self.doc.cross_reference_formats.values() {
+            let id = uref(Some(f.uid));
+            x.start("CrossReferenceFormat")
+                .attr("Self", &id)
+                .attr("Name", &f.name);
+            if f.character_style == 0 {
+                x.attr("AppliedCharacterStyle", "n");
+            }
+            for (i, b) in f.blocks.iter().enumerate() {
+                let Some(kind) = b.type_name() else { continue };
+                x.start("BuildingBlock")
+                    .attr("Self", format!("{id}BuildingBlock{i}"))
+                    .attr("BlockType", kind);
+                if b.zero_fields {
+                    x.attr("AppliedCharacterStyle", "n");
+                }
+                x.attr("CustomText", &b.text);
+                if b.zero_fields {
+                    x.attr("AppliedDelimiter", "$ID/")
+                        .attr("IncludeDelimiter", "false");
+                }
+                x.end();
+            }
+            x.end();
+        }
     }
 
     /// Hyperlink text sources written in the stories.

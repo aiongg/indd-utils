@@ -7,6 +7,7 @@ pub mod font;
 pub mod hyperlink;
 pub mod table;
 pub mod variable;
+pub mod xref;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -16,6 +17,7 @@ pub use font::{Font, FontFamily};
 pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
 pub use table::{Cell, Table};
 pub use variable::TextVariable;
+pub use xref::CrossReferenceFormat;
 
 use crate::object::{Cursor, Object};
 use crate::{Database, Error, Version};
@@ -374,6 +376,8 @@ pub struct Document {
     pub bookmarks: BTreeMap<u32, Bookmark>,
     /// All bookmarks in document order (document chunk 0x13501).
     pub bookmark_order: Vec<u32>,
+    /// Cross-reference formats, by UID.
+    pub cross_reference_formats: BTreeMap<u32, CrossReferenceFormat>,
     /// Problems that did not stop the conversion (content left out).
     pub warnings: Vec<String>,
     pub preferences: Option<DocumentPreferences>,
@@ -551,6 +555,7 @@ impl<'a> Reader<'a> {
         let mut text_sources = BTreeMap::new();
         let mut destinations = Vec::new();
         let mut bookmarks = BTreeMap::new();
+        let mut cross_reference_formats = BTreeMap::new();
         for &(uid, cls) in self.db.classes() {
             if self.db.object(uid)?.is_none() {
                 continue;
@@ -677,6 +682,11 @@ impl<'a> Reader<'a> {
                         destinations.push(d);
                     }
                 }
+                xref::CLASS => {
+                    if let Some(f) = CrossReferenceFormat::read(uid, &*self.object(uid)?)? {
+                        cross_reference_formats.insert(uid, f);
+                    }
+                }
                 hyperlink::class::BOOKMARK => {
                     if let Some(b) = Bookmark::read(uid, &*self.object(uid)?)? {
                         bookmarks.insert(uid, b);
@@ -721,6 +731,7 @@ impl<'a> Reader<'a> {
                 Some(d) => hyperlink::document_bookmarks(&d)?,
                 None => Vec::new(),
             },
+            cross_reference_formats,
             warnings: self.warnings.borrow().clone(),
             preferences: self.document_preferences()?,
         })
