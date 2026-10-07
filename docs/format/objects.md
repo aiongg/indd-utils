@@ -259,6 +259,75 @@ frame list (class 0x228). Its chunk 0x205: u32 story, then a UID list of
 the columns of all threaded frames in order, which gives
 `PreviousTextFrame` and `NextTextFrame`.
 
+## Page item settings
+
+Every page item element in IDML (`TextFrame`, `Rectangle`, `Oval`,
+`Polygon`, `GraphicLine`, `Group`) has the attributes below. Each is
+stored in a chunk of the item (class 0x6201 or 0x401), or in its
+attribute list (chunk 0x6E03, `attributes.md`); without the chunk the
+IDML value is the default in the table.
+
+| Chunk | Contents | IDML | Without the chunk |
+|---|---|---|---|
+| 0x2C10 (groups: 0x418) | u8 1 if a built-in key, then an in-object string | `Name`: the string, or `$ID/` and the key | `$ID/` |
+| 0x2C32 | u16, 0 = hidden | `Visible` | `true` |
+| 0x2C2D | u32, 1 = locked | `Locked` | `false` |
+| 0x21D4E | u32 count *n*, *n* pairs of u32 | `ParentInterfaceChangeCount`: the numbers | empty |
+| 0x21D50 | same | `TargetInterfaceChangeCount` | empty |
+| 0x21D53 | same | `LastUpdatedInterfaceChangeCount` | empty |
+| 0x1424 | u32 master page item, UID list | `OverriddenPageItemProps`: the list in decimal; empty if the master item is 0 | empty |
+| 0x22228 | u8 flags | `HorizontalLayoutConstraints` (bits 4–6), `VerticalLayoutConstraints` (bits 0–2): per bit `FixedDimension` if set, else `FlexibleDimension` | as 0x22 |
+
+| Attribute | IDML | Without the attribute |
+|---|---|---|
+| 0x5520, 0x551F, 0x551E | `GradientFillStart`, `GradientFillLength`, `GradientFillAngle` | `0 0`, `0`, `0` |
+| 0x5526, 0x5525, 0x5524 | `GradientStrokeStart`, `GradientStrokeLength`, `GradientStrokeAngle` | same |
+| 0x5522, 0x5523 | `GradientFillHiliteLength`, `GradientFillHiliteAngle` | `0` |
+| 0x5528, 0x5529 | `GradientStrokeHiliteLength`, `GradientStrokeHiliteAngle` | `0` |
+
+Rules the IDML follows, over the 92,409 page item elements of the 495
+trustworthy pairs:
+
+- `Locked` is on the 36,817 items that are children of a spread or
+  anchored in text, and on none of the 55,592 items inside a group or
+  another page item.
+- The change counts, `OverriddenPageItemProps` and the layout
+  constraints are in IDML from DOM 8 on: every page item of the
+  distinct corpus IDML files from DOM 8 on has them, none of the DOM 7
+  files does (145 text frames, 335 rectangles, 61 groups).
+- A group has no gradient attributes of its own (no group in the pairs
+  has 0x551E to 0x5529). IDML gives it, for each gradient attribute, the
+  value all its child items have, and leaves the attribute out when they
+  differ: 58,068 of the 58,080 gradient values of the 5,808 groups.
+
+Evidence: the INDD values, decoded as above, against the IDML of the
+same item, over the page items of the trustworthy pairs that have an
+INDD object:
+
+| IDML attribute | Equal |
+|---|---|
+| `Name` | 92,264 of 92,402 |
+| `Visible` | 92,402 of 92,402 |
+| `Locked` | 36,810 of 36,810 |
+| The three change counts and `OverriddenPageItemProps` | 91,812 of 91,812 each |
+| Both layout constraints | 91,812 of 91,812 each |
+| Gradient start and length, fill and stroke (four attributes), items other than groups | 86,594 of 86,594 each |
+| Gradient angles and highlights (six attributes) | all, 92,396 to 92,402 per attribute (groups by the rule above) |
+
+The 138 names that differ belong to groups that are states of a button
+(their parent has class 0x1450D); they have no name chunk, and IDML
+names them `$ID/$$$/StateType/...`. The converter does not write such
+groups.
+
+Values other than the default: 206 items with a name given by the
+user, 176 hidden, 1,241 with change counts, 1,113 with overridden
+properties. Flags 0x22 are in 66,820 items, 0x55 (`FixedDimension
+FlexibleDimension FixedDimension` both ways) in 643 and 0x02
+(`FlexibleDimension` three times horizontally) in 13; with another bit
+set the converter leaves both attributes out. In 14,918 items with
+chunk 0x1424 the master item is 0; in 197 of them the list still holds
+IDs, and IDML writes the attribute empty.
+
 ## Text wrap
 
 Page items (class 0x6201 and groups, 0x401) and placed graphics have

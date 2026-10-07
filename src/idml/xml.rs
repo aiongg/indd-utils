@@ -9,6 +9,8 @@ pub struct Xml {
     open: bool,
     /// The current element has text content, so its end tag is not indented.
     inline: bool,
+    /// Names of the attributes written in the open start tag.
+    written: Vec<String>,
 }
 
 /// Whether XML 1.0 allows `c` (control characters aside): not U+FFFE or
@@ -48,6 +50,7 @@ impl Xml {
             stack: Vec::new(),
             open: false,
             inline: false,
+            written: Vec::new(),
         }
     }
 
@@ -85,12 +88,32 @@ impl Xml {
         self.stack.push(name.to_string());
         self.open = true;
         self.inline = false;
+        self.written.clear();
         self
     }
 
     pub fn attr(&mut self, name: &str, value: impl AsRef<str>) -> &mut Self {
         debug_assert!(self.open, "attribute outside a start tag");
         let _ = write!(self.out, " {name}=\"{}\"", escape_attr(value.as_ref()));
+        self.written.push(name.to_string());
+        self
+    }
+
+    /// Whether the open start tag has attribute `name`.
+    pub fn has_attr(&self, name: &str) -> bool {
+        self.open && self.written.iter().any(|w| w == name)
+    }
+
+    /// Write the attributes the open start tag does not have yet.
+    pub fn attrs_missing<'a>(
+        &mut self,
+        attrs: impl IntoIterator<Item = &'a (String, String)>,
+    ) -> &mut Self {
+        for (k, v) in attrs {
+            if !self.has_attr(k) {
+                self.attr(k, v);
+            }
+        }
         self
     }
 
@@ -179,6 +202,18 @@ mod tests {
             s.ends_with("<a k=\"1 &lt; 2\">\n\t<b />\n\t<c>hi &amp; bye</c>\n</a>"),
             "{s}"
         );
+    }
+
+    #[test]
+    fn adds_only_missing_attributes() {
+        let mut x = Xml::new();
+        x.start("a").attr("k", "1");
+        let more = [
+            ("k".to_string(), "2".to_string()),
+            ("m".to_string(), "3".to_string()),
+        ];
+        x.attrs_missing(&more).end();
+        assert!(x.finish().ends_with("<a k=\"1\" m=\"3\" />"));
     }
 
     #[test]

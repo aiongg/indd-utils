@@ -187,15 +187,69 @@ All 973 `Ink` elements of the 240 corpus IDML files have
 No INDD field for them is identified; the converter writes them on every
 ink (`objects.md`).
 
-## Export options of page items
+## Values of other elements
 
-All 6,151 `ObjectExportOption` elements of page items (text frames,
-rectangles, ovals, polygons, lines and groups) in the corpus IDML files
-with DOM 12 or later have the same values, which are also the values
-every object style other than `[None]` has (above). The converter writes
-that element on every page item of documents from InDesign 12 on. The 2
-elements in the DOM 7 file differ and that file has the element on few
-items, so nothing is written for older documents.
+`tools/element_values.py` collects the values of other elements the
+converter writes from every distinct IDML of the corpus (683 files
+exported by InDesign; one more IDML in the corpus lacks the `product` of
+InDesign's `aid` processing instruction and was written by a script, so
+it is left out). A value is kept for a range of DOM versions when every
+element of that kind in every file of those versions has it with the
+same value, and it is left out entirely when some version shows two
+values or elements without it. The values may differ between versions;
+each range needs 10 files. The kept values are in
+`src/idml/element_values.xml`, in blocks with `MinimumVersion` and
+`MaximumVersion`. The converter writes them after the values it reads
+from the INDD and only where the element lacks the attribute.
+
+Files per DOM version: 7: 9, 8: 67, 9: 8, 10: 52, 11: 48, 12: 39, 13: 79,
+14: 74, 15: 66, 16: 42, 17: 17, 18: 48, 19: 70, 20: 31, 21: 33.
+
+### Page items
+
+| Element | Elements | Values kept |
+|---|---|---|
+| `TextFrame` | 32,002 | `LocalDisplaySetting="Default"`, `GradientStrokeAngle`, `GradientStrokeHiliteLength`, `GradientStrokeHiliteAngle` (`0`) from DOM 7; `FlexItemWidthMode` and `FlexItemHeightMode` (`FlexFixed`) from 21 |
+| `Rectangle` | 24,314 | `LocalDisplaySetting`, `StoryTitle="$ID/"` from 7 |
+| `Oval` | 3,356 | `LocalDisplaySetting`, `StoryTitle` and the gradient highlights from 8 |
+| `Polygon` | 52,774 | `LocalDisplaySetting`, `StoryTitle` and the gradient highlights from 7 |
+| `GraphicLine` | 4,351 | `LocalDisplaySetting`, `LockState="None"` and the gradient highlights from 7 |
+| `Group` | 9,010 | `LocalDisplaySetting`, `GradientStrokeAngle` and the gradient highlights from 7 |
+
+Each kind also has `FlexItemWidthMode` and `FlexItemHeightMode` from
+DOM 21, and values that the converter reads from the INDD
+(`objects.md`, page item settings), which take precedence. Values such
+as `Name`, `Visible`, `Locked`, the gradient angles and the layout
+constraints are not kept: they differ in some elements, and those
+values come from the INDD.
+
+### Export options of page items
+
+`ObjectExportOption` of page items has different attributes in
+different versions. Kept for each kind of item:
+
+| Values | Versions |
+|---|---|
+| Image conversion, GIF, JPEG, spacing, page break, layout and metadata options (13 to 18 values, 22 for ovals) | 8 on (7 on for rectangles) |
+| `EpubType="$ID/"` | 10 on |
+| `EpubAriaRole="$ID/"` (ovals: also two ARIA label values) | 21 on |
+
+`CustomImageSizeOption="SizeRelativeToPageWidth"`, which every page item
+of DOM 8 and 9 has, is left out: the IDML schema the output is checked
+against does not allow that value. The elements are 31,857 text frames, 23,981 rectangles, 3,356 ovals,
+52,694 polygons, 4,332 lines and 8,949 groups. The alternative text and
+tagging values (`AltTextSourceType`, `ActualTextSourceType`,
+`CustomAltText`, `CustomActualText`, `ApplyTagType`) are kept only for
+ovals: in one DOM 20 document, text frames, rectangles, polygons and
+groups are tagged as artifacts with custom text. Their INDD objects hold
+these settings in chunk 0x1E206 (its first u32 is 5 in items with the
+usual values, 8 or 0 in those items), which is not decoded.
+
+The converter writes these values on every page item. From DOM 12 on it
+adds the values that every object style other than `[None]` has in the
+files the object style values were made from (above); all 6,151
+`ObjectExportOption` elements of page items in those files with DOM 12
+or later have them.
 
 All 3,412 `InCopyExportOption` elements of rectangles, ovals and polygons
 have `IncludeGraphicProxies="true"` and `IncludeAllResources="false"`,

@@ -112,6 +112,23 @@ pub mod chunk {
     pub const OBJECT_STYLE_INFO: u32 = 0x1B907;
     pub const OBJECT_STYLE_ROOT_CHILDREN: u32 = 0x1B95A;
     pub const ITEM_OBJECT_STYLE: u32 = 0x1B916;
+    /// Page item name: u8 1 if a built-in key, then an in-object string.
+    pub const ITEM_NAME: u32 = 0x2C10;
+    /// The same for a group.
+    pub const GROUP_NAME: u32 = 0x418;
+    /// u32 1 if the page item is locked.
+    pub const ITEM_LOCKED: u32 = 0x2C2D;
+    /// u16 0 if the page item is hidden.
+    pub const ITEM_VISIBLE: u32 = 0x2C32;
+    /// Override of a master page item: u32 master item, then a list of
+    /// attribute IDs.
+    pub const ITEM_OVERRIDE: u32 = 0x1424;
+    /// Interface change counts: u32 count *n*, then *n* pairs of u32.
+    pub const ITEM_PARENT_CHANGES: u32 = 0x21D4E;
+    pub const ITEM_TARGET_CHANGES: u32 = 0x21D50;
+    pub const ITEM_UPDATED_CHANGES: u32 = 0x21D53;
+    /// u8 layout constraint flags.
+    pub const ITEM_LAYOUT_CONSTRAINTS: u32 = 0x22228;
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;
@@ -291,6 +308,35 @@ pub struct PageItem {
     /// Anchored object settings (chunk 0x2800 of the anchor), for an item
     /// anchored in text.
     pub anchor: Option<Vec<u8>>,
+    pub props: ItemProps,
+}
+
+/// Settings every page item has. See `docs/format/objects.md`, page item
+/// settings.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ItemProps {
+    /// The name (chunk 0x2C10, of a group 0x418); `None` without the
+    /// chunk.
+    pub name: Option<ItemName>,
+    /// Chunk 0x2C32 is 0.
+    pub hidden: bool,
+    /// Chunk 0x2C2D is 1.
+    pub locked: bool,
+    /// Layout constraint flags (chunk 0x22228).
+    pub layout_constraints: Option<u8>,
+    /// The parent, target and last updated interface change counts
+    /// (chunks 0x21D4E, 0x21D50, 0x21D53), each a list of numbers.
+    pub change_counts: [Vec<u32>; 3],
+    /// The overridden master page item (0 for none) and the IDs of the
+    /// attributes overridden (chunk 0x1424).
+    pub overridden: Option<(u32, Vec<u32>)>,
+}
+
+/// A page item name: a built-in key or a name given by the user.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemName {
+    pub builtin: bool,
+    pub name: String,
 }
 
 /// Text wrap settings of a page item or graphic (chunk 0x3703).
@@ -1583,6 +1629,63 @@ impl<'a> Reader<'a> {
         })
     }
 
+    /// The settings every page item has (`ItemProps`).
+    fn item_props(&self, uid: u32) -> Result<ItemProps, Error> {
+        let name_chunk = if self.class(uid) == Some(class::GROUP) {
+            chunk::GROUP_NAME
+        } else {
+            chunk::ITEM_NAME
+        };
+        let name = match self.chunk(uid, name_chunk)? {
+            Some(d) => {
+                let mut c = Cursor::new(&d);
+                let builtin = c.flag()? == 1;
+                Some(ItemName {
+                    builtin,
+                    name: c.string()?,
+                })
+            }
+            None => None,
+        };
+        let counts = |id: u32| -> Result<Vec<u32>, Error> {
+            let Some(d) = self.chunk(uid, id)? else {
+                return Ok(Vec::new());
+            };
+            let mut c = Cursor::new(&d);
+            let n = c.u32()? as usize;
+            if n > d.len() / 8 {
+                return Err(Error::Corrupt(format!("item {uid}: {n} change counts")));
+            }
+            (0..2 * n).map(|_| c.u32()).collect()
+        };
+        let overridden = match self.chunk(uid, chunk::ITEM_OVERRIDE)? {
+            Some(d) => {
+                let mut c = Cursor::new(&d);
+                let master = c.u32()?;
+                Some((master, c.u32_list()?))
+            }
+            None => None,
+        };
+        Ok(ItemProps {
+            name,
+            hidden: self
+                .chunk(uid, chunk::ITEM_VISIBLE)?
+                .is_some_and(|d| d.len() >= 2 && Cursor::new(&d).u16().ok() == Some(0)),
+            locked: self
+                .chunk(uid, chunk::ITEM_LOCKED)?
+                .is_some_and(|d| d.len() >= 4 && Cursor::new(&d).u32().ok() == Some(1)),
+            layout_constraints: self
+                .chunk(uid, chunk::ITEM_LAYOUT_CONSTRAINTS)?
+                .and_then(|d| d.first().copied()),
+            change_counts: [
+                counts(chunk::ITEM_PARENT_CHANGES)?,
+                counts(chunk::ITEM_TARGET_CHANGES)?,
+                counts(chunk::ITEM_UPDATED_CHANGES)?,
+            ],
+            overridden,
+        })
+    }
+
     /// Text wrap of a page item or graphic, from chunk 0x3703: u32 mode,
     /// u32 contour path object, four f64 offsets, u32 flags.
     fn text_wrap(&self, uid: u32) -> Result<Option<TextWrap>, Error> {
@@ -1735,6 +1838,10 @@ impl<'a> Reader<'a> {
             children,
             text_wrap: self.text_wrap(uid)?,
             anchor: None,
+            props: self.item_props(uid).unwrap_or_else(|e| {
+                self.warn(format!("item {uid}: settings left out: {e}"));
+                ItemProps::default()
+            }),
         }))
     }
 

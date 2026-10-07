@@ -457,6 +457,50 @@ const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
         AttrKind::Enum(&[(0, "CenterAlignment"), (1, "InsideAlignment")]),
     ),
 ];
+/// Gradient attributes every page item has: attribute-list ID (0 for
+/// none, `GradientStroke...` of groups), IDML name, value without the
+/// attribute. Fill and stroke start and length are in `ITEM_ATTRS`. See
+/// `docs/format/objects.md`, page item settings.
+const GRADIENT_ATTRS: &[(u32, &str, &str)] = &[
+    (0x5520, "GradientFillStart", "0 0"),
+    (0x551F, "GradientFillLength", "0"),
+    (0x551E, "GradientFillAngle", "0"),
+    (0x5526, "GradientStrokeStart", "0 0"),
+    (0x5525, "GradientStrokeLength", "0"),
+    (0x5524, "GradientStrokeAngle", "0"),
+    (0x5522, "GradientFillHiliteLength", "0"),
+    (0x5523, "GradientFillHiliteAngle", "0"),
+    (0x5528, "GradientStrokeHiliteLength", "0"),
+    (0x5529, "GradientStrokeHiliteAngle", "0"),
+];
+
+/// IDML `HorizontalLayoutConstraints` and `VerticalLayoutConstraints` of
+/// layout constraint flags (chunk 0x22228): bits 4 to 6 and 0 to 2, each
+/// set for `FixedDimension`. `None` if another bit is set.
+fn layout_constraints(flags: u8) -> Option<(String, String)> {
+    if flags & 0x88 != 0 {
+        return None;
+    }
+    let side = |bits: u8| {
+        (0..3)
+            .map(|i| {
+                if bits & (1 << i) != 0 {
+                    "FixedDimension"
+                } else {
+                    "FlexibleDimension"
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    Some((side(flags >> 4), side(flags & 7)))
+}
+
+/// Numbers separated by spaces.
+fn join_numbers(v: &[u32]) -> String {
+    v.iter().map(u32::to_string).collect::<Vec<_>>().join(" ")
+}
+
 /// Kinds of cell attribute values.
 #[derive(Clone, Copy)]
 enum CellKind {
@@ -900,7 +944,12 @@ struct Writer<'a> {
     group_path: std::collections::HashMap<u32, Vec<String>>,
     /// Values left out while writing, reported with the model's warnings.
     warnings: std::cell::RefCell<Vec<String>>,
+    /// Observed attributes by element path (`values::element_attrs`).
+    observed: std::cell::RefCell<std::collections::HashMap<String, Observed>>,
 }
+
+/// Attributes observed on an element path (`values::element_attrs`).
+type Observed = std::rc::Rc<Vec<(String, String)>>;
 
 fn group_paths(doc: &Document) -> std::collections::HashMap<u32, Vec<String>> {
     fn walk(
@@ -927,6 +976,18 @@ fn group_paths(doc: &Document) -> std::collections::HashMap<u32, Vec<String>> {
 }
 
 impl Writer<'_> {
+    /// The attributes every IDML of the document's version has on the
+    /// elements on `path` (`docs/format/idml-values.md`).
+    fn observed(&self, path: &str) -> Observed {
+        self.observed
+            .borrow_mut()
+            .entry(path.to_string())
+            .or_insert_with(|| {
+                std::rc::Rc::new(values::element_attrs(path, self.doc.version.major))
+            })
+            .clone()
+    }
+
     fn package_root(&self, x: &mut Xml, kind: &str) {
         x.start(&format!("idPkg:{kind}"))
             .attr("xmlns:idPkg", PACKAGING_NS)
@@ -2735,7 +2796,82 @@ impl Writer<'_> {
         x.end();
     }
 
-    fn page_item(&self, x: &mut Xml, item: &PageItem) {
+    /// The gradient attributes of a page item: its own, or, for a group,
+    /// the values all its children have. See `docs/format/objects.md`.
+    fn gradients(item: &PageItem) -> Vec<(&'static str, String)> {
+        if item.kind == ItemKind::Group {
+            let kids: Vec<_> = item.children.iter().map(Self::gradients).collect();
+            return GRADIENT_ATTRS
+                .iter()
+                .filter_map(|&(_, name, _)| {
+                    let mut values = kids
+                        .iter()
+                        .map(|k| k.iter().find(|(n, _)| *n == name).map(|(_, v)| v));
+                    let first = values.next()??;
+                    values
+                        .all(|v| v == Some(first))
+                        .then(|| (name, first.clone()))
+                })
+                .collect();
+        }
+        GRADIENT_ATTRS
+            .iter()
+            .map(|&(id, name, default)| {
+                let v = match item.attrs.get(id) {
+                    Some(Value::Point(x, y)) => Some(nums(&[*x, *y])),
+                    Some(v) => v.as_f64().map(num),
+                    None => None,
+                };
+                (name, v.unwrap_or_else(|| default.to_string()))
+            })
+            .collect()
+    }
+
+    /// The name, visibility, lock and the other settings every page item
+    /// has; `nested` for an item inside another page item, which IDML
+    /// writes without `Locked`. See `docs/format/objects.md`.
+    fn item_settings(&self, x: &mut Xml, item: &PageItem, nested: bool) {
+        let p = &item.props;
+        let name = match &p.name {
+            Some(n) if n.builtin => format!("$ID/{}", n.name),
+            Some(n) => n.name.clone(),
+            None => "$ID/".into(),
+        };
+        x.attr("Name", name)
+            .attr("Visible", (!p.hidden).to_string());
+        if !nested {
+            x.attr("Locked", p.locked.to_string());
+        }
+        if self.doc.version.major >= 8 {
+            for (name, counts) in [
+                "ParentInterfaceChangeCount",
+                "TargetInterfaceChangeCount",
+                "LastUpdatedInterfaceChangeCount",
+            ]
+            .into_iter()
+            .zip(&p.change_counts)
+            {
+                x.attr(name, join_numbers(counts));
+            }
+            let overridden = match &p.overridden {
+                Some((master, ids)) if *master != 0 => join_numbers(ids),
+                _ => String::new(),
+            };
+            x.attr("OverriddenPageItemProps", overridden);
+            if let Some((h, v)) = layout_constraints(p.layout_constraints.unwrap_or(0x22)) {
+                x.attr("HorizontalLayoutConstraints", h)
+                    .attr("VerticalLayoutConstraints", v);
+            }
+        }
+        for (name, v) in Self::gradients(item) {
+            if !x.has_attr(name) {
+                x.attr(name, v);
+            }
+        }
+    }
+
+    /// `nested` for an item inside another page item.
+    fn page_item(&self, x: &mut Xml, item: &PageItem, nested: bool) {
         let tag = match &item.kind {
             ItemKind::TextFrame { .. } => "TextFrame",
             ItemKind::Group => "Group",
@@ -2783,6 +2919,8 @@ impl Writer<'_> {
             x.attr("ItemLayer", uref(Some(layer)));
         }
         x.attr("ItemTransform", matrix(&item.transform));
+        self.item_settings(x, item, nested);
+        x.attrs_missing(self.observed(tag).iter());
         Self::path_geometry(x, &item.paths);
         if let ItemKind::TextFrame {
             preferences: Some(p),
@@ -2798,12 +2936,20 @@ impl Writer<'_> {
         if frame {
             self.frame_fitting(x, item);
         }
-        // Every page item of IDML from DOM 12 on has the same export
-        // options as the object styles (idml-values.md).
-        if self.doc.version.major >= 12
-            && let Some(n) =
-                values::object_style(self.doc.version.major).child("ObjectExportOption")
+        // Export options every IDML of the version has on this kind of
+        // item; from DOM 12 on, also those of the object styles
+        // (idml-values.md).
+        let major = self.doc.version.major;
+        let mut export = values::element(&format!("{tag}/ObjectExportOption"), major);
+        if major >= 12
+            && let Some(n) = values::object_style(major).child("ObjectExportOption")
         {
+            match &mut export {
+                Some(e) => e.merge(n),
+                None => export = Some(n.clone()),
+            }
+        }
+        if let Some(n) = export {
             n.write(x);
         }
         if let Some(d) = &item.anchor {
@@ -2838,7 +2984,7 @@ impl Writer<'_> {
             ));
         }
         for child in &item.children {
-            self.page_item(x, child);
+            self.page_item(x, child, true);
         }
         for g in &item.graphics {
             Self::placed_graphic(x, g);
@@ -3026,7 +3172,7 @@ impl Writer<'_> {
             x.end();
         }
         for item in &s.items {
-            self.page_item(&mut x, item);
+            self.page_item(&mut x, item, false);
         }
         x.end();
         x.finish()
@@ -3291,7 +3437,7 @@ impl Writer<'_> {
                 '\u{FFFC}' if story.anchors.contains_key(&pos) => {
                     flush(x, &mut buf);
                     for item in &story.anchors[&pos] {
-                        self.page_item(x, item);
+                        self.page_item(x, item, false);
                     }
                 }
                 '\u{16}' if story.tables.contains_key(&pos) => {
@@ -3457,6 +3603,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         name: name.to_string(),
         group_path: group_paths(doc),
         warnings: Default::default(),
+        observed: Default::default(),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();
     files.insert(
@@ -3559,6 +3706,7 @@ mod tests {
             name: String::new(),
             group_path: Default::default(),
             warnings: Default::default(),
+            observed: Default::default(),
         };
         let out: String = w
             .backing_story()
