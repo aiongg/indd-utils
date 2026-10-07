@@ -2299,6 +2299,35 @@ impl Writer<'_> {
         let mut x = Xml::new();
         self.package_root(&mut x, "Story");
         x.start("Story").attr("Self", uref(Some(s.uid)));
+        // Values every exported IDML has on every story, from the DOM
+        // version where they first appear (docs/format/idml-values.md).
+        let major = self.doc.version.major;
+        if major >= 12 {
+            x.attr("UserText", "true");
+        }
+        if major >= 15 {
+            x.attr("IsEndnoteStory", "false");
+        }
+        x.attr("TrackChanges", "false")
+            .attr("StoryTitle", "$ID/")
+            .attr("AppliedNamedGrid", "n");
+        x.empty(
+            "StoryPreference",
+            &[
+                ("OpticalMarginAlignment", "false".into()),
+                ("OpticalMarginSize", "12".into()),
+                ("FrameType", "TextFrameType".into()),
+                ("StoryOrientation", "Horizontal".into()),
+                ("StoryDirection", "LeftToRightDirection".into()),
+            ],
+        );
+        x.empty(
+            "InCopyExportOption",
+            &[
+                ("IncludeGraphicProxies", "true".into()),
+                ("IncludeAllResources", "false".into()),
+            ],
+        );
         let scope = uref(Some(s.uid));
         self.text_ranges(&mut x, &s.runs, s, &scope);
         x.end().end();

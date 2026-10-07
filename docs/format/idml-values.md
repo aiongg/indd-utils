@@ -96,6 +96,28 @@ All 240 corpus IDML files list the same 18 `StrokeStyle` elements in
 writes the same list, so every `StrokeType` it writes refers to an
 element in the package.
 
+## Story values
+
+Every `Story` element in the 240 corpus IDML files (2,094 stories) has
+these values, which the converter writes on every story. No INDD field
+for them is identified; the story objects examined have no attributes in
+their attribute list (chunk 0x23F, always empty), and no story chunk has
+a value that varies with them.
+
+| Element | Values | Same in |
+|---|---|---|
+| `Story` | `TrackChanges="false"`, `StoryTitle="$ID/"`, `AppliedNamedGrid="n"` | 2,094 of 2,094 |
+| `Story` | `UserText="true"` | 2,090 of 2,090 with DOM 12 or later (written for version 12 and later) |
+| `Story` | `IsEndnoteStory="false"` | 1,514 of 1,514 with DOM 15 or later (written for version 15 and later) |
+| `StoryPreference` | `OpticalMarginAlignment="false"`, `OpticalMarginSize="12"`, `FrameType="TextFrameType"`, `StoryOrientation="Horizontal"`, `StoryDirection="LeftToRightDirection"` | 2,094 of 2,094 |
+| `InCopyExportOption` | `IncludeGraphicProxies="true"`, `IncludeAllResources="false"` | 2,094 of 2,094 |
+
+`StoryPreference` and `InCopyExportOption` are the first two children of
+every story, in that order, as the IDML schema puts them. Optical margin
+alignment is off in every corpus story, so the field that turns it on is
+not known and a document that uses it is converted without it.
+`AppliedTOCStyle` is left out: it names a TOC style in 4 stories.
+
 ## Column direction of pages
 
 All 832 `MarginPreference` elements in the 240 corpus IDML files have
