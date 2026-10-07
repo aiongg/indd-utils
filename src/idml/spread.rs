@@ -407,20 +407,8 @@ impl Writer<'_> {
         if frame {
             self.frame_fitting(x, item);
         }
-        // Export options every IDML of the version has on this kind of
-        // item; from DOM 12 on, also those of the object styles
-        // (idml-values.md).
-        let major = self.doc.version.major;
-        let mut export = values::element(&format!("{tag}/ObjectExportOption"), major);
-        if major >= 12
-            && let Some(n) = values::object_style(major).child("ObjectExportOption")
+        if let Some(n) = export::object_export_option(self.doc.version, item.export.as_ref(), false)
         {
-            match &mut export {
-                Some(e) => e.merge(n),
-                None => export = Some(n.clone()),
-            }
-        }
-        if let Some(n) = export {
             n.write(x);
         }
         if let Some(d) = &item.anchor {

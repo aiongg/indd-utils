@@ -146,6 +146,8 @@ pub mod chunk {
     pub const ITEM_UPDATED_CHANGES: u32 = 0x21D53;
     /// u8 layout constraint flags.
     pub const ITEM_LAYOUT_CONSTRAINTS: u32 = 0x22228;
+    /// Export options: alternative text, actual text, tagging.
+    pub const ITEM_EXPORT: u32 = 0x1E206;
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;

@@ -328,21 +328,14 @@ impl Writer<'_> {
         let mut node = if root {
             values::root_style("ObjectStyle", major)
         } else {
-            let mut n = values::object_style(major);
-            // The export options every object style of the version has,
-            // which also covers versions before 12 (idml-values.md).
-            if let Some(e) = values::element("ObjectStyle/ObjectExportOption", major) {
-                match n
-                    .children
-                    .iter_mut()
-                    .find(|c| c.tag == "ObjectExportOption")
-                {
-                    Some(c) => c.merge(&e),
-                    None => n.children.push(e),
-                }
-            }
-            n
+            values::object_style(major)
         };
+        // The export options of the version (idml-values.md) in place of
+        // those of the value files.
+        node.children.retain(|c| c.tag != "ObjectExportOption");
+        if let Some(e) = export::object_export_option(self.doc.version, None, true) {
+            node.children.insert(0, e);
+        }
         let mut attrs = self.item_attr_values(&os.attrs);
         for (id, name) in [
             (0x551E, "GradientFillAngle"),

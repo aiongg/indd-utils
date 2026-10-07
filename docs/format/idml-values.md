@@ -351,36 +351,49 @@ reads from the INDD (`objects.md`, text frame preferences).
 
 ### Export options of page items
 
-`ObjectExportOption` of page items has different attributes in
-different versions. Kept for each kind of item:
+`ObjectExportOption` of page items has different attributes in different
+INDD versions, major and minor. Over the 92,409 page items of the
+trustworthy pairs there is no exception inside a version:
 
-| Values | Versions |
+| INDD version | Attributes in addition to the common set |
 |---|---|
-| Image conversion, GIF, JPEG, spacing, page break, layout and metadata options (13 to 18 values, 22 for ovals) | 8 on (7 on for rectangles) |
-| `EpubType="$ID/"` | 10 on |
-| `EpubAriaRole="$ID/"` (ovals: also two ARIA label values) | 21 on |
+| 7 | no `ObjectExportOption` |
+| 8.0–9.1 | `CustomImageConversion="false"`, `CustomImageSizeOption="SizeRelativeToPageWidth"` |
+| 9.2 | also `UseOriginalImage="false"` |
+| 10.0 | `EpubType="$ID/"`, `UseExistingImage="false"`, `CustomHeightType="DefaultHeight"`, `CustomHeight="$ID/"`, `CustomWidthType="DefaultWidth"`, `CustomWidth="$ID/"`, `CustomImageConversion="false"`, `UseOriginalImage="false"` |
+| 10.1 on | `EpubType="$ID/"`, `SizeType="DefaultSize"`, `CustomSize="$ID/"`, `PreserveAppearanceFromLayout="PreserveAppearanceDefault"` |
+| 21.0 on | also `EpubAriaRole="$ID/"` |
+| 21.1 on | also `EpubAriaLabel="$ID/"`, `EpubAriaLabelSourceType="AutomaticARIALabel"` |
+| 21.4 on | also `AIGeneratedAltText="false"`, `AltTextGenerationError="false"`, `AltTextCropSyncRect=""` |
 
-`CustomImageSizeOption="SizeRelativeToPageWidth"`, which every page item
-of DOM 8 and 9 has, is left out: the IDML schema the output is checked
-against does not allow that value. The elements are 31,857 text frames, 23,981 rectangles, 3,356 ovals,
-52,694 polygons, 4,332 lines and 8,949 groups. The alternative text and
-tagging values (`AltTextSourceType`, `ActualTextSourceType`,
-`CustomAltText`, `CustomActualText`, `ApplyTagType`) are kept only for
-ovals: in one DOM 20 document, text frames, rectangles, polygons and
-groups are tagged as artifacts with custom text. Their INDD objects hold
-these settings in chunk 0x1E206 (its first u32 is 5 in items with the
-usual values, 8 or 0 in those items), which is not decoded.
+The common set, on every page item from version 8 on: the alternative
+text and tagging values (`AltTextSourceType`, `ActualTextSourceType`,
+`CustomAltText`, `CustomActualText`, `ApplyTagType`, read from chunk
+0x1E206, `objects.md`), `ImageConversionType="JPEG"`,
+`ImageExportResolution="Ppi300"`, `GIFOptionsPalette="AdaptivePalette"`,
+`GIFOptionsInterlaced="true"`, `JPEGOptionsQuality="High"`,
+`JPEGOptionsFormat="BaselineEncoding"`, `ImageAlignment="AlignLeft"`,
+`ImageSpaceBefore="0"`, `ImageSpaceAfter="0"`,
+`UseImagePageBreak="false"`, `ImagePageBreak="PageBreakBefore"`,
+`CustomImageAlignment="false"`, `SpaceUnit="CssPixel"`,
+`CustomLayout="false"`, `CustomLayoutType="AlignmentAndSpacing"`, and
+the `Properties` children `AltMetadataProperty` and
+`ActualMetadataProperty` (their values also from chunk 0x1E206). These
+are constant in all 93,701 elements except `ImageAlignment` (3
+`AlignCenter`) and `SizeType` (3 `RelativeToTextFlow`), all in the same 3
+items of one document; their INDD field is not identified.
 
-Object styles other than `[None]` (2,657 `ObjectExportOption`
-elements) have 22 of the same values from DOM 9 on, `EpubType` from 10
-and `EpubAriaRole` from 21; the converter writes them on those styles,
-in addition to the object style values above.
+Object styles, `[None]` included, have `ObjectExportOption` from version
+9 on (all 1,882 styles of those versions), with the common set (all
+values constant) and the same version-dependent attributes, except that
+21.4 on adds only `AltTextCropSyncRect=""`.
 
-The converter writes these values on every page item. From DOM 12 on it
-adds the values that every object style other than `[None]` has in the
-files the object style values were made from (above); all 6,151
-`ObjectExportOption` elements of page items in those files with DOM 12
-or later have them.
+The converter writes these values by the version of the INDD file. It
+leaves out `CustomImageSizeOption`: the IDML schema the output is
+checked against does not allow that value. The `ObjectExportOption`
+blocks of `element_values.xml`, `root_values.xml` and
+`object_style_values.xml` are not used, because those files are keyed
+by major version only.
 
 All 3,412 `InCopyExportOption` elements of rectangles, ovals and polygons
 have `IncludeGraphicProxies="true"` and `IncludeAllResources="false"`,

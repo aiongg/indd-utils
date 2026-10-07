@@ -9,6 +9,7 @@
 
 mod attrs;
 mod designmap;
+mod export;
 mod format;
 mod kind;
 mod pages;

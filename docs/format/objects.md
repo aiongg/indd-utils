@@ -621,6 +621,39 @@ attribute, 625 with 1 and 30 with other values, in 200 of the pairs)
 and get none. The converter
 writes 1 for items other than groups with the style `[None]`.
 
+## Object export options
+
+Page items (class 0x6201 and groups, 0x401) may have chunk 0x1E206, the
+alternative text and tagging settings that IDML writes in
+`ObjectExportOption`:
+
+| Size | Contents | IDML `ObjectExportOption` |
+|---|---|---|
+| 4 | u32 alternative text source: 0 `SourceCustom`, 5 `SourceXMLStructure`, 8 `SourceDecorativeImage` | `AltTextSourceType` |
+| flagged string | custom alternative text | `CustomAltText` |
+| flagged string | | `Properties/AltMetadataProperty NamespacePrefix` |
+| flagged string | | `Properties/AltMetadataProperty PropertyPath` |
+| 4 | u32 actual text source: 0 `SourceCustom`, 5 `SourceXMLStructure`, 6 `SourceXMPAltText` | `ActualTextSourceType` |
+| flagged string | custom actual text | `CustomActualText` |
+| flagged string ×2 | | `Properties/ActualMetadataProperty` (as above) |
+| 4 | u32 tagging: 0 `TagFromStructure`, 1 `TagArtifact` | `ApplyTagType` |
+| rest | 64 bytes (DOM 8–9), 83 (10–20), 88 (21) | not decoded |
+
+A flagged string is a u8 (1: a built-in key, written `$ID/` and the
+string; 2: a plain string) and an in-object string. An empty key is
+`$ID/`.
+
+Evidence: 69,814 page items with the chunk in the trustworthy pairs; all
+eight values match in 69,814 of 69,814 (other than the default: 30
+custom and 199 decorative alternative text sources, 197 custom and 14
+XMP actual text sources, 205 artifacts, 31 custom alternative texts, 197
+custom actual texts). The 22,005 items without the chunk all have the
+values `SourceXMLStructure`, `$ID/` and `TagFromStructure`. The chunk
+parses in all 363,145 page items of the distinct little-endian corpus
+files. The converter leaves out an attribute whose code is not in the
+table. Which other attributes `ObjectExportOption` has depends on the
+version (`idml-values.md`, export options of page items).
+
 ## Text wrap
 
 Page items (class 0x6201 and groups, 0x401) and placed graphics have

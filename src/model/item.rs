@@ -81,6 +81,25 @@ pub struct PageItem {
     /// anchored in text.
     pub anchor: Option<AnchorSettings>,
     pub props: ItemProps,
+    /// Export options (chunk 0x1E206); `None` without the chunk.
+    pub export: Option<ExportOptions>,
+}
+
+/// Alternative text and tagging settings of a page item (chunk 0x1E206).
+/// See `docs/format/objects.md`, object export options.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportOptions {
+    /// Source codes: 0 custom, 5 XML structure, 6 XMP (actual text only),
+    /// 8 decorative image (alternative text only).
+    pub alt_source: u32,
+    pub alt_text: Name,
+    /// The namespace prefix and property path of the metadata property.
+    pub alt_metadata: [Name; 2],
+    pub actual_source: u32,
+    pub actual_text: Name,
+    pub actual_metadata: [Name; 2],
+    /// 0 tag from structure, 1 artifact.
+    pub tag_type: u32,
 }
 
 /// Settings every page item has. See `docs/format/objects.md`, page item
@@ -423,6 +442,32 @@ impl<'a> Reader<'a> {
         })
     }
 
+    /// The export options of a page item (chunk 0x1E206): the alternative
+    /// text and actual text, each a u32 source and three flagged strings
+    /// (text, metadata namespace prefix, property path), then the u32
+    /// tagging type. The rest of the chunk is not decoded.
+    pub(super) fn export_options(&self, uid: u32) -> Result<Option<ExportOptions>, Error> {
+        let Some(d) = self.chunk(uid, chunk::ITEM_EXPORT)? else {
+            return Ok(None);
+        };
+        let mut c = self.cursor(&d);
+        let alt_source = c.u32()?;
+        let alt_text = c.name()?;
+        let alt_metadata = [c.name()?, c.name()?];
+        let actual_source = c.u32()?;
+        let actual_text = c.name()?;
+        let actual_metadata = [c.name()?, c.name()?];
+        Ok(Some(ExportOptions {
+            alt_source,
+            alt_text,
+            alt_metadata,
+            actual_source,
+            actual_text,
+            actual_metadata,
+            tag_type: c.u32()?,
+        }))
+    }
+
     /// Text wrap of a page item or graphic, from chunk 0x3703: u32 mode,
     /// u32 contour path object, four f64 offsets, u32 flags.
     pub(super) fn text_wrap(&self, uid: u32) -> Result<Option<TextWrap>, Error> {
@@ -632,6 +677,10 @@ impl<'a> Reader<'a> {
             props: self.item_props(uid).unwrap_or_else(|e| {
                 self.warn(format!("item {uid}: settings left out: {e}"));
                 ItemProps::default()
+            }),
+            export: self.export_options(uid).unwrap_or_else(|e| {
+                self.warn(format!("item {uid}: export options left out: {e}"));
+                None
             }),
         }))
     }
