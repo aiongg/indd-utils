@@ -225,6 +225,38 @@ true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
 
+## Index sort options
+
+Chunk 0x1307E of the preferences object (class 0x2202) holds the index
+groups: u32 count, then for each group its name (a flag byte and an
+in-object string such as `kIndexGroup_Symbol` or
+`kWRIndexGroup_GreekAlphabet`), u8 include, u8, u16 header variant, and
+further fields with the group's sections, whose letters and names repeat
+strings. The section records are not decoded: the converter finds each
+group at the first occurrence of its name (a flagged string starting
+with `kIndexGroup_` or `kWRIndexGroup_`) and uses the result only when it
+finds as many groups as the count says.
+
+IDML writes an `IndexingSortOption` per group, in the stored order:
+`Self` `dIndexingSortOptionn` and the name, `Name` `$ID/` and the name,
+`Include`, `Priority` (the position, from 0) and `HeaderType`:
+
+| Group | Variant | `HeaderType` |
+|---|---|---|
+| `kIndexGroup_Alphabet` | 0, 3, 5 | `BasicLatin`, `Spanish`, `Czech` |
+| `kWRIndexGroup_CyrillicAlphabet` | 2 | `Russian` |
+| `kIndexGroup_Kana` | 0 | `HiraganaAll` |
+| `kIndexGroup_Chinese` | 0 | `ChinesePinyin` |
+| `kIndexGroup_Korean` | 0 | `KoreanConsonant` |
+| Symbol, numeric, Greek, Arabic and Hebrew groups | 0 | `Nothing` |
+
+The converter leaves `HeaderType` out for other combinations. Evidence:
+the 495 trustworthy pairs have 11 different lists (8 or 10 groups, in
+different orders, with different groups included); the converted groups
+match the IDML in all 4,934 groups on every attribute. Over all 654
+pairs the Alphabet variant is 0 in 652 files, 3 and 5 in one each, and
+the Cyrillic variant is 2 in all.
+
 ## Assignments (0x1BE01)
 
 Every document has one object of class 0x1BE01, listed in chunk 0x1BE13

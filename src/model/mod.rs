@@ -163,6 +163,8 @@ pub mod chunk {
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;
+    /// Index sort groups, in the preferences object.
+    pub const INDEX_GROUPS: u32 = 0x1307E;
     pub const XML_TAG_NAME: u32 = 0xBF2F;
     pub const XML_TAG_COLOR: u32 = 0x117;
     /// Bullet characters, in the preferences object.
@@ -662,6 +664,9 @@ pub struct Document {
     pub active_layer: Option<u32>,
     /// Document users (chunk 0xA443): flag byte and name.
     pub users: Vec<(u8, String)>,
+    /// Index sort groups (preferences chunk 0x1307E), in order: name,
+    /// include flag and header variant.
+    pub index_groups: Vec<(String, bool, u16)>,
     /// Assignment objects (class 0x1BE01), in UID order.
     pub assignments: Vec<u32>,
     /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
@@ -1370,6 +1375,7 @@ impl<'a> Reader<'a> {
             language_list,
             toc_styles: self.toc_styles(),
             named_grids: self.named_grids(),
+            index_groups: self.index_groups(),
             assignments: {
                 let mut a: Vec<u32> = self
                     .db
@@ -2716,6 +2722,55 @@ impl<'a> Reader<'a> {
                 None => None,
             },
         })
+    }
+
+    /// The index sort groups of the preferences object, chunk 0x1307E: u32
+    /// group count, then the groups with their sections. Each group is
+    /// found by its name, a flag byte and an in-object string starting with
+    /// `kIndexGroup_` or `kWRIndexGroup_`, at its first occurrence; after
+    /// the name come u8 include, u8, u16 header variant. Empty unless the
+    /// names found are as many as the count. See `docs/format/objects.md`.
+    fn index_groups(&self) -> Vec<(String, bool, u16)> {
+        let Some(&(uid, _)) = self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::PREFERENCES)
+        else {
+            return Vec::new();
+        };
+        let Ok(Some(d)) = self.chunk(uid, chunk::INDEX_GROUPS) else {
+            return Vec::new();
+        };
+        if crate::object::big_endian() {
+            return Vec::new();
+        }
+        let Some(count) = u32_at(&d, 0) else {
+            return Vec::new();
+        };
+        let mut out: Vec<(String, bool, u16)> = Vec::new();
+        for i in 4..d.len().saturating_sub(6) {
+            if d[i] != 1 || d[i + 1] != 2 {
+                continue;
+            }
+            let mut c = Cursor::new(&d[i + 1..]);
+            let Ok(name) = c.string() else { continue };
+            if !(name.starts_with("kIndexGroup_") || name.starts_with("kWRIndexGroup_"))
+                || out.iter().any(|(n, _, _)| *n == name)
+            {
+                continue;
+            }
+            let at = i + 1 + c.pos();
+            let (Some(&include), Some(header)) = (d.get(at), u16_at(&d, at + 2)) else {
+                continue;
+            };
+            out.push((name, include != 0, header));
+        }
+        if out.len() == count as usize {
+            out
+        } else {
+            Vec::new()
+        }
     }
 
     /// The named grids, in UID order.

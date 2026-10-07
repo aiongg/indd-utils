@@ -553,6 +553,29 @@ fn layout_constraints(flags: u8) -> Option<(String, String)> {
     Some((side(flags >> 4), side(flags & 7)))
 }
 
+/// IDML `HeaderType` of an index group by its name and header variant.
+/// See `docs/format/objects.md`, index sort options.
+fn index_header_type(group: &str, variant: u16) -> Option<&'static str> {
+    Some(match (group, variant) {
+        ("kIndexGroup_Alphabet", 0) => "BasicLatin",
+        ("kIndexGroup_Alphabet", 3) => "Spanish",
+        ("kIndexGroup_Alphabet", 5) => "Czech",
+        ("kWRIndexGroup_CyrillicAlphabet", 2) => "Russian",
+        ("kIndexGroup_Kana", 0) => "HiraganaAll",
+        ("kIndexGroup_Chinese", 0) => "ChinesePinyin",
+        ("kIndexGroup_Korean", 0) => "KoreanConsonant",
+        (
+            "kIndexGroup_Symbol"
+            | "kIndexGroup_Numeric"
+            | "kWRIndexGroup_GreekAlphabet"
+            | "kWRIndexGroup_ArabicAlphabet"
+            | "kWRIndexGroup_HebrewAlphabet",
+            0,
+        ) => "Nothing",
+        _ => return None,
+    })
+}
+
 /// Numbers separated by spaces.
 fn join_numbers(v: &[u32]) -> String {
     v.iter().map(u32::to_string).collect::<Vec<_>>().join(" ")
@@ -1362,6 +1385,19 @@ impl Writer<'_> {
                     ("BulletsFontStyle", "string", b.font_style.clone().into()),
                 ],
             );
+            x.end();
+        }
+        // Index sort options: the groups in their order, with the header
+        // type each group and header variant has in IDML (objects.md).
+        for (i, (name, include, variant)) in doc.index_groups.iter().enumerate() {
+            x.start("IndexingSortOption")
+                .attr("Self", format!("dIndexingSortOptionn{name}"))
+                .attr("Name", format!("$ID/{name}"))
+                .attr("Include", include.to_string())
+                .attr("Priority", i.to_string());
+            if let Some(h) = index_header_type(name, *variant) {
+                x.attr("HeaderType", h);
+            }
             x.end();
         }
         // InCopy assignments: the values every IDML has on them; the name
