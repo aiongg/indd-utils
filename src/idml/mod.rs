@@ -777,6 +777,7 @@ fn number_style(code: u32) -> Option<&'static str> {
     match code {
         numbering::ARABIC => Some("Arabic"),
         numbering::LOWER_ROMAN => Some("LowerRoman"),
+        numbering::KANJI => Some("Kanji"),
         _ => None,
     }
 }
@@ -808,17 +809,30 @@ fn lower_roman(mut n: u32) -> String {
     out
 }
 
+/// Chinese numeral of `n`, digit by digit (10 is 一〇), as the folios of
+/// a sample with that style show.
+fn kanji_digits(n: u32) -> String {
+    const DIGITS: [char; 10] = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    n.to_string()
+        .bytes()
+        .map(|b| DIGITS[usize::from(b - b'0')])
+        .collect()
+}
+
 /// The name of each document page: its number (see `page_numbers`) in
-/// its section's style. Styles other than lower-case Roman are written as
-/// Arabic numbers.
+/// its section's style. Styles other than lower-case Roman and Kanji are
+/// written as Arabic numbers.
 fn page_names(doc: &Document) -> Vec<String> {
     let numbers = page_numbers(doc);
     let mut out: Vec<String> = numbers.iter().map(u32::to_string).collect();
     for (s, first, length) in section_ranges(doc) {
-        if s.style == numbering::LOWER_ROMAN {
-            for i in (first..first + length).filter(|&i| numbers[i] > 0) {
-                out[i] = lower_roman(numbers[i]);
-            }
+        let name: fn(u32) -> String = match s.style {
+            numbering::LOWER_ROMAN => lower_roman,
+            numbering::KANJI => kanji_digits,
+            _ => continue,
+        };
+        for i in (first..first + length).filter(|&i| numbers[i] > 0) {
+            out[i] = name(numbers[i]);
         }
     }
     out
@@ -3608,6 +3622,13 @@ mod tests {
             x.finish()
                 .ends_with("\n<Contents><![CDATA[ab]]><![CDATA[cd]]><![CDATA[e]]></Contents>")
         );
+    }
+
+    #[test]
+    fn names_pages_in_kanji_digits() {
+        assert_eq!(kanji_digits(8), "八");
+        assert_eq!(kanji_digits(10), "一〇");
+        assert_eq!(kanji_digits(102), "一〇二");
     }
 
     #[test]

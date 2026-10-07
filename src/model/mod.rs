@@ -596,6 +596,8 @@ pub struct Section {
 pub mod numbering {
     pub const ARABIC: u32 = 0x4C15;
     pub const LOWER_ROMAN: u32 = 0x4C17;
+    /// Chinese numerals, written digit by digit.
+    pub const KANJI: u32 = 0x4C12;
 }
 
 /// A bullet character of the document's list (IDML `ABullet`): u32
@@ -1281,7 +1283,7 @@ impl<'a> Reader<'a> {
                 section.continue_numbering = cont != 0;
             }
         }
-        if section.style != numbering::ARABIC && section.style != numbering::LOWER_ROMAN {
+        if ![numbering::ARABIC, numbering::LOWER_ROMAN, numbering::KANJI].contains(&section.style) {
             self.warn(format!(
                 "section {uid}: page number style {:#x} is not known; left out",
                 section.style

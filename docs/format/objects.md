@@ -711,7 +711,7 @@ Section chunk 0x4C02:
 | u8, string | Not identified; empty in most samples |
 | u32 | First page of the section; 0 for the section that starts at the document's first page |
 | u32 | Page number start (`PageNumberStart`) |
-| u32 | Page number style: 0x4C15 = `Arabic`, 0x4C17 = `LowerRoman` |
+| u32 | Page number style: 0x4C15 = `Arabic`, 0x4C17 = `LowerRoman`, 0x4C12 = `Kanji` |
 | u32 | Continue numbering (1 = true, `ContinueNumbering`) |
 
 Evidence:
@@ -736,14 +736,24 @@ Evidence:
   sample and its print PDF. The PDF's page labels (`/PageLabels` in the
   document catalog) give the pages of the sample's 0x4C17 sections style
   `/r`, lower-case Roman, and the pages of its 0x4C15 section style
-  `/D`, decimal. The converter writes `PageNumberStyle` for 0x4C15 and 0x4C17 and leaves it
-  out (with a warning) for other codes.
+  `/D`, decimal.
+- Style 0x4C12 has no pair either. The evidence is a sample typeset
+  vertically and its print PDF. The folios on the pages of its 0x4C12
+  section are Chinese numerals written digit by digit (〇 一 二 … 九,
+  so 10 is 一〇 and 100 is 一〇〇), counting from the section's start
+  number. The PDF's page labels belong to a larger document and do not
+  show the style. `Kanji` is the only value of the schema's
+  `PageNumberStyle` enumeration that uses such numerals.
+
+The converter writes `PageNumberStyle` for these three codes and leaves
+it out (with a warning) for other codes.
 
 The converter names document pages by their number in their section,
 counting on from the previous section when numbering continues. In a
 section with style 0x4C17 it writes the number in lower-case Roman (i,
-ii, iii), as in the PDF labels above; no pair shows IDML page names in
-such a section.
+ii, iii), as in the PDF labels above, and in a section with style 0x4C12
+in Chinese digits, as the folios show. No pair shows IDML page names in
+such sections.
 
 ## Document preferences (class 0x2202)
 
