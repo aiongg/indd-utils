@@ -792,3 +792,45 @@ colour UIDs, *n* f64 locations (0–1), *n* f64 midpoints (the midpoint
 between stops i and i+1 is stored with stop i), u32 type (1 linear).
 Chunk 0x5505: flag byte, name, u32 flags as for colours. All 99 gradients
 and 198 stops in the pairs match.
+
+## Inks (0x1F07)
+
+Each ink object with chunk 0x1F0D is one IDML `Ink` in
+`Resources/Graphic.xml`, in UID order (314 of 314 inks, 78 of 78 pairs;
+the four process inks are UIDs 7 to 10). `Self` is `Ink/<Name>` (973 of
+973 inks in the corpus IDML files). Chunk 0x1F0D is a flag byte (1 =
+built-in key, `$ID/`) and the name, then 86 bytes. Offsets from the end
+of the name:
+
+| Offset | Contents | IDML | Evidence |
+|---|---|---|---|
+| 14 | f64 | `NeutralDensity` | 314 of 314 |
+| 26 | u32, one less than the IDML value | `TrapOrder` | 314 of 314 |
+| 32 | f64 | `Frequency` | 314 of 314 |
+| 40 | f64 | `Angle` | 314 of 314 (0, 15, 27, 45, 63 and 75) |
+
+Byte 2 is 1 for the four process inks and 0 for spot inks; its meaning
+is not known. `InkType="Normal"`, `PrintInk="true"` and
+`ConvertToProcess="false"` are in all 973 IDML inks and are written from
+that observation (`idml-values.md`). The schema puts inks after the
+colours and before the tints.
+
+## Colour groups (0x1F39)
+
+Chunk 0x13C is a flag byte and the group name, chunk 0x1F60 a UID list
+of the group's swatches. The preferences object (class 0x2202) lists the
+groups in chunk 0x1F61 (u32 count, UIDs). IDML writes a `ColorGroup` in
+`designmap.xml` for each listed group, in that order, with
+`Self="ColorGroup/<Name>"`; the first has `IsRootColorGroup="true"`, the
+others `false` (77 of 77 pairs; the DOM 7 pair has no chunk 0x1F61 and
+no groups). The root group is named `[Root Color Group]` with no `$ID/`,
+though its flag byte is 0.
+
+Each swatch of the list is a `ColorGroupSwatch` with
+`Self="u<group UID>ColorGroupSwatch<index in hex>"` and `SwatchItemRef`
+the swatch's reference (`Swatch/None`, `Color/…`, `Tint/…` or
+`Gradient/…`). In 99 of 101 groups the list gives exactly the IDML
+swatches, in order; the other two are in the pairs whose IDML was
+exported from another save. The converter writes 907 of the 942 IDML
+swatches, all with the IDML reference. A swatch without a reference is
+left out, and the indices of the others are kept.

@@ -7,6 +7,8 @@ pub mod class {
     pub const COLOR: u32 = 0x1F05;
     pub const SWATCH_NONE: u32 = 0x6E0B;
     pub const GRADIENT: u32 = 0x5503;
+    pub const INK: u32 = 0x1F07;
+    pub const COLOR_GROUP: u32 = 0x1F39;
 }
 
 pub mod chunk {
@@ -19,6 +21,12 @@ pub mod chunk {
     pub const TINT_BASE: u32 = 0x117;
     pub const GRADIENT_STOPS: u32 = 0x5503;
     pub const GRADIENT_NAME: u32 = 0x5505;
+    pub const INK: u32 = 0x1F0D;
+    pub const COLOR_GROUP_NAME: u32 = 0x13C;
+    pub const COLOR_GROUP_SWATCHES: u32 = 0x1F60;
+    /// In the preferences object: u32 list of the colour groups, the root
+    /// group first.
+    pub const COLOR_GROUPS: u32 = 0x1F61;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -318,5 +326,70 @@ mod tests {
         };
         assert_eq!(t.idml_name(&color("Black", 2)), "[Black] 40%");
         assert_eq!(t.reference(&color("Gold", 0)), "Tint/Gold 40%25");
+    }
+}
+
+/// An ink (class 0x1F07). Chunk 0x1F0D: flag byte and name, then fields
+/// at offsets from the end of the name: f64 neutral density at 14, u32
+/// trap order − 1 at 26, f64 frequency at 32, f64 angle at 40.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ink {
+    pub uid: u32,
+    /// The IDML name, with `$ID/` for a built-in name.
+    pub name: String,
+    pub neutral_density: f64,
+    pub trap_order: u32,
+    pub frequency: f64,
+    pub angle: f64,
+}
+
+impl Ink {
+    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Ink>, Error> {
+        let Some(d) = obj.chunk(chunk::INK) else {
+            return Ok(None);
+        };
+        let mut c = Cursor::new(d);
+        let builtin = c.u8()? == 1;
+        let name = c.string()?;
+        let end = c.pos();
+        if d.len() < end + 48 {
+            return Ok(None);
+        }
+        let f = |o: usize| Cursor::new(&d[end + o..]).f64();
+        Ok(Some(Ink {
+            uid,
+            name: if builtin { format!("$ID/{name}") } else { name },
+            neutral_density: f(14)?,
+            trap_order: Cursor::new(&d[end + 26..]).u32()? + 1,
+            frequency: f(32)?,
+            angle: f(40)?,
+        }))
+    }
+}
+
+/// A colour group (class 0x1F39): chunk 0x13C is a flag byte and the name,
+/// chunk 0x1F60 a UID list of its swatches.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColorGroup {
+    pub uid: u32,
+    pub name: String,
+    pub swatches: Vec<u32>,
+}
+
+impl ColorGroup {
+    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<ColorGroup>, Error> {
+        let Some(d) = obj.chunk(chunk::COLOR_GROUP_NAME) else {
+            return Ok(None);
+        };
+        let name = Cursor::new(&d[1.min(d.len())..]).string()?;
+        let swatches = match obj.chunk(chunk::COLOR_GROUP_SWATCHES) {
+            Some(d) => Cursor::new(d).u32_list()?,
+            None => Vec::new(),
+        };
+        Ok(Some(ColorGroup {
+            uid,
+            name,
+            swatches,
+        }))
     }
 }

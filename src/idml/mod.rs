@@ -979,8 +979,34 @@ impl Writer<'_> {
             );
         }
         self.hyperlinks(&mut x);
+        self.color_groups(&mut x);
         x.end();
         x.finish()
+    }
+
+    /// Colour groups and their swatches. See `docs/format/objects.md`.
+    fn color_groups(&self, x: &mut Xml) {
+        for (i, g) in self.doc.color_groups.iter().enumerate() {
+            x.start("ColorGroup")
+                .attr("Self", format!("ColorGroup/{}", self_name(&g.name)))
+                .attr("Name", &g.name)
+                .attr("IsRootColorGroup", (i == 0).to_string());
+            for (n, s) in g.swatches.iter().enumerate() {
+                if let Some(r) = self.doc.swatches.get(s) {
+                    x.empty(
+                        "ColorGroupSwatch",
+                        &[
+                            (
+                                "Self",
+                                format!("{}ColorGroupSwatch{n:x}", uref(Some(g.uid))),
+                            ),
+                            ("SwatchItemRef", r.clone()),
+                        ],
+                    );
+                }
+            }
+            x.end();
+        }
     }
 
     /// Cross-reference formats. See docs/format/cross-references.md.
@@ -1258,6 +1284,25 @@ impl Writer<'_> {
                     ("ColorEditable", c.editable.to_string()),
                     ("ColorRemovable", c.removable.to_string()),
                     ("Visible", c.visible.to_string()),
+                ],
+            );
+        }
+        // The schema puts inks after the colours.
+        for i in &self.doc.inks {
+            x.empty(
+                "Ink",
+                &[
+                    ("Self", format!("Ink/{}", self_name(&i.name))),
+                    ("Name", i.name.clone()),
+                    ("Angle", num(i.angle)),
+                    // These three are the same in every Ink of the corpus
+                    // IDML files (idml-values.md).
+                    ("ConvertToProcess", "false".into()),
+                    ("Frequency", num(i.frequency)),
+                    ("NeutralDensity", num(i.neutral_density)),
+                    ("PrintInk", "true".into()),
+                    ("TrapOrder", i.trap_order.to_string()),
+                    ("InkType", "Normal".into()),
                 ],
             );
         }

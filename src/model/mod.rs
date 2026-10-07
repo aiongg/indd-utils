@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 
 pub use attrs::{Attrs, Value};
 pub use cjk::{CjkTable, CompositeFont, CompositeFontEntry};
-pub use color::{Color, Gradient, Tint};
+pub use color::{Color, ColorGroup, Gradient, Ink, Tint};
 pub use font::{Font, FontFamily};
 pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
 pub use table::{Cell, CellFormat, Table, TableStyle};
@@ -463,6 +463,10 @@ pub struct Document {
     pub composite_fonts: Vec<CompositeFont>,
     /// Kinsoku and mojikumi tables, in UID order.
     pub cjk_tables: Vec<CjkTable>,
+    /// Inks, in UID order.
+    pub inks: Vec<Ink>,
+    /// Colour groups in document order, the root group first.
+    pub color_groups: Vec<ColorGroup>,
 }
 
 /// Document setup, from chunk 0x533 of the preferences object.
@@ -663,6 +667,8 @@ impl<'a> Reader<'a> {
         let mut composite_fonts = Vec::new();
         let mut composite_entries = HashMap::new();
         let mut cjk_tables = Vec::new();
+        let mut inks = Vec::new();
+        let mut color_groups = HashMap::new();
         for &(uid, cls) in self.db.classes() {
             if self.db.object(uid)?.is_none() {
                 continue;
@@ -861,6 +867,16 @@ impl<'a> Reader<'a> {
                         cjk_tables.push(t);
                     }
                 }
+                color::class::INK => {
+                    if let Some(i) = Ink::read(uid, &*self.object(uid)?)? {
+                        inks.push(i);
+                    }
+                }
+                color::class::COLOR_GROUP => {
+                    if let Some(g) = ColorGroup::read(uid, &*self.object(uid)?)? {
+                        color_groups.insert(uid, g);
+                    }
+                }
                 class::LANGUAGE => {
                     if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
                         && d.len() > 1
@@ -935,7 +951,26 @@ impl<'a> Reader<'a> {
                 })
                 .collect(),
             cjk_tables,
+            inks,
+            color_groups: self
+                .color_group_order()?
+                .into_iter()
+                .filter_map(|u| color_groups.remove(&u))
+                .collect(),
         })
+    }
+
+    /// The colour groups listed in the preferences object (chunk 0x1F61).
+    fn color_group_order(&self) -> Result<Vec<u32>, Error> {
+        let Some(&(uid, _)) = self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::PREFERENCES)
+        else {
+            return Ok(Vec::new());
+        };
+        self.uid_list(uid, color::chunk::COLOR_GROUPS)
     }
 
     fn document_preferences(&self) -> Result<Option<DocumentPreferences>, Error> {

@@ -169,6 +169,13 @@ have (18) are left out as for the preferences.
 240 corpus IDML files. No INDD field for it is identified; the converter
 writes it on every entry (`fonts.md`).
 
+## Inks
+
+All 973 `Ink` elements of the 240 corpus IDML files have
+`InkType="Normal"`, `PrintInk="true"` and `ConvertToProcess="false"`.
+No INDD field for them is identified; the converter writes them on every
+ink (`objects.md`).
+
 ## Column direction of pages
 
 All 832 `MarginPreference` elements in the 240 corpus IDML files have
