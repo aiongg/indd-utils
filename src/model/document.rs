@@ -144,10 +144,16 @@ impl<'a> Reader<'a> {
             .map(|d| self.cursor(&d).u32())
             .transpose()?;
         let (spreads, master_spreads) = self.document_spreads()?;
-        let stories = self.document_stories()?;
+        let mut stories = self.document_stories()?;
         let mut objects = self.class_objects()?;
+        // Cell spans depend on insets that cells inherit from styles.
+        let table_styles = table::TableStyles::new(&objects.cell_styles, &objects.table_styles);
+        for story in &mut stories {
+            for t in story.tables.values_mut() {
+                t.resolve_spans(&table_styles);
+            }
+        }
         let xml_story = self.xml_story()?;
-        let mut stories = stories;
         for story in &mut stories {
             story.orientation = self.story_orientation(story.uid);
         }

@@ -623,6 +623,16 @@ pub(super) const TABLE_ATTRS: &[(u32, &str, Kind)] = &[
     (0x10454, "RightColumnRegionCellStyle", Kind::CellStyle),
 ];
 
+/// The text cell values of tables, rows, columns and cells: ID, IDML
+/// attribute, kind. See `docs/format/tables.md`.
+pub(super) const TEXT_CELL_ATTRS: &[(u32, &str, Kind)] = &[
+    (0xB62C, "TextTopInset", Kind::Number),
+    (0xB62B, "TextLeftInset", Kind::Number),
+    (0xB62E, "TextBottomInset", Kind::Number),
+    (0xB62D, "TextRightInset", Kind::Number),
+    (0xB6DE, "ClipContentToTextCell", Kind::Bool),
+];
+
 /// Row group attributes: ID, IDML attribute, kind.
 /// See `docs/format/tables.md`.
 pub(super) const ROW_ATTRS: &[(u32, &str, Kind)] = &[

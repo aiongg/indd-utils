@@ -327,7 +327,23 @@ impl Writer<'_> {
         }
     }
 
+    /// The text cell values IDML writes on every table, row, column and
+    /// cell from DOM 11, with the value in effect (tables.md).
+    fn text_cell_values<'a>(
+        &self,
+        value: impl Fn(u32) -> Option<&'a Value>,
+    ) -> Vec<(&'static str, String)> {
+        if self.doc.version.major < 11 {
+            return Vec::new();
+        }
+        TEXT_CELL_ATTRS
+            .iter()
+            .filter_map(|&(id, name, kind)| Some((name, self.value_text(kind, value(id)?)?)))
+            .collect()
+    }
+
     pub(super) fn table(&self, x: &mut Xml, t: &Table, story: &Story, scope: &str) {
+        let styles = TableStyles::new(&self.doc.cell_styles, &self.doc.table_styles);
         let id = format!("{scope}i{:x}", t.uid);
         let rows = t.rows.len() as u32;
         x.start("Table")
@@ -354,10 +370,24 @@ impl Writer<'_> {
         for (name, v) in self.table_attrs(&t.attrs) {
             x.attr(name, v);
         }
+        for (name, v) in self.text_cell_values(|a| t.value(a, &styles)) {
+            x.attr(name, v);
+        }
+        // A row (column) has the values of the first cell that starts in
+        // it.
+        let first_cell = |of: &dyn Fn(&Cell) -> bool| -> Vec<(&'static str, String)> {
+            match t.cells.iter().find(|c| of(c)) {
+                Some(c) => self.text_cell_values(|a| t.cell_value(c, a, &styles)),
+                None => self.text_cell_values(|a| t.value(a, &styles)),
+            }
+        };
         for (i, r) in t.rows.iter().enumerate() {
             x.start("Row")
                 .attr("Self", format!("{id}Row{i:x}"))
                 .attr("Name", i.to_string());
+            for (name, v) in first_cell(&|c| c.row == i) {
+                x.attr(name, v);
+            }
             if let Some(h) = r.height {
                 x.attr("SingleRowHeight", num(h));
             }
@@ -370,14 +400,14 @@ impl Writer<'_> {
             x.end();
         }
         for (i, w) in t.columns.iter().enumerate() {
-            x.empty(
-                "Column",
-                &[
-                    ("Self", format!("{id}Column{i:x}")),
-                    ("Name", i.to_string()),
-                    ("SingleColumnWidth", num(*w)),
-                ],
-            );
+            x.start("Column")
+                .attr("Self", format!("{id}Column{i:x}"))
+                .attr("Name", i.to_string());
+            for (name, v) in first_cell(&|c| c.column == i) {
+                x.attr(name, v);
+            }
+            x.attr("SingleColumnWidth", num(*w));
+            x.end();
         }
         for c in &t.cells {
             let cell_id = format!("{id}i{:x}", c.id);
@@ -388,9 +418,18 @@ impl Writer<'_> {
                 .attr("ColumnSpan", c.column_span.to_string());
             // From DOM 11 (tables.md).
             if self.doc.version.major >= 11 {
-                x.attr("CellType", "TextTypeCell");
+                x.attr(
+                    "CellType",
+                    match c.kind {
+                        CellKind::Text => "TextTypeCell",
+                        CellKind::Graphic => "GraphicTypeCell",
+                    },
+                );
             }
-            if let Some(f) = &c.format {
+            for (name, v) in self.text_cell_values(|a| t.cell_value(c, a, &styles)) {
+                x.attr(name, v);
+            }
+            if let Some(f) = t.format(c) {
                 for (name, v) in self.cell_attrs(&f.attrs) {
                     x.attr(name, v);
                 }

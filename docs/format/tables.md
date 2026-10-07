@@ -85,29 +85,128 @@ cell strands of the corpus pairs parse to the end with this layout. In
 files whose sets all have flag 1 the earlier reader worked; files with
 flag-0 sets (one pair, 8 tables) could not be read before.
 
-Every grid position has an ID. A position whose attribute is 0xB666 starts
-a cell (its ID is the cell ID); 0xB614 marks a position covered by a merged
-cell. The second value of attribute 0xB666 holds the cell's text area: f64
-width at offset 32 and f64 height at offset 40, the cell's full size minus
-its insets. The converter takes the smallest number of columns (rows)
-whose widths (heights) reach the text area as the span. A cell that was
-never laid out has width and height 0; then its column span is the run of
-covered positions to its right, and its row span 1.
+Every grid position has an ID. A position whose attribute is 0xB666
+starts a text cell (its ID is the cell ID); attribute 0x10469 starts a
+graphic cell (22 cells, one stale pair; IDML
+`CellType="GraphicTypeCell"`). Every other position is covered by a
+merged cell: attribute 0xB614 (779 positions in the pairs, no values), or
+no record at all, when a row record has fewer attribute records than the
+row has positions (80 positions; the missing ones are the last).
 
-All 1,089 cells produced for the pairs match IDML `Name` (column:row),
-`RowSpan` and `ColumnSpan`.
+**Layout record.** The second value of attribute 0xB666 is the cell's
+layout:
 
-`CellType="TextTypeCell"` is on every cell from DOM 11 (11,097 of 11,097
-cells of the trustworthy pairs) and on none before (0 of 453 cells of
-DOM 8 and 10).
+| Field | Contents |
+|---|---|
+| u32 | Flags. If the low four bits are 0xF, one more u32 follows the count |
+| u32 | Count of parcels (0: the cell was never laid out; the record is 8 bytes) |
+| per parcel | u32 parcel flags; if bit 31 is set, one more u32; 16 bytes; f64 text area width; f64 text area height; more |
+
+Only the first parcel's width is used. It is the cell's spanned column
+widths minus its left and right text insets (11,558 of 11,700 laid-out
+cells of the trustworthy pairs; the others differ by stroke-sized
+amounts). Bit 31 of the parcel flags is set in 10,287 of 12,975 records;
+without it the width is 4 bytes earlier.
+
+### Spans
+
+Two passes over the grid in row order:
+
+1. Column span. For each starting position, *run* = 1 + the number of
+   positions to its right before the next starting position. If the
+   layout has a width *w* > 0, the span is the *n* in 1..*run* for which
+   the sum of the widths of columns *c* .. *c*+*n*−1 is closest to *w* +
+   left + right text inset (the values in effect, below, for the cell
+   spanning *n* columns; the first *n* wins a tie). Otherwise the span is
+   *run*. Positions *c*+1 .. *c*+span−1 of the row are taken.
+2. Row span. For each starting position, count the rows below in which
+   all positions *c* .. *c*+span−1 are covered and not taken; stop at the
+   first row where one is not. Those positions are taken.
+
+Evidence: all 11,844 cells of the trustworthy pairs and 1,297 of 1,297
+cells of stale pairs get `Name` (column:row), `RowSpan` and `ColumnSpan`
+right. Without the layout width (span = run everywhere) 78 cells are
+wrong: a cell next to a multi-row merged cell would take the covered
+position to its right. The smallest *n* whose widths reach *w* fails for
+23 cells, 14 of them where the last spanned column is narrower than the
+insets (an 18-pt column, insets 26.5). A single pass that resolves row
+spans before the next row's column spans fails for 10 cells. Using the
+layout height for row spans fails for 6 cells (rows that grew), so
+heights are not used.
+
+Cells that were never laid out (parcel count 0) are 1 × 1 cells with
+the rule (run 1), as in IDML: 144 cells in 8 tables of one trustworthy
+DOM 16 pair, the last three rows of each table, which are overset.
+
+`CellType="TextTypeCell"` is on every text cell from DOM 11 (11,097 of
+11,097 cells of the trustworthy pairs) and on none before (0 of 453 cells
+of DOM 8 and 10).
+
+## Values in effect
+
+From DOM 11, IDML writes `TextTopInset`, `TextLeftInset`,
+`TextBottomInset`, `TextRightInset` and `ClipContentToTextCell` on every
+`Table`, `Row`, `Column` and `Cell`, with the value in effect. DOM 8 and
+10 write none of them (7 tables, 59 rows, 453 cells); every table, row,
+column and cell of DOM 11 to 21 has them (325 tables, 2,737 rows, 1,204
+columns, 11,391 cells). The IDs are those of the cell attribute sets:
+0xB62B left, 0xB62C top, 0xB62D right, 0xB62E bottom inset; 0xB6DE
+`ClipContentToTextCell` (0 = false, 1 = true).
+
+**Cell.** The first of:
+
+1. the cell's own attribute set;
+2. the applied cell style (the set's cell style UID), then its based-on
+   chain;
+3. the cell style of the cell's region in the table's style. Region:
+   header rows (row index < header row count) → header; footer rows →
+   footer; otherwise a cell in the first column → left column; a cell
+   whose last spanned column is the last column → right column;
+   otherwise body. If the region's "same as body" flag is 1, the body
+   region is used. The region cell style UID and the flag are looked up
+   along the table style chain (below); the value is then looked up in
+   that cell style and its based-on chain. A region cell style UID of 0
+   gives nothing;
+4. the table's value.
+
+| Region | Cell style | Same as body |
+|---|---|---|
+| Header | 0x10450 | 0x10457 |
+| Footer | 0x10451 | 0x10458 |
+| Body | 0x10452 | |
+| Left column | 0x10453 | 0x10459 |
+| Right column | 0x10454 | 0x1045A |
+
+Evidence: all 56,955 values of the 11,391 cells (32 files take values
+from the cell's set, 4 from a cell style, 4 from a region cell style, 24
+from the table). Header rows take precedence over the left and right
+column regions (the top-left cell of 2 tables in a DOM 20.2 file needs
+it, 4 inset values each; the opposite order gets them wrong). No sample
+shows whether the left or the right column region wins for a table of
+one column.
+
+**Table.** The table's own attribute list (chunk 0xB668), then the
+applied table style (chunk 0xB6FC) and its based-on chain, ending at the
+root style `[No table style]`, which has all five. The root style is
+taken last even when the chain does not reach it. Evidence: 325 of 325
+tables; values 4 (322), 1.417 (2, a root style with 1.417), 3.96 (1,
+local values in chunk 0xB668).
+
+**Row.** The values of the first cell that starts in that row (lowest
+column). **Column.** The values of the first cell that starts in that
+column (lowest row). Evidence: 2,796 of 2,796 rows, 1,267 of 1,267
+columns. Taking the cell that covers column 0 (row 0) instead fails for
+29 rows (159 columns), where a merged cell from an earlier row (column)
+covers that position.
 
 ## Cell formatting
 
 A cell's formatting is the attribute set that covers its position. IDML
 writes these attributes on a `Cell` exactly when the set has them, so
-they are the cell's local values. The exception is the text insets:
-IDML writes `TextTopInset` and the other three on every cell, with the
-value in effect; where the set has an inset, it is that value.
+they are the cell's local values. The exception is the text insets and
+`ClipContentToTextCell`: from DOM 11 IDML writes them on every cell,
+with the value in effect (above); where the set has the value, it is
+that value.
 
 Evidence: the same-version pairs have 1,125 IDML cells with an INDD
 cell, 952 of them in a set (5 files). For every attribute below, the INDD set has the
@@ -159,9 +258,7 @@ converter writes those values for them.
 **Not converted.** The gap colour, gap tint and overprint of the edges
 (0x10420–0x10423, 0x1040F–0x10412, 0xB6BA–0xB6BD) have one value in
 every cell and the same set of cells for three edges, so the edges
-cannot be told apart. Text insets of cells without a local inset come
-from the cell style or elsewhere; for 74 cells neither the cell style nor
-the table default gives the IDML value, so they are not written.
+cannot be told apart.
 
 ## Cell and table styles
 

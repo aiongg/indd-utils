@@ -39,7 +39,12 @@ use crate::model::{
     Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, ItemProps, Link, Matrix, Orientation,
     Page, PageItem, Path, Section, Shape, Spread, Story, Style, StyleGroup, Table,
     TextFramePreferences, TextRun, TextVariable, TextWrap, UiColorRef, Value, XmlElement,
-    XmlMarker, hyperlink::DestinationKind, numbering, root_kind, variable::Instance, wrap_mode,
+    XmlMarker,
+    hyperlink::DestinationKind,
+    numbering, root_kind,
+    table::{Cell, CellKind, TableStyles},
+    variable::Instance,
+    wrap_mode,
     xml::Key as XmlKey,
 };
 

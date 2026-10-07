@@ -1,5 +1,7 @@
 //! Tables. See `docs/format/tables.md`.
 
+use std::collections::BTreeMap;
+
 use super::{Attrs, Reader, TextRun, Value};
 use crate::Error;
 use crate::audit::{List, Recorder};
@@ -42,8 +44,11 @@ pub mod attr {
     pub const COLUMN_WIDTH: u32 = 0xB60D;
     pub const ROW_HEIGHT: u32 = 0xB60C;
     pub const ROW_MIN_HEIGHT: u32 = 0xB66E;
-    /// A grid position that starts a cell; its value holds cell geometry.
+    /// A grid position that starts a text cell; its second value is the
+    /// cell's layout record.
     pub const CELL: u32 = 0xB666;
+    /// A grid position that starts a graphic cell.
+    pub const GRAPHIC_CELL: u32 = 0x10469;
     /// A grid position covered by a merged cell.
     pub const COVERED: u32 = 0xB614;
 }
@@ -56,6 +61,13 @@ pub struct Row {
     pub attrs: Attrs,
 }
 
+/// What a cell holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CellKind {
+    Text,
+    Graphic,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
     /// Cell ID, local to the table (IDML `Self` suffix `i<hex>`).
@@ -64,9 +76,14 @@ pub struct Cell {
     pub column: usize,
     pub row_span: usize,
     pub column_span: usize,
+    pub kind: CellKind,
+    /// Text area width of the cell's layout record; `None` for a cell
+    /// that was never laid out.
+    pub width: Option<f64>,
     pub runs: Vec<TextRun>,
-    /// Formatting of the cell: its attribute set, if it has one.
-    pub format: Option<CellFormat>,
+    /// The cell's attribute set (index into `Table::formats`), if it has
+    /// one.
+    pub format: Option<usize>,
 }
 
 /// An attribute set shared by a run of cells in a row group.
@@ -105,6 +122,91 @@ pub struct Table {
     pub rows: Vec<Row>,
     pub columns: Vec<f64>,
     pub cells: Vec<Cell>,
+    /// The attribute sets of the cell strand.
+    pub formats: Vec<CellFormat>,
+    /// Per grid row, the attribute set (index into `formats`) of each
+    /// grid position.
+    pub grid: Vec<Vec<Option<usize>>>,
+}
+
+/// Attribute IDs of the effective text cell values (tables.md).
+pub mod text_cell {
+    pub const LEFT_INSET: u32 = 0xB62B;
+    pub const TOP_INSET: u32 = 0xB62C;
+    pub const RIGHT_INSET: u32 = 0xB62D;
+    pub const BOTTOM_INSET: u32 = 0xB62E;
+    /// `ClipContentToCell` / `ClipContentToTextCell`.
+    pub const CLIP: u32 = 0xB6DE;
+}
+
+/// Table style attributes that name the cell style of a table region,
+/// and the flags that make a region use the body's cell style.
+mod region {
+    pub const HEADER: (u32, u32) = (0x10450, 0x10457);
+    pub const FOOTER: (u32, u32) = (0x10451, 0x10458);
+    pub const BODY: u32 = 0x10452;
+    pub const LEFT_COLUMN: (u32, u32) = (0x10453, 0x10459);
+    pub const RIGHT_COLUMN: (u32, u32) = (0x10454, 0x1045A);
+}
+
+/// The cell and table styles of a document, for values that tables and
+/// cells inherit (tables.md, "Values in effect").
+pub struct TableStyles<'a> {
+    cells: &'a BTreeMap<u32, TableStyle>,
+    tables: &'a BTreeMap<u32, TableStyle>,
+    /// The root table style `[No table style]`.
+    root: Option<&'a TableStyle>,
+}
+
+impl<'a> TableStyles<'a> {
+    pub fn new(
+        cells: &'a BTreeMap<u32, TableStyle>,
+        tables: &'a BTreeMap<u32, TableStyle>,
+    ) -> Self {
+        let root = tables
+            .values()
+            .find(|s| s.builtin && s.based_on.is_none() && s.name == "[No table style]");
+        TableStyles {
+            cells,
+            tables,
+            root,
+        }
+    }
+
+    /// A style and the styles it is based on, without cycles.
+    fn chain(styles: &'a BTreeMap<u32, TableStyle>, uid: Option<u32>) -> Vec<&'a TableStyle> {
+        let mut out: Vec<&TableStyle> = Vec::new();
+        let mut next = uid;
+        while let Some(u) = next {
+            match styles.get(&u) {
+                Some(s) if !out.iter().any(|x| x.uid == u) => {
+                    out.push(s);
+                    next = s.based_on;
+                }
+                _ => break,
+            }
+        }
+        out
+    }
+
+    /// The table style chain of a table: its style, the styles that is
+    /// based on, and the root table style.
+    fn table_chain(&self, style: Option<u32>) -> Vec<&'a TableStyle> {
+        let mut out = Self::chain(self.tables, style);
+        if let Some(r) = self.root
+            && !out.iter().any(|s| s.uid == r.uid)
+        {
+            out.push(r);
+        }
+        out
+    }
+
+    /// A value of a cell style or of the styles it is based on.
+    pub fn cell_style_value(&self, uid: u32, id: u32) -> Option<&'a Value> {
+        Self::chain(self.cells, Some(uid))
+            .into_iter()
+            .find_map(|s| s.attrs.get(id))
+    }
 }
 
 /// Groups of rows or columns sharing attributes: u32 group count; per
@@ -135,11 +237,13 @@ fn f64_attr(a: &Attrs, id: u32) -> Option<f64> {
 /// One grid position from the cell strand.
 struct Position {
     id: u32,
-    /// Text area width and height, for positions that start a cell.
-    size: Option<(f64, f64)>,
-    /// Covered by a merged cell.
-    covered: bool,
-    format: Option<CellFormat>,
+    /// The kind of cell the position starts; `None` for a position
+    /// covered by a merged cell.
+    starts: Option<CellKind>,
+    /// Text area width of the layout record of a text cell.
+    width: Option<f64>,
+    /// Attribute set, an index into the table's formats.
+    format: Option<usize>,
 }
 
 impl Reader<'_> {
@@ -213,7 +317,7 @@ impl Reader<'_> {
         // and a column count no larger than its widest row (every corpus
         // table). Larger counts are damage; checking them before
         // allocating keeps a damaged count from sizing the vectors below.
-        let grid = self.cell_grid(uid)?;
+        let (grid, formats) = self.cell_grid(uid)?;
         let widest = grid.iter().map(Vec::len).max().unwrap_or(0);
         if nrows > grid.len() || ncols > widest {
             return Err(Error::Corrupt(format!(
@@ -249,7 +353,11 @@ impl Reader<'_> {
             },
         );
 
-        let cells = cells_from_grid(&grid, &rows, &columns);
+        let cells = cells_from_grid(&grid);
+        let grid = grid
+            .into_iter()
+            .map(|row| row.into_iter().map(|p| p.format).collect())
+            .collect();
         let style = match self.chunk(uid, chunk::TABLE_STYLE)? {
             Some(d) => super::uid_or_none(self.cursor(&d).u32()?),
             None => None,
@@ -269,11 +377,15 @@ impl Reader<'_> {
             rows,
             columns,
             cells,
+            formats,
+            grid,
         })
     }
 
-    /// Grid positions by row, from the cell strand's row groups.
-    fn cell_grid(&self, table: u32) -> Result<Vec<Vec<Position>>, Error> {
+    /// Grid positions by row, from the cell strand's row groups, and the
+    /// attribute sets they refer to.
+    #[allow(clippy::type_complexity)]
+    fn cell_grid(&self, table: u32) -> Result<(Vec<Vec<Position>>, Vec<CellFormat>), Error> {
         let parts = self.required(table, chunk::TABLE_PARTS)?;
         let mut c = self.cursor(&parts);
         let n = c.u32()?;
@@ -284,12 +396,13 @@ impl Reader<'_> {
                 owner = Some(u);
             }
         }
-        let Some(owner) = owner else {
-            return Ok(Vec::new());
-        };
         let mut grid = Vec::new();
+        let mut all_formats = Vec::new();
+        let Some(owner) = owner else {
+            return Ok((grid, all_formats));
+        };
         let Some(list) = self.chunk(owner, super::chunk::STRAND_DATA)? else {
-            return Ok(grid);
+            return Ok((grid, all_formats));
         };
         let mut lc = self.cursor(&list);
         let count = lc.u16()?;
@@ -317,15 +430,18 @@ impl Reader<'_> {
                     };
                     let style_priority = g.u32()?;
                     let style = g.u32()?;
-                    let f = CellFormat {
+                    all_formats.push(CellFormat {
                         attrs,
                         style_priority,
                         style,
-                    };
+                    });
                     // A row of this group has at most one position per
                     // four bytes, so later formats would never be used.
                     let room = (size / 4).saturating_sub(formats.len());
-                    formats.extend(std::iter::repeat_n(f, columns.min(room)));
+                    formats.extend(std::iter::repeat_n(
+                        all_formats.len() - 1,
+                        columns.min(room),
+                    ));
                 }
                 let nr = g.u32()?;
                 let mut ids = Vec::new();
@@ -340,24 +456,32 @@ impl Reader<'_> {
                     }
                     let n = g.u16()? as usize;
                     let raw = raw_attrs(&mut g, n)?;
+                    // A row record with fewer attribute records than
+                    // positions leaves the last positions covered.
                     let row = row_ids
                         .into_iter()
-                        .zip(raw)
                         .enumerate()
-                        .map(|(k, (id, (aid, value)))| Position {
-                            id,
-                            size: (aid == attr::CELL)
-                                .then(|| cell_size(self.enc(), &value))
-                                .flatten(),
-                            covered: aid == attr::COVERED,
-                            format: formats.get(k).cloned(),
+                        .map(|(k, id)| {
+                            let (aid, value) = raw.get(k).map_or((0, &[][..]), |(a, v)| (*a, v));
+                            Position {
+                                id,
+                                starts: match aid {
+                                    attr::CELL => Some(CellKind::Text),
+                                    attr::GRAPHIC_CELL => Some(CellKind::Graphic),
+                                    _ => None,
+                                },
+                                width: (aid == attr::CELL)
+                                    .then(|| layout_width(self.enc(), value))
+                                    .flatten(),
+                                format: formats.get(k).copied(),
+                            }
                         })
                         .collect();
                     grid.push(row);
                 }
             }
         }
-        Ok(grid)
+        Ok((grid, all_formats))
     }
 }
 
@@ -387,54 +511,192 @@ fn raw_attrs(c: &mut Cursor, n: usize) -> Result<Vec<(u32, Vec<u8>)>, Error> {
     Ok(out)
 }
 
-/// Text area width and height of a cell record.
-fn cell_size(enc: Encoding, v: &[u8]) -> Option<(f64, f64)> {
-    let f = |o: usize| enc.f64_at(v, o);
-    Some((f(32)?, f(40)?))
+/// Text area width of a cell's layout record: u32 flags, u32 parcel
+/// count (and one more u32 if the low four flag bits are 0xF), then per
+/// parcel u32 flags (and one more u32 if bit 31 is set), 16 bytes, f64
+/// width, f64 height. `None` for a cell never laid out (no parcels) or a
+/// record too short.
+fn layout_width(enc: Encoding, v: &[u8]) -> Option<f64> {
+    let mut c = enc.cursor(v);
+    let flags = c.u32().ok()?;
+    if c.u32().ok()? == 0 {
+        return None;
+    }
+    if flags & 0xF == 0xF {
+        c.u32().ok()?;
+    }
+    if c.u32().ok()? & 0x8000_0000 != 0 {
+        c.u32().ok()?;
+    }
+    c.skip(16).ok()?;
+    c.f64().ok()
 }
 
-/// Cells from the grid: a position with geometry starts a cell. Its text
-/// area is its spanned width and height minus the insets, so its span is
-/// the smallest number of columns (rows) whose sizes reach the text area.
-fn cells_from_grid(grid: &[Vec<Position>], rows: &[Row], columns: &[f64]) -> Vec<Cell> {
+/// The cells of the grid, each 1 × 1 until `Table::resolve_spans`.
+fn cells_from_grid(grid: &[Vec<Position>]) -> Vec<Cell> {
     let mut cells = Vec::new();
     for (r, row) in grid.iter().enumerate() {
         for (c, pos) in row.iter().enumerate() {
-            let Some((w, h)) = pos.size else { continue };
-            let span = |sizes: &[f64], target: f64| -> usize {
-                let mut sum = 0.0;
-                for (k, s) in sizes.iter().enumerate() {
-                    sum += s;
-                    if sum >= target - 1e-3 {
-                        return k + 1;
-                    }
-                }
-                sizes.len().max(1)
-            };
-            let heights: Vec<f64> = rows[r.min(rows.len())..]
-                .iter()
-                .map(|x| x.height.unwrap_or(0.0))
-                .collect();
-            // A cell that was never laid out has no geometry; then take the
-            // covered positions to its right as its span.
-            let column_span = if w > 0.0 {
-                span(&columns[c.min(columns.len())..], w)
-            } else {
-                1 + row[c + 1..].iter().take_while(|p| p.covered).count()
-            };
-            let row_span = if h > 0.0 { span(&heights, h) } else { 1 };
+            let Some(kind) = pos.starts else { continue };
             cells.push(Cell {
                 id: pos.id,
                 row: r,
                 column: c,
-                row_span,
-                column_span,
+                row_span: 1,
+                column_span: 1,
+                kind,
+                width: pos.width,
                 runs: Vec::new(),
-                format: pos.format.clone(),
+                format: pos.format,
             });
         }
     }
     cells
+}
+
+impl Table {
+    /// The attribute set of a cell.
+    pub fn format(&self, cell: &Cell) -> Option<&CellFormat> {
+        cell.format.and_then(|i| self.formats.get(i))
+    }
+
+    /// The value in effect for the table: its own attributes, then its
+    /// table style, the styles that is based on, and the root table
+    /// style.
+    pub fn value<'a>(&'a self, id: u32, styles: &TableStyles<'a>) -> Option<&'a Value> {
+        self.attrs.get(id).or_else(|| {
+            styles
+                .table_chain(self.style)
+                .into_iter()
+                .find_map(|s| s.attrs.get(id))
+        })
+    }
+
+    /// The region cell style of a cell starting at `row` and `column` and
+    /// spanning `span` columns; `None` if the region has none (UID 0).
+    fn region_style(
+        &self,
+        row: usize,
+        column: usize,
+        span: usize,
+        styles: &TableStyles,
+    ) -> Option<u32> {
+        let chain = styles.table_chain(self.style);
+        let get = |id: u32| chain.iter().find_map(|s| s.attrs.get(id)?.as_u32());
+        let nrows = self.rows.len();
+        let region = if row < self.header_rows as usize {
+            Some(region::HEADER)
+        } else if self.footer_rows > 0 && row + self.footer_rows as usize >= nrows {
+            Some(region::FOOTER)
+        } else if column == 0 {
+            Some(region::LEFT_COLUMN)
+        } else if column + span >= self.columns.len() {
+            Some(region::RIGHT_COLUMN)
+        } else {
+            None
+        };
+        let id = match region {
+            Some((style, same_as_body)) if get(same_as_body) != Some(1) => style,
+            _ => region::BODY,
+        };
+        get(id).filter(|&u| u != 0)
+    }
+
+    /// The value in effect for a cell: its attribute set, its cell style
+    /// (and the styles that is based on), the cell style of its table
+    /// region, then the table's value.
+    pub fn cell_value<'a>(
+        &'a self,
+        cell: &Cell,
+        id: u32,
+        styles: &TableStyles<'a>,
+    ) -> Option<&'a Value> {
+        self.cell_value_at(cell, cell.column_span, id, styles)
+    }
+
+    fn cell_value_at<'a>(
+        &'a self,
+        cell: &Cell,
+        span: usize,
+        id: u32,
+        styles: &TableStyles<'a>,
+    ) -> Option<&'a Value> {
+        let format = self.format(cell);
+        format
+            .and_then(|f| f.attrs.get(id))
+            .or_else(|| {
+                format
+                    .filter(|f| f.style != 0)
+                    .and_then(|f| styles.cell_style_value(f.style, id))
+            })
+            .or_else(|| {
+                self.region_style(cell.row, cell.column, span, styles)
+                    .and_then(|u| styles.cell_style_value(u, id))
+            })
+            .or_else(|| self.value(id, styles))
+    }
+
+    /// Set the cells' column and row spans (tables.md, "Spans"). A
+    /// cell's column span is the number of columns, up to the next cell
+    /// in its row, whose widths best match its laid-out width plus its
+    /// left and right insets; its row span takes the rows below whose
+    /// positions under it are covered and not yet taken.
+    pub fn resolve_spans(&mut self, styles: &TableStyles) {
+        let nrows = self.rows.len().min(self.grid.len());
+        let mut starts: Vec<Vec<bool>> = self.grid.iter().map(|r| vec![false; r.len()]).collect();
+        for c in &self.cells {
+            starts[c.row][c.column] = true;
+        }
+        let mut taken: Vec<Vec<bool>> = starts.clone();
+        let mut spans = Vec::with_capacity(self.cells.len());
+        for cell in &self.cells {
+            let row = &starts[cell.row];
+            let run = 1 + row[cell.column + 1..].iter().take_while(|s| !**s).count();
+            let span = match cell.width.filter(|&w| w > 0.0) {
+                Some(w) => {
+                    let inset = |n: usize, id: u32| {
+                        self.cell_value_at(cell, n, id, styles)
+                            .and_then(Value::as_f64)
+                            .unwrap_or(0.0)
+                    };
+                    let mut best = (1, f64::INFINITY);
+                    let mut sum = 0.0;
+                    for n in 1..=run {
+                        sum += self
+                            .columns
+                            .get(cell.column + n - 1)
+                            .copied()
+                            .unwrap_or(0.0);
+                        let target =
+                            w + inset(n, text_cell::LEFT_INSET) + inset(n, text_cell::RIGHT_INSET);
+                        let d = (sum - target).abs();
+                        if d < best.1 {
+                            best = (n, d);
+                        }
+                    }
+                    best.0
+                }
+                None => run,
+            };
+            for t in &mut taken[cell.row][cell.column..cell.column + span] {
+                *t = true;
+            }
+            spans.push(span);
+        }
+        for (cell, span) in self.cells.iter_mut().zip(spans) {
+            cell.column_span = span;
+            let cols = cell.column..cell.column + span;
+            let mut rows = 1;
+            for row in taken.iter_mut().take(nrows).skip(cell.row + 1) {
+                match row.get_mut(cols.clone()) {
+                    Some(p) if p.iter().all(|t| !t) => p.fill(true),
+                    _ => break,
+                }
+                rows += 1;
+            }
+            cell.row_span = rows;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -497,13 +759,38 @@ mod tests {
         d
     }
 
-    /// The second value of a cell record: text area width at 32 and
+    /// The second value of a cell record, a layout record with one
+    /// parcel whose flags have bit 31 set: text area width at 32 and
     /// height at 40.
     fn geometry(w: f64, h: f64) -> Vec<u8> {
-        let mut g = vec![0; 32];
+        let mut g = le(0);
+        g.extend(le(1));
+        g.extend(le(0x8000_0000));
+        g.extend([0; 20]);
         g.extend(w.to_le_bytes());
         g.extend(h.to_le_bytes());
         g
+    }
+
+    #[test]
+    fn reads_the_layout_width() {
+        let enc = Encoding::default();
+        assert_eq!(layout_width(enc, &geometry(12.5, 3.0)), Some(12.5));
+        // An extra u32 after the count (flags 0xF), none after the parcel
+        // flags: the width is at 32 again.
+        let mut g = le(0xF);
+        g.extend(le(1));
+        g.extend(le(0));
+        g.extend(le(0));
+        g.extend([0; 16]);
+        g.extend(7.0f64.to_le_bytes());
+        assert_eq!(layout_width(enc, &g), Some(7.0));
+        // Never laid out.
+        assert_eq!(layout_width(enc, &[0; 8]), None);
+    }
+
+    fn no_styles() -> BTreeMap<u32, TableStyle> {
+        BTreeMap::new()
     }
 
     /// A 2 × 3 table: row 0 has a cell spanning columns 0–1 (its text
@@ -540,7 +827,7 @@ mod tests {
         let cell = |w, h| record(attr::CELL, &[&[], &geometry(w, h)]);
         let covered = record(attr::COVERED, &[&[], &[]]);
         g.extend(3u16.to_le_bytes());
-        g.extend(cell(150.0, 15.0));
+        g.extend(cell(190.0, 15.0));
         g.extend(covered);
         g.extend(cell(90.0, 15.0));
         g.extend(3u16.to_le_bytes());
@@ -583,7 +870,9 @@ mod tests {
         let bytes = synthetic::image(&objects);
         let db = synthetic::database(&bytes, &objects);
         let reader = Reader::new(&db);
-        let t = reader.table(5).unwrap();
+        let mut t = reader.table(5).unwrap();
+        let none = no_styles();
+        t.resolve_spans(&TableStyles::new(&none, &none));
         assert_eq!((t.header_rows, t.footer_rows, t.style), (1, 0, Some(0x30)));
         assert_eq!(t.columns, [100.0; 3]);
         assert_eq!(t.rows.len(), 2);
@@ -604,37 +893,56 @@ mod tests {
             ]
         );
         // The cell format applies to the first column of each row.
-        let f = t.cells[0].format.as_ref().unwrap();
+        let f = t.format(&t.cells[0]).unwrap();
         assert_eq!((f.style_priority, f.style), (2, 0x11));
         assert_eq!(f.attrs.get(0xB63E), Some(&Value::Double(50.0)));
-        assert!(t.cells[1].format.is_none());
+        assert!(t.format(&t.cells[1]).is_none());
     }
 
     #[test]
-    fn cells_without_geometry_span_the_covered_positions() {
-        let pos = |id, size, covered| Position {
+    fn spans_take_the_best_width_then_the_free_rows_below() {
+        let pos = |id, width: Option<f64>| Position {
             id,
-            size,
-            covered,
+            starts: (id != 0).then_some(CellKind::Text),
+            width,
             format: None,
         };
-        let grid = vec![vec![
-            pos(1, Some((0.0, 0.0)), false),
-            pos(2, None, true),
-            pos(3, None, true),
-            pos(4, Some((10.0, 30.0)), false),
-        ]];
-        let row = |h| Row {
-            height: Some(h),
+        // Cell 1 is 20 wide (two columns of 10) and covers the row below;
+        // cell 5 was never laid out and spans the covered position to its
+        // right.
+        let grid = vec![
+            vec![pos(1, Some(20.0)), pos(0, None), pos(3, None)],
+            vec![pos(0, None), pos(0, None), pos(4, None)],
+            vec![pos(6, Some(5.0)), pos(5, None), pos(0, None)],
+        ];
+        let row = Row {
+            height: None,
             min_height: None,
             attrs: Attrs::default(),
         };
-        let cells = cells_from_grid(&grid, &[row(20.0), row(20.0)], &[10.0; 4]);
-        let spans: Vec<_> = cells
+        let mut t = Table {
+            uid: 1,
+            style: None,
+            attrs: Attrs::default(),
+            right_to_left: false,
+            header_rows: 0,
+            footer_rows: 0,
+            rows: vec![row; 3],
+            columns: vec![10.0; 3],
+            cells: cells_from_grid(&grid),
+            formats: Vec::new(),
+            grid: vec![vec![None; 3]; 3],
+        };
+        let none = no_styles();
+        t.resolve_spans(&TableStyles::new(&none, &none));
+        let spans: Vec<_> = t
+            .cells
             .iter()
             .map(|c| (c.id, c.row_span, c.column_span))
             .collect();
-        // Cell 4 is 30 high: two rows of 20.
-        assert_eq!(spans, [(1, 1, 3), (4, 2, 1)]);
+        assert_eq!(
+            spans,
+            [(1, 2, 2), (3, 1, 1), (4, 1, 1), (6, 1, 1), (5, 1, 2)]
+        );
     }
 }
