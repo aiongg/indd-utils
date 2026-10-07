@@ -279,6 +279,10 @@ character styles in the IDML files):
 | `EmitCss="true"` where written | paragraph and character | 10 on |
 | `SplitDocument="false"` where written | character | 10 on |
 
+TOC styles (707 in the IDML files) all have `RunIn="false"` and
+`IncludeHidden="false"`, and `SetStoryDirection="Horizontal"` where they
+have it (all but one, from DOM 7 on).
+
 `KeyboardShortcut` and the paragraph styles' `ExtendedKeyboardShortcut`,
 `SplitDocument` and `IncludeClass` are left out: a few styles have
 other values (keyboard shortcuts such as `16 82`), whose INDD field was

@@ -50,6 +50,7 @@ pub mod class {
     pub const RAW_DATA: u32 = 0x129;
     pub const FONT_FAMILY: u32 = 0x3E03;
     pub const LANGUAGE: u32 = 0x2D07;
+    pub const TOC_STYLE: u32 = 0x11605;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
@@ -115,6 +116,11 @@ pub mod chunk {
     pub const COLUMN_FRAME_LIST: u32 = 0x220;
     pub const FRAME_LIST_FRAMES: u32 = 0x205;
     pub const STORY_STRANDS: u32 = 0x223;
+    /// The table of contents (class 0x8C20) that made a story.
+    pub const STORY_TOC: u32 = 0x8C40;
+    /// The TOC style of a table of contents.
+    pub const TOC_STYLE_OF: u32 = 0x11613;
+    pub const TOC_STYLE: u32 = 0x11605;
     pub const STRAND_DATA: u32 = 0x261;
     pub const STRAND_RUNS: u32 = 0x262;
     pub const STYLE_INFO: u32 = 0x230;
@@ -576,6 +582,24 @@ pub struct Story {
     /// Text orientation, from the frames that show the story; `None` when
     /// it has no frame or its frames disagree.
     pub orientation: Option<Orientation>,
+    /// The TOC style that made the story (chunk 0x8C40).
+    pub toc_style: Option<u32>,
+}
+
+/// A table of contents style (class 0x11605), from chunk 0x11605: a flag
+/// byte and the name, three u32 (the third the title style), a flag byte
+/// and the title. See `docs/format/objects.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TocStyle {
+    pub uid: u32,
+    pub name: String,
+    pub builtin: bool,
+    pub title: String,
+    pub title_style: u32,
+    /// After a flag byte and a string: u16 at 2 numbered paragraphs, at 4
+    /// make anchor and at 6 remove forced line breaks, where the chunk
+    /// has them.
+    pub flags: Vec<u16>,
 }
 
 /// Text orientation of a story (IDML `StoryOrientation`).
@@ -633,6 +657,7 @@ pub struct Document {
     pub master_spreads: Vec<Spread>,
     pub stories: Vec<Story>,
     pub styles: BTreeMap<u32, Style>,
+    pub toc_styles: Vec<TocStyle>,
     pub colors: Vec<Color>,
     /// Tint swatches, with their IDML reference and name.
     pub tints: Vec<(Tint, String, String)>,
@@ -1329,6 +1354,7 @@ impl<'a> Reader<'a> {
             fonts,
             languages,
             language_list,
+            toc_styles: self.toc_styles(),
             style_groups,
             object_styles,
             cell_styles,
@@ -2645,7 +2671,63 @@ impl<'a> Reader<'a> {
             xml_markers,
             xml_element,
             orientation: None,
+            // The story names an object (class 0x8C20) whose chunk 0x11613
+            // is the TOC style.
+            toc_style: match self
+                .chunk(uid, chunk::STORY_TOC)?
+                .and_then(|d| u32_at(&d, 0))
+                .and_then(uid_or_none)
+            {
+                Some(toc) => self
+                    .chunk(toc, chunk::TOC_STYLE_OF)?
+                    .and_then(|d| u32_at(&d, 0))
+                    .and_then(uid_or_none),
+                None => None,
+            },
         })
+    }
+
+    /// The table of contents styles, in UID order.
+    fn toc_styles(&self) -> Vec<TocStyle> {
+        let mut out = Vec::new();
+        for &(uid, cls) in self.db.classes() {
+            if cls != class::TOC_STYLE {
+                continue;
+            }
+            let read = (|| -> Result<Option<TocStyle>, Error> {
+                let Some(d) = self.chunk(uid, chunk::TOC_STYLE)? else {
+                    return Ok(None);
+                };
+                let mut c = Cursor::new(&d);
+                let builtin = c.flag()? == 1;
+                let name = c.string()?;
+                c.skip(8)?;
+                let title_style = c.u32()?;
+                c.flag()?;
+                let title = c.string()?;
+                c.flag()?;
+                c.string()?;
+                let mut flags = Vec::new();
+                while flags.len() < 4 && c.remaining() >= 2 {
+                    flags.push(c.u16()?);
+                }
+                Ok(Some(TocStyle {
+                    uid,
+                    name,
+                    builtin,
+                    title,
+                    title_style,
+                    flags,
+                }))
+            })();
+            match read {
+                Ok(Some(t)) => out.push(t),
+                Ok(None) => {}
+                Err(e) => self.warn(format!("TOC style {uid} left out: {e}")),
+            }
+        }
+        out.sort_by_key(|t| t.uid);
+        out
     }
 
     /// Read the XML nodes stored with story `uid` and place their markers.

@@ -225,6 +225,30 @@ true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
 
+## Table of contents styles (0x11605)
+
+Chunk 0x11605: a flag byte (1 = built-in key) and the name, three u32
+(the third the UID of the title's paragraph style), a flag byte and the
+title, a flag byte and a string not identified, then u16 fields: at 2
+`NumberedParagraphs` (0 `IncludeFullParagraph`, 2 `ExcludeNumbers`), at
+4 `MakeAnchor` and at 6 `RemoveForcedLineBreak` (1 = true; the chunk of
+older files ends before the fields IDML does not have yet), then the
+entries. IDML writes one `TOCStyle` per object in `Styles.xml`.
+
+A story made by a table of contents has chunk 0x8C40, the UID of an
+object of class 0x8C20 whose chunk 0x11613 is the TOC style; IDML writes
+that style as the story's `AppliedTOCStyle`, and `n` for other stories.
+
+Evidence over the trustworthy pairs: the 511 TOC styles the converter
+writes match on `Name`, `Title` and `TitleStyle` (511 of 511),
+`NumberedParagraphs` (511, one `ExcludeNumbers`), `MakeAnchor` (445 of
+445 from DOM 9 on, 4 true) and `RemoveForcedLineBreak` (340 of 340 from
+DOM 13 on, 4 true); `AppliedTOCStyle` matches for 18,923 of 18,923
+stories (21 made by a table of contents). `CreateBookmarks` (false in 1
+of 676 IDML styles) and `IncludeBookDocuments` (true in 8) were not
+found, and the entries (`TOCStyleEntry`, 130 in all corpus IDML files)
+are not decoded: the converter writes the styles without them.
+
 ## Languages (0x2D07)
 
 Chunk 0x2D0F: a flag byte and the name (`English: USA`), a flag byte and

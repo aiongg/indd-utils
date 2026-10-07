@@ -45,6 +45,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				<PreviewColor type="enumeration">Nothing</PreviewColor>
 			</Properties>
 		</CharacterStyle>
+		<TOCStyle RunIn="false" IncludeHidden="false" />
 		<Document>
 			<ConditionalTextPreference Present="true" ShowConditionIndicators="ShowIndicators" ActiveConditionSet="n" />
 			<LinkedStoryOption UpdateWhileSaving="false" WarnOnUpdateOfEditedStory="true" RemoveForcedLineBreaks="false" />
@@ -113,6 +114,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</ObjectExportOption>
 		</ObjectStyle>
+		<TOCStyleEntry SortAlphabet="false" />
 	</Values>
 	<Values MinimumVersion="10">
 		<TextFrame>
@@ -211,6 +213,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<TextFrame>
 			<TextFramePreference VerticalThreshold="0" />
 		</TextFrame>
+		<TOCStyle SetStoryDirection="Horizontal" />
 	</WhenWritten>
 	<WhenWritten MinimumVersion="8">
 		<TextFrame>

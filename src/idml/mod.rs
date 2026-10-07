@@ -1345,6 +1345,60 @@ impl Writer<'_> {
         x.finish()
     }
 
+    /// The IDML reference of a TOC style.
+    fn toc_style_ref(t: &crate::model::TocStyle) -> String {
+        let name = if t.builtin {
+            format!("$ID/{}", t.name)
+        } else {
+            t.name.clone()
+        };
+        format!("TOCStyle/{}", self_name(&name))
+    }
+
+    /// Table of contents styles, without their entries. See
+    /// `docs/format/objects.md`, table of contents styles.
+    fn toc_styles(&self, x: &mut Xml) {
+        for t in &self.doc.toc_styles {
+            let name = if t.builtin {
+                format!("$ID/{}", t.name)
+            } else {
+                t.name.clone()
+            };
+            x.start("TOCStyle")
+                .attr("Self", Self::toc_style_ref(t))
+                .attr(
+                    "TitleStyle",
+                    self.style_ref((t.title_style != 0).then_some(t.title_style), true),
+                )
+                .attr("Title", &t.title)
+                .attr("Name", &name);
+            let major = self.doc.version.major;
+            let flag = |i: usize| t.flags.get(i).copied();
+            match flag(1) {
+                Some(0) => {
+                    x.attr("NumberedParagraphs", "IncludeFullParagraph");
+                }
+                Some(2) => {
+                    x.attr("NumberedParagraphs", "ExcludeNumbers");
+                }
+                _ => {}
+            }
+            if major >= 9
+                && let Some(v) = flag(2)
+            {
+                x.attr("MakeAnchor", (v != 0).to_string());
+            }
+            if major >= 13
+                && let Some(v) = flag(3)
+            {
+                x.attr("RemoveForcedLineBreak", (v != 0).to_string());
+            }
+            x.attrs_missing(self.observed("TOCStyle").iter());
+            x.attrs_missing(values::when_written("TOCStyle", major).iter());
+            x.end();
+        }
+    }
+
     /// The document's languages, in UID order. See
     /// `docs/format/objects.md`, languages.
     fn languages(&self, x: &mut Xml) {
@@ -2439,6 +2493,7 @@ impl Writer<'_> {
             }
             x.end();
         }
+        self.toc_styles(&mut x);
         for (tag, kind, style, name) in [
             ("RootCellStyleGroup", root_kind::CELL, "CellStyle", "[None]"),
             (
@@ -3692,6 +3747,14 @@ impl Writer<'_> {
         x.attr("TrackChanges", "false")
             .attr("StoryTitle", "$ID/")
             .attr("AppliedNamedGrid", "n");
+        // The TOC style that made the story, if any (objects.md).
+        let toc = s
+            .toc_style
+            .and_then(|u| self.doc.toc_styles.iter().find(|t| t.uid == u));
+        x.attr(
+            "AppliedTOCStyle",
+            toc.map_or("n".into(), Self::toc_style_ref),
+        );
     }
 
     fn xml_element_start(x: &mut Xml, e: &XmlElement) {
@@ -4186,6 +4249,7 @@ mod tests {
             xml_markers: markers.into_iter().collect(),
             xml_element: None,
             orientation: None,
+            toc_style: None,
         };
         let doc = Document {
             xml: XmlStructure {

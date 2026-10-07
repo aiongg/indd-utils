@@ -67,7 +67,7 @@ ELEMENTS = [
     "Spread", "MasterSpread", "Page", "Spread/FlattenerPreference", "Layer",
     "TextFrame/TextFramePreference", "TextFrame/TextFrameFootnoteOptionsObject",
     "Color", "Tint", "Gradient", "Swatch", "Guide", "ObjectStyle/ObjectExportOption",
-    "ParagraphStyle", "CharacterStyle",
+    "ParagraphStyle", "CharacterStyle", "TOCStyle", "TOCStyleEntry",
     "Document/ConditionalTextPreference", "Document/EndnoteOption",
     "Document/TextFrameFootnoteOptionsObject", "Document/LinkedStoryOption",
     "Document/LinkedPageItemOption", "Document/WatermarkPreference",
@@ -98,6 +98,7 @@ WHEN_WRITTEN = {
         "MinimumFirstBaselineOffset",
     ],
     "ParagraphStyle": ["EmitCss"],
+    "TOCStyle": ["SetStoryDirection"],
     "CharacterStyle": ["EmitCss", "SplitDocument"],
 }
 # Values that are nearly constant; the exceptions are read from the INDD.
