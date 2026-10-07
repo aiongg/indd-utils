@@ -29,6 +29,12 @@ now). Licence: MIT OR Apache-2.0.
 
 - `src/header.rs`, `src/container.rs`: decoded layers (see `docs/format/`).
 - `src/audit.rs`: records what a conversion reads, for `indd audit`.
+- `src/model/`: the document model. `reader` (typed object access),
+  `document` (`Reader::document`), and one module per area: `spread`,
+  `item`, `story`, `style`, `settings`, `table`, `color`, `font`, …
+- `src/idml/`: the IDML writer. `mod.rs` has `write`; one module per
+  package part (`designmap`, `resources`, `styles`, `spread`, `story`),
+  plus `attrs` (attribute tables), `format`, `pages`, `values`.
 - `docs/measurement.md`: how `compare.py` and the audit measure the
   converter (stale pairs, value coverage, exclusions).
 - `tests/fixtures.rs`: smoke tests on open-licensed samples listed in
