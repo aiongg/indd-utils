@@ -53,7 +53,7 @@ All little-endian.
 | 0x1401 | UID list: master spreads |
 | 0x301 | UID list: layers (the first is an internal layer that holds pages) |
 | 0x313 | u32: active layer (IDML `ActiveLayer`) |
-| 0x222 | UID lists: stories (IDML `StoryList`) |
+| 0x222 | Two UID lists: the stories, then the XML backing story; IDML `StoryList` is both (`xml.md`) |
 | 0x4C01 | UID list: sections |
 
 ## Spreads (0x501) and master spreads (0x1401)
@@ -544,6 +544,9 @@ of characters; with that reading, each emoji gets the character style
 range IDML gives it (6 of 6). The converter applies the same reading to
 hyperlink range trees, for which no sample with such a character exists.
 
+U+FEFF characters can be XML markers, which IDML does not write
+(`xml.md`).
+
 INDD stores a forced line break as U+000A; IDML writes it as U+2028. The
 last paragraph return of a story is not written to IDML.
 
@@ -918,7 +921,5 @@ tags).
 Each colour other than light blue occurs once, all in one file. The
 converter leaves out `TagColor` for other colours.
 
-The XML structure itself is not converted: the backing story (named by
-document chunk 0xBF14 in 76 of 78 pairs) and its `XMLElement` elements,
-whose `Self` (`di2`, `di3`, `di2ib`, …) does not follow from a UID found
-so far.
+The XML structure (the backing story and the elements) is described in
+`xml.md`.

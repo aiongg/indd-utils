@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Page, PageItem, Path, Section,
     Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextVariable,
-    TextWrap, Value, hyperlink::DestinationKind, numbering, root_kind, variable::Instance,
-    wrap_mode,
+    TextWrap, Value, XmlElement, XmlMarker, hyperlink::DestinationKind, numbering, root_kind,
+    variable::Instance, wrap_mode, xml::Key as XmlKey,
 };
 
 #[derive(Clone, Copy)]
@@ -907,7 +907,13 @@ impl Writer<'_> {
             "aid style=\"50\" type=\"document\" readerVersion=\"6.0\" featureSet=\"257\" product=\"{}\" ",
             self.dom
         ));
-        let stories: Vec<String> = doc.stories.iter().map(|s| uref(Some(s.uid))).collect();
+        // The stories, then the backing story.
+        let stories: Vec<String> = doc
+            .stories
+            .iter()
+            .chain(&doc.xml.story)
+            .map(|s| uref(Some(s.uid)))
+            .collect();
         x.start("Document")
             .attr("xmlns:idPkg", PACKAGING_NS)
             .attr("DOMVersion", &self.dom)
@@ -2907,10 +2913,9 @@ impl Writer<'_> {
         x.finish()
     }
 
-    fn story(&self, s: &Story) -> String {
-        let mut x = Xml::new();
-        self.package_root(&mut x, "Story");
-        x.start("Story").attr("Self", uref(Some(s.uid)));
+    /// The start tag of a `Story` or `XmlStory` with its attributes.
+    fn story_start(&self, x: &mut Xml, tag: &str, s: &Story) {
+        x.start(tag).attr("Self", uref(Some(s.uid)));
         // Values every exported IDML has on every story, from the DOM
         // version where they first appear (docs/format/idml-values.md).
         let major = self.doc.version.major;
@@ -2923,6 +2928,21 @@ impl Writer<'_> {
         x.attr("TrackChanges", "false")
             .attr("StoryTitle", "$ID/")
             .attr("AppliedNamedGrid", "n");
+    }
+
+    fn xml_element_start(x: &mut Xml, e: &XmlElement) {
+        x.start("XMLElement")
+            .attr("Self", &e.name)
+            .attr("MarkupTag", format!("XMLTag/{}", self_name(&e.tag)));
+        if let Some(c) = e.content {
+            x.attr("XMLContent", uref(Some(c)));
+        }
+    }
+
+    fn story(&self, s: &Story) -> String {
+        let mut x = Xml::new();
+        self.package_root(&mut x, "Story");
+        self.story_start(&mut x, "Story", s);
         x.empty(
             "StoryPreference",
             &[
@@ -2941,9 +2961,33 @@ impl Writer<'_> {
             ],
         );
         let scope = uref(Some(s.uid));
+        // The element whose content is the story holds all its text.
+        let element = s
+            .xml_element
+            .and_then(|k| self.doc.xml.elements.get(&k))
+            .filter(|e| e.content == Some(s.uid));
+        if let Some(e) = element {
+            Self::xml_element_start(&mut x, e);
+        }
         self.text_ranges(&mut x, &s.runs, s, &scope);
+        if element.is_some() {
+            x.end();
+        }
         x.end().end();
         x.finish()
+    }
+
+    /// The start tag of a character range for `r`.
+    fn csr_start(&self, x: &mut Xml, r: &TextRun) {
+        let (plain, props) = self.text_attrs(&r.character_attrs);
+        x.start("CharacterStyleRange").attr(
+            "AppliedCharacterStyle",
+            self.style_ref(r.character_style, false),
+        );
+        for (k, v) in &plain {
+            x.attr(k, v);
+        }
+        Self::properties(x, &props);
     }
 
     /// Paragraph and character ranges for `runs`. The final paragraph
@@ -2979,28 +3023,37 @@ impl Writer<'_> {
                 x.attr(k, v);
             }
             Self::properties(x, &props);
+            let mut st = TextState::default();
             while i < n && (runs[i].paragraph_style, &runs[i].paragraph_attrs) == para {
                 let r = runs[i];
-                let (plain, props) = self.text_attrs(&r.character_attrs);
-                x.start("CharacterStyleRange").attr(
-                    "AppliedCharacterStyle",
-                    self.style_ref(r.character_style, false),
-                );
-                for (k, v) in &plain {
-                    x.attr(k, v);
-                }
-                Self::properties(x, &props);
-                self.run_content(x, text_of(i), r.start, story, scope);
-                x.end();
+                self.csr_start(x, r);
+                st.csr = true;
+                self.run_content(x, text_of(i), r, story, scope, &mut st);
+                st.close_csr(x);
                 i += 1;
+            }
+            // Elements left open (their end is missing) end with the range.
+            for _ in st.blocks.drain(..) {
+                x.end();
             }
             x.end();
         }
     }
 
-    /// Content, line breaks, anchored items and tables of one character
-    /// range. `offset` is the UTF-16 offset of the range in the story.
-    fn run_content(&self, x: &mut Xml, text: &str, offset: usize, story: &Story, scope: &str) {
+    /// Content, line breaks, anchored items, tables and XML elements of
+    /// one character range `run`, whose text is `text`. A character range
+    /// is open on entry (`st.csr`); XML markers can close it and open
+    /// others (see `docs/format/xml.md`).
+    fn run_content(
+        &self,
+        x: &mut Xml,
+        text: &str,
+        run: &TextRun,
+        story: &Story,
+        scope: &str,
+        st: &mut TextState,
+    ) {
+        let offset = run.start;
         let mut buf = String::new();
         let flush = |x: &mut Xml, buf: &mut String| {
             if !buf.is_empty() {
@@ -3020,6 +3073,59 @@ impl Writer<'_> {
                 x.end();
                 open = None;
             }
+            if ch == '\u{FEFF}'
+                && let Some(&m) = story.xml_markers.get(&pos)
+            {
+                flush(x, &mut buf);
+                // An XML marker ends the open text source.
+                if open.take().is_some() {
+                    x.end();
+                }
+                let get = |k: &XmlKey| self.doc.xml.elements.get(k);
+                match m {
+                    XmlMarker::Start(k) => match get(&k) {
+                        Some(e) if e.block => {
+                            st.close_csr(x);
+                            Self::xml_element_start(x, e);
+                            st.blocks.push(k);
+                            self.csr_start(x, run);
+                            st.csr = true;
+                        }
+                        Some(e) => {
+                            st.open_csr(self, x, run);
+                            Self::xml_element_start(x, e);
+                            st.inline.push(k);
+                        }
+                        None => {}
+                    },
+                    XmlMarker::End(k) => {
+                        if st.inline.last() == Some(&k) {
+                            st.inline.pop();
+                            x.end();
+                        } else if st.blocks.last() == Some(&k) {
+                            st.close_csr(x);
+                            st.blocks.pop();
+                            x.end();
+                        }
+                    }
+                    XmlMarker::Placeholder(k) => {
+                        if let Some(e) = get(&k) {
+                            st.open_csr(self, x, run);
+                            Self::xml_element_start(x, e);
+                            x.end();
+                            // An element with a story as content ends its
+                            // character range.
+                            if e.story_content {
+                                st.close_csr(x);
+                            }
+                        }
+                    }
+                    XmlMarker::Hidden => {}
+                }
+                pos += 1;
+                continue;
+            }
+            st.open_csr(self, x, run);
             if open.is_none()
                 && let Some(r) = story.sources.iter().find(|r| r.start == pos)
                 && let Some(src) = self.doc.text_sources.get(&r.source)
@@ -3154,6 +3260,11 @@ impl Writer<'_> {
     fn backing_story(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "BackingStory");
+        if let Some(s) = &self.doc.xml.story {
+            self.story_start(&mut x, "XmlStory", s);
+            self.text_ranges(&mut x, &s.runs, s, &uref(Some(s.uid)));
+            x.end();
+        }
         x.end();
         x.finish()
     }
@@ -3175,6 +3286,36 @@ impl Writer<'_> {
         }
         x.end();
         x.finish()
+    }
+}
+
+/// While writing text with XML markers: whether a character range is
+/// open, and the XML elements open inside it and around it.
+#[derive(Default)]
+struct TextState {
+    csr: bool,
+    /// Elements open inside the character range.
+    inline: Vec<XmlKey>,
+    /// Elements open between character ranges.
+    blocks: Vec<XmlKey>,
+}
+
+impl TextState {
+    fn open_csr(&mut self, w: &Writer, x: &mut Xml, run: &TextRun) {
+        if !self.csr {
+            w.csr_start(x, run);
+            self.csr = true;
+        }
+    }
+
+    fn close_csr(&mut self, x: &mut Xml) {
+        if self.csr {
+            for _ in self.inline.drain(..) {
+                x.end();
+            }
+            x.end();
+            self.csr = false;
+        }
     }
 }
 
@@ -3228,6 +3369,84 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_xml_elements_at_their_markers() {
+        use crate::model::{Attrs, XmlStructure};
+        let element = |name: &str, content, story_content, block| XmlElement {
+            name: name.into(),
+            tag: "t".into(),
+            content,
+            story_content,
+            block,
+        };
+        let (a, b, c, d) = ((9, 2), (9, 5), (9, 6), (9, 7));
+        let markers = [
+            (0, XmlMarker::Hidden),
+            (1, XmlMarker::Start(a)),
+            (2, XmlMarker::Placeholder(b)),
+            (3, XmlMarker::Start(c)),
+            (4, XmlMarker::Placeholder(d)),
+            (5, XmlMarker::End(c)),
+            (6, XmlMarker::End(a)),
+        ];
+        let story = Story {
+            uid: 9,
+            runs: vec![TextRun {
+                start: 0,
+                text: "\u{FEFF}".repeat(8) + "\r",
+                paragraph_style: None,
+                character_style: None,
+                paragraph_attrs: Attrs::default(),
+                character_attrs: Attrs::default(),
+            }],
+            anchors: Default::default(),
+            tables: Default::default(),
+            text_variables: Default::default(),
+            sources: Vec::new(),
+            xml_markers: markers.into_iter().collect(),
+            xml_element: None,
+        };
+        let doc = Document {
+            xml: XmlStructure {
+                story: Some(story),
+                elements: [
+                    (a, element("di2", None, false, true)),
+                    (b, element("di2i5", Some(0x10), true, false)),
+                    (c, element("di2i6", None, false, false)),
+                    (d, element("di2i6i7", Some(0x20), false, false)),
+                ]
+                .into_iter()
+                .collect(),
+            },
+            ..Document::default()
+        };
+        let w = Writer {
+            doc: &doc,
+            dom: "20.0".into(),
+            name: String::new(),
+            group_path: Default::default(),
+        };
+        let out: String = w
+            .backing_story()
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .concat();
+        let csr =
+            "CharacterStyleRange AppliedCharacterStyle=\"CharacterStyle/$ID/[No character style]\"";
+        let el = |name: &str| format!("XMLElement Self=\"{name}\" MarkupTag=\"XMLTag/t\"");
+        let want = format!(
+            "<{csr} /><{a}><{csr}><{b} XMLContent=\"u10\" /></CharacterStyleRange>\
+             <{csr}><{c}><{d} XMLContent=\"u20\" /></XMLElement></CharacterStyleRange>\
+             </XMLElement><{csr}><Content>\u{FEFF}</Content></CharacterStyleRange>",
+            a = el("di2"),
+            b = el("di2i5"),
+            c = el("di2i6"),
+            d = el("di2i6i7"),
+        );
+        assert!(out.contains(&want), "{out}");
+    }
 
     #[test]
     fn numbers_pages_by_section() {

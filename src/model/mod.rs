@@ -8,6 +8,7 @@ pub mod font;
 pub mod hyperlink;
 pub mod table;
 pub mod variable;
+pub mod xml;
 pub mod xref;
 
 use std::collections::{BTreeMap, HashMap};
@@ -432,6 +433,47 @@ pub struct Story {
     pub text_variables: BTreeMap<usize, variable::Instance>,
     /// Hyperlink text sources, sorted by start.
     pub sources: Vec<SourceRange>,
+    /// XML markers, by UTF-16 offset of their U+FEFF.
+    pub xml_markers: BTreeMap<usize, XmlMarker>,
+    /// The XML element whose content is this story.
+    pub xml_element: Option<xml::Key>,
+}
+
+/// What an XML marker character (U+FEFF) in story text stands for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum XmlMarker {
+    /// The start of an element that holds the text up to its end marker.
+    Start(xml::Key),
+    End(xml::Key),
+    /// An element that is a single marker; its content is elsewhere.
+    Placeholder(xml::Key),
+    /// A marker that IDML does not write: the start of the document node,
+    /// or a marker of an element that is left out.
+    Hidden,
+}
+
+/// An XML element that can be written, with its IDML values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct XmlElement {
+    /// IDML `Self`.
+    pub name: String,
+    /// Tag name (IDML `MarkupTag` without `XMLTag/`).
+    pub tag: String,
+    /// UID written as `XMLContent`.
+    pub content: Option<u32>,
+    /// The content is a story.
+    pub story_content: bool,
+    /// Written between character ranges rather than inside one: the
+    /// element holds an element whose content is a story.
+    pub block: bool,
+}
+
+/// The XML structure of the document.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct XmlStructure {
+    /// The backing story, IDML `XmlStory`.
+    pub story: Option<Story>,
+    pub elements: BTreeMap<xml::Key, XmlElement>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -483,6 +525,7 @@ pub struct Document {
     pub bullets: Vec<Bullet>,
     /// XML tags (class 0xBF19): name and colour (red, green, blue).
     pub xml_tags: Vec<(String, Option<[f64; 3]>)>,
+    pub xml: XmlStructure,
 }
 
 /// Document setup, from chunk 0x533 of the preferences object.
@@ -597,6 +640,8 @@ pub struct Reader<'a> {
     db: &'a Database<'a>,
     cache: std::cell::RefCell<HashMap<u32, std::rc::Rc<Object>>>,
     warnings: std::cell::RefCell<Vec<String>>,
+    /// XML nodes found in the stories read so far.
+    xml_nodes: std::cell::RefCell<BTreeMap<xml::Key, xml::Node>>,
 }
 
 fn uid_or_none(v: u32) -> Option<u32> {
@@ -609,6 +654,7 @@ impl<'a> Reader<'a> {
             db,
             cache: Default::default(),
             warnings: Default::default(),
+            xml_nodes: Default::default(),
         }
     }
 
@@ -699,6 +745,7 @@ impl<'a> Reader<'a> {
         let mut composite_entries = HashMap::new();
         let mut cjk_tables = Vec::new();
         let mut xml_tags = Vec::new();
+        let mut xml_tag_names = HashMap::new();
         let mut inks = Vec::new();
         let mut color_groups = HashMap::new();
         for &(uid, cls) in self.db.classes() {
@@ -921,6 +968,7 @@ impl<'a> Reader<'a> {
                             Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
                             _ => None,
                         };
+                        xml_tag_names.insert(uid, name.clone());
                         xml_tags.push((name, color));
                     }
                 }
@@ -934,6 +982,22 @@ impl<'a> Reader<'a> {
                 _ => {}
             }
         }
+        // The backing story: the document's chunk 0xBF14 names it and the
+        // document node.
+        let xml_story = match self.chunk(doc, xml::chunk::NODE_REF)? {
+            Some(d) if d.len() >= 4 => {
+                let s = Cursor::new(&d).u32()?;
+                match self.class(s) {
+                    Some(class::STORY) => Some(self.story(s)?),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let xml = XmlStructure {
+            story: xml_story,
+            elements: self.xml_elements(&xml_tag_names)?,
+        };
         let mut tints = Vec::new();
         for t in tint_objects {
             match colors
@@ -1006,6 +1070,7 @@ impl<'a> Reader<'a> {
                 .collect(),
             bullets: self.bullets()?,
             xml_tags,
+            xml,
         })
     }
 
@@ -1709,7 +1774,11 @@ impl<'a> Reader<'a> {
         // (start, length, owner, cell) for each stretch of text.
         let mut owners: Vec<(usize, usize, u32, u32)> = Vec::new();
         let mut sources = Vec::new();
+        let mut marker_strand = None;
         for strand in strands {
+            if self.class(strand) == Some(xml::class::MARKER_STRAND) {
+                marker_strand = Some(strand);
+            }
             if self.class(strand) == Some(hyperlink::class::RANGE_STRAND)
                 && let Some(tree) = self.chunk(strand, hyperlink::chunk::RANGE_TREE)?
                 && tree.len() >= 4
@@ -1810,6 +1879,20 @@ impl<'a> Reader<'a> {
             r.len = unit(r.start + r.len) - start;
             r.start = start;
         }
+        let xml_markers = match self.story_xml(uid, marker_strand, &para, &unit) {
+            Ok(m) => m,
+            Err(e) => {
+                self.warn(format!("story {uid}: XML structure left out: {e}"));
+                BTreeMap::new()
+            }
+        };
+        let xml_element = match self.chunk(uid, xml::chunk::NODE_REF)? {
+            Some(d) if d.len() >= 8 => {
+                let mut c = Cursor::new(&d);
+                Some((c.u32()?, c.u32()?))
+            }
+            _ => None,
+        };
         let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
         let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
         let mut text_variables = BTreeMap::new();
@@ -1894,7 +1977,183 @@ impl<'a> Reader<'a> {
             tables,
             text_variables,
             sources,
+            xml_markers,
+            xml_element,
         })
+    }
+
+    /// Read the XML nodes stored with story `uid` and place their markers.
+    /// `unit` converts a character position to a UTF-16 offset; `para` are
+    /// the paragraph runs, in UTF-16 units. An element whose start and end
+    /// lie in different paragraph runs is left out.
+    fn story_xml(
+        &self,
+        uid: u32,
+        marker_strand: Option<u32>,
+        para: &[StyleRun],
+        unit: &dyn Fn(usize) -> usize,
+    ) -> Result<BTreeMap<usize, XmlMarker>, Error> {
+        let mut out = BTreeMap::new();
+        let first = match self.chunk(uid, xml::chunk::STORE)? {
+            Some(d) if d.len() >= 4 => Cursor::new(&d).u32()?,
+            _ => return Ok(out),
+        };
+        let nodes = xml::read_store(first, |p| self.chunk(p, xml::chunk::PAGE))?;
+        if nodes.is_empty() {
+            return Ok(out);
+        }
+        let positions = match marker_strand.map(|s| self.chunk(s, xml::chunk::MARKER_TREE)) {
+            Some(r) => match r? {
+                Some(d) => xml::marker_positions(&d)?,
+                None => BTreeMap::new(),
+            },
+            None => BTreeMap::new(),
+        };
+        let para_of = |at: usize| {
+            let mut end = 0;
+            para.iter().position(|(len, _, _)| {
+                end += len;
+                at < end
+            })
+        };
+        for node in nodes {
+            let at = |m: Option<u32>| m.and_then(|m| positions.get(&m)).map(|&p| unit(p));
+            let (start, end) = (at(node.start), at(node.end));
+            if node.start.is_some() != start.is_some() || node.end.is_some() != end.is_some() {
+                self.warn(format!(
+                    "story {uid}: XML node {:?} left out: marker not found",
+                    node.key
+                ));
+            } else if node.document {
+                if let Some(s) = start {
+                    out.insert(s, XmlMarker::Hidden);
+                }
+            } else {
+                match (start, end) {
+                    (Some(s), Some(e)) if para_of(s) == para_of(e) => {
+                        out.insert(s, XmlMarker::Start(node.key));
+                        out.insert(e, XmlMarker::End(node.key));
+                    }
+                    (Some(s), Some(e)) => {
+                        self.warn(format!(
+                            "story {uid}: XML element {:?} spans paragraphs; left out",
+                            node.key
+                        ));
+                        out.insert(s, XmlMarker::Hidden);
+                        out.insert(e, XmlMarker::Hidden);
+                    }
+                    (Some(s), None) => {
+                        out.insert(s, XmlMarker::Placeholder(node.key));
+                    }
+                    _ => {}
+                }
+            }
+            self.xml_nodes.borrow_mut().insert(node.key, node);
+        }
+        Ok(out)
+    }
+
+    /// The XML elements that can be written: those whose parents lead to
+    /// the document node and whose tag is known. See `docs/format/xml.md`.
+    fn xml_elements(
+        &self,
+        tags: &HashMap<u32, String>,
+    ) -> Result<BTreeMap<xml::Key, XmlElement>, Error> {
+        let nodes = self.xml_nodes.borrow();
+        let mut out = BTreeMap::new();
+        for (key, node) in nodes.iter().filter(|(_, n)| !n.document) {
+            // `Self`: "d", then "i" and the hex ID of each element from the
+            // root down to this one.
+            let mut path = vec![key.1];
+            let mut parent = node.parent;
+            let mut reached = false;
+            while let Some(p) = nodes.get(&parent) {
+                if p.document {
+                    reached = true;
+                    break;
+                }
+                if path.len() > nodes.len() {
+                    break;
+                }
+                path.push(p.key.1);
+                parent = p.parent;
+            }
+            let Some(tag) = tags.get(&node.tag) else {
+                self.warn(format!(
+                    "XML element {key:?} left out: tag {} unknown",
+                    node.tag
+                ));
+                continue;
+            };
+            if !reached {
+                self.warn(format!("XML element {key:?} left out: no path to the root"));
+                continue;
+            }
+            let name = path.iter().rev().fold(String::from("d"), |mut s, id| {
+                s.push_str(&format!("i{id:x}"));
+                s
+            });
+            let (content, story_content) = match self.class(node.content) {
+                _ if node.content == 0 => (None, false),
+                Some(class::STORY) => (Some(node.content), true),
+                // A content holder stands for its parent page item.
+                Some(xml::class::CONTENT_HOLDER) => {
+                    match self.chunk(node.content, chunk::ITEM_HIERARCHY)? {
+                        Some(d) if d.len() >= 8 => {
+                            (uid_or_none(Cursor::new(&d[4..]).u32()?), false)
+                        }
+                        _ => (None, false),
+                    }
+                }
+                c => {
+                    self.warn(format!(
+                        "XML element {key:?}: content {} of class {c:x?} left out",
+                        node.content
+                    ));
+                    (None, false)
+                }
+            };
+            out.insert(
+                *key,
+                XmlElement {
+                    name,
+                    tag: tag.clone(),
+                    content,
+                    story_content,
+                    block: false,
+                },
+            );
+        }
+        // An element is written as a block when it holds, at any depth, an
+        // element that is a single marker with a story as content.
+        let holds_story = |key: &xml::Key| {
+            let mut stack = vec![*key];
+            let mut seen = Vec::new();
+            while let Some(k) = stack.pop() {
+                if seen.contains(&k) {
+                    continue;
+                }
+                seen.push(k);
+                let Some(n) = nodes.get(&k) else { continue };
+                for c in &n.children {
+                    if let Some(child) = nodes.get(c)
+                        && child.end.is_none()
+                        && out.get(c).is_some_and(|e: &XmlElement| e.story_content)
+                    {
+                        return true;
+                    }
+                    stack.push(*c);
+                }
+            }
+            false
+        };
+        let blocks: Vec<xml::Key> = out.keys().filter(|k| holds_story(k)).copied().collect();
+        for k in blocks {
+            if let Some(e) = out.get_mut(&k) {
+                e.block = true;
+            }
+        }
+        Ok(out)
     }
 }
 
