@@ -256,6 +256,10 @@ all of them have; the converter writes it in the order of the IDML files.
 | `HTMLFXLExportPreference` | 11 | both | |
 | `PublishExportPreference` | 11 | 11 | `ImageExportResolution`, `PublishPdf` |
 
+`Assignment` (683 elements, one per file): `UserName="$ID/"`,
+`ExportOptions="AssignedSpreads"`, `IncludeLinksWhenPackage="true"`,
+`FilePath="$ID/"` and `FrameColor` `Nothing`, from DOM 7.
+
 ### Language quotes
 
 The quotes of a language are not in its INDD object (`objects.md`,

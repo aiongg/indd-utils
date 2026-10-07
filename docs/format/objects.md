@@ -225,6 +225,20 @@ true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
 
+## Assignments (0x1BE01)
+
+Every document has one object of class 0x1BE01, listed in chunk 0x1BE13
+of the document; IDML writes it as an `Assignment` with `Self` its UID
+(495 of 495 trustworthy pairs). Chunk 0x1BE1B starts with a flag byte
+and the name in the language the document was made in (`Unassigned
+InCopy Content`, `Contenu InCopy non affecté`, …), then two empty
+strings and fields that are the same in every pair. IDML names it
+`$ID/UnassignedInCopy` in 476 pairs and gives the stored name in 19, in
+files of several languages and versions, so the name follows the
+computer that exported the IDML; the converter leaves `Name` out (it is
+optional in the schema) and the measurement too. The other attributes
+are the same in every IDML (`idml-values.md`).
+
 ## Named grids (0xCD12)
 
 Chunk 0xCD28: u32, a flag byte (1 = built-in key) and the name

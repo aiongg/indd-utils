@@ -67,7 +67,7 @@ ELEMENTS = [
     "Spread", "MasterSpread", "Page", "Spread/FlattenerPreference", "Layer",
     "TextFrame/TextFramePreference", "TextFrame/TextFrameFootnoteOptionsObject",
     "Color", "Tint", "Gradient", "Swatch", "Guide", "ObjectStyle/ObjectExportOption",
-    "ParagraphStyle", "CharacterStyle", "TOCStyle", "TOCStyleEntry",
+    "ParagraphStyle", "CharacterStyle", "TOCStyle", "TOCStyleEntry", "Assignment",
     "Document/ConditionalTextPreference", "Document/EndnoteOption",
     "Document/TextFrameFootnoteOptionsObject", "Document/LinkedStoryOption",
     "Document/LinkedPageItemOption", "Document/WatermarkPreference",

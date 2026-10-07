@@ -322,6 +322,8 @@ EXCLUDED = [
      "file names of the package parts, chosen by the IDML writer"),
     ("DocumentUser", "P.UserColor",
      "colour the exporting InDesign gives each user, not the colour in the INDD"),
+    ("Assignment", "Name",
+     "the exporting InDesign's name for unassigned content, which depends on its language"),
 ]
 
 

@@ -1364,6 +1364,15 @@ impl Writer<'_> {
             );
             x.end();
         }
+        // InCopy assignments: the values every IDML has on them; the name
+        // depends on the computer that exported the IDML (objects.md).
+        if let Some(n) = values::element("Assignment", doc.version.major) {
+            for &uid in &doc.assignments {
+                let mut a = n.clone();
+                a.attrs.insert(0, ("Self".into(), uref(Some(uid))));
+                a.write(&mut x);
+            }
+        }
         x.end();
         x.finish()
     }

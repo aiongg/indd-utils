@@ -52,6 +52,7 @@ pub mod class {
     pub const LANGUAGE: u32 = 0x2D07;
     pub const TOC_STYLE: u32 = 0x11605;
     pub const NAMED_GRID: u32 = 0xCD12;
+    pub const ASSIGNMENT: u32 = 0x1BE01;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
@@ -661,6 +662,8 @@ pub struct Document {
     pub active_layer: Option<u32>,
     /// Document users (chunk 0xA443): flag byte and name.
     pub users: Vec<(u8, String)>,
+    /// Assignment objects (class 0x1BE01), in UID order.
+    pub assignments: Vec<u32>,
     /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
     /// a built-in key, and the name), in UID order.
     pub named_grids: Vec<(bool, String)>,
@@ -1367,6 +1370,17 @@ impl<'a> Reader<'a> {
             language_list,
             toc_styles: self.toc_styles(),
             named_grids: self.named_grids(),
+            assignments: {
+                let mut a: Vec<u32> = self
+                    .db
+                    .classes()
+                    .iter()
+                    .filter(|&&(_, c)| c == class::ASSIGNMENT)
+                    .map(|&(u, _)| u)
+                    .collect();
+                a.sort_unstable();
+                a
+            },
             style_groups,
             object_styles,
             cell_styles,

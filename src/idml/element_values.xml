@@ -46,6 +46,11 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			</Properties>
 		</CharacterStyle>
 		<TOCStyle RunIn="false" IncludeHidden="false" />
+		<Assignment UserName="$ID/" ExportOptions="AssignedSpreads" IncludeLinksWhenPackage="true" FilePath="$ID/">
+			<Properties>
+				<FrameColor type="enumeration">Nothing</FrameColor>
+			</Properties>
+		</Assignment>
 		<Document>
 			<ConditionalTextPreference Present="true" ShowConditionIndicators="ShowIndicators" ActiveConditionSet="n" />
 			<LinkedStoryOption UpdateWhileSaving="false" WarnOnUpdateOfEditedStory="true" RemoveForcedLineBreaks="false" />
