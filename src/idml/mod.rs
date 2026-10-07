@@ -1348,20 +1348,20 @@ impl Writer<'_> {
         self.package_root(&mut x, "Graphic");
         for c in &self.doc.colors {
             let name = c.idml_name();
-            x.empty(
-                "Color",
-                &[
-                    ("Self", c.reference()),
-                    ("Model", c.model_name().into()),
-                    ("Space", c.space_name().into()),
-                    ("ColorValue", nums(&c.idml_values())),
-                    ("ColorOverride", c.override_name().into()),
-                    ("Name", name),
-                    ("ColorEditable", c.editable.to_string()),
-                    ("ColorRemovable", c.removable.to_string()),
-                    ("Visible", c.visible.to_string()),
-                ],
-            );
+            let mut attrs = vec![("Self", c.reference())];
+            if let Some(model) = c.model_name() {
+                attrs.push(("Model", model.into()));
+            }
+            attrs.extend([
+                ("Space", c.space_name().into()),
+                ("ColorValue", nums(&c.idml_values())),
+                ("ColorOverride", c.override_name().into()),
+                ("Name", name),
+                ("ColorEditable", c.editable.to_string()),
+                ("ColorRemovable", c.removable.to_string()),
+                ("Visible", c.visible.to_string()),
+            ]);
+            x.empty("Color", &attrs);
         }
         // The schema puts inks after the colours.
         for i in &self.doc.inks {

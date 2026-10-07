@@ -826,12 +826,19 @@ Built-in tables have only `Self` and `Name` in IDML. Mojikumi chunk
 |---|---|
 | 0x1F10 | u8 1 if the name is a built-in key; name; u32 flags: bit 0 removable, bit 1 visible, bit 2 editable |
 | 0x1F01 | u32 space (5 RGB, 6 CMYK), u16 count, f64 components as fractions |
-| 0x1F09 | u32 model: 0 Process, 2 Registration |
+| 0x1F09 | u32 model: 0 Process, 1 Spot, 2 Registration (below) |
 | 0x1F24 | f64 tint value (−1 for a colour, see tints below), then u32 `ColorOverride`: 0 Normal, 1 Specialpaper, 2 Specialblack, 3 Specialregistration, 4 Hiddenreserved |
 
 Unnamed colours are referenced by UID (`Color/u93`). All 1,296 colours in
 the pairs match on `Model`, `Space`, `ColorValue`, `ColorOverride`,
 `Name` and the three flags.
+
+**Model codes.** The 250 distinct little-endian files hold 13,067
+colours with chunk 0x1F09: 12,814 with code 0, 250 with code 2 (one
+`Registration` colour per file) and 3 with code 1. Two of the three are
+copies of one colour in two pairs, and their IDML has `Model="Spot"`;
+the third is in a file without an IDML. No file has another code, so
+the converter leaves `Model` out, with a warning, for any other code.
 
 **Tints** are objects of the same class without chunks 0x1F10 and
 0x1F01. Chunk 0x117 is the UID of the base colour, and chunk 0x1F24 holds

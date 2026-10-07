@@ -889,6 +889,12 @@ impl<'a> Reader<'a> {
                         }
                         let obj = self.object(uid)?;
                         if let Some(c) = Color::read(uid, &obj)? {
+                            if c.model_name().is_none() {
+                                self.warn(format!(
+                                    "colour {uid}: colour model code {} is not known; left out",
+                                    c.model
+                                ));
+                            }
                             swatches.insert(uid, c.reference());
                             colors.push(c);
                         } else if let Some(t) = Tint::read(uid, &obj)? {

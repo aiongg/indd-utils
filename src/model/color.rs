@@ -237,12 +237,14 @@ impl Color {
         }
     }
 
-    pub fn model_name(&self) -> &'static str {
+    /// IDML `Model` of the stored model code; `None` for a code no
+    /// sample shows (`docs/format/objects.md`).
+    pub fn model_name(&self) -> Option<&'static str> {
         match self.model {
-            1 => "Spot",
-            2 => "Registration",
-            3 => "MixedInkModel",
-            _ => "Process",
+            0 => Some("Process"),
+            1 => Some("Spot"),
+            2 => Some("Registration"),
+            _ => None,
         }
     }
 
