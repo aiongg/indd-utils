@@ -181,7 +181,14 @@ enum TextKind {
     Text,
     /// A number, left out when 0.
     NonZero,
+    /// Manual kerning in ems, written in thousandths of an em; 1e8 (the
+    /// root style's value) is left out.
+    Kerning,
 }
+
+/// Value of the kerning attribute (0x1B13) in every root paragraph style;
+/// IDML writes no `KerningValue` for it.
+const KERNING_NONE: f64 = 1e8;
 
 /// Text attributes: ID, IDML name, kind, written in `<Properties>`.
 /// See `docs/format/attributes.md` for the evidence behind each entry.
@@ -199,6 +206,7 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
     ),
     (0x1B0A, "StrokeWeight", TextKind::Number, false),
     (0x1B0B, "Tracking", TextKind::Scale(1000.0), false),
+    (0x1B13, "KerningValue", TextKind::Kerning, false),
     (
         0x1B0C,
         "Composer",
@@ -1507,6 +1515,10 @@ impl Writer<'_> {
             },
             TextKind::Percent => v.as_f64().map(|f| ("unit", num(round(f * 100.0)))),
             TextKind::Scale(k) => v.as_f64().map(|f| ("unit", num(round(f * k)))),
+            TextKind::Kerning => v
+                .as_f64()
+                .filter(|&f| f != KERNING_NONE)
+                .map(|f| ("unit", num(round(f * 1000.0)))),
             TextKind::Bool(t) => v.as_u32().map(|u| ("boolean", (u == t).to_string())),
             TextKind::Enum(map) => v
                 .as_u32()
@@ -2418,7 +2430,11 @@ impl Writer<'_> {
         let doc = self.doc;
         let paragraph = s.paragraph;
         let name = style_name(s);
-        let (plain, mut props) = self.text_attrs(&s.attrs);
+        let (mut plain, mut props) = self.text_attrs(&s.attrs);
+        if paragraph {
+            // The schema allows KerningValue on character styles only.
+            plain.retain(|(k, _)| *k != "KerningValue");
+        }
         x.start(tag)
             .attr("Self", self.style_ref(Some(s.uid), paragraph))
             .attr("Name", &name);

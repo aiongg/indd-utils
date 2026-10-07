@@ -142,6 +142,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B10 | `BaselineShift` | f64 | 79/79 styles; see below |
 | 0x1B11 | `Capitalization` | 0 Normal, 1 SmallCaps, 2 AllCaps, 3 CapToSmallCap | 77/77 styles; codes 1 and 3 below |
 | 0x1B12 | `StrokeColor` | swatch UID | 75/75 styles |
+| 0x1B13 | `KerningValue` | ems ×1000; 1e8 = none | 8/8 ranges; scale from a sample and its print PDF, see below |
 | 0x1B15 | `VerticalScale` | fraction ×100 | 79/79 styles; see below |
 | 0x1B16 | `LeftIndent` | f64 | 22/22 ranges |
 | 0x1B17 | `RightIndent` | f64 | 86/86 styles |
@@ -396,6 +397,29 @@ number (1 in every such run; the schema type is an integer). The other
 ruby settings (`RubyType`, `RubyAlignment`, `RubyPosition`, font and
 size) are not identified.
 
+**`KerningValue` (0x1B13).** Every root paragraph style stores 1e8, and
+IDML writes no `KerningValue` on root styles; the converter leaves 1e8
+out. In one pair, 8 ranges store 0 and IDML writes `KerningValue="0"`
+on the same 8 ranges; no other range in the pairs has the attribute. So
+the field is located, but 0 does not show its scale. The scale rests on
+a sample and its print PDF:
+
+- Runs of one character set 0x1B13 to −0.1, −0.06, −0.12 and 0. In the
+  PDF, the gap between that character and the next (start of the next
+  glyph minus the end of the first glyph's advance width) is −0.1,
+  −0.06, −0.12 and 0 times the point size, to 0.01 pt, once the letter
+  spacing that every other gap in the same line shows is subtracted.
+- The same letter pairs elsewhere, without the attribute, have other
+  gaps, which come from the font's kerning. So the stored value replaces
+  the font's kerning after that character.
+- The value is in ems. The IDML schema types `KerningValue` as a plain
+  number. `Tracking` (0x1B0B) is also stored in ems, and IDML writes it
+  ×1000 (thousandths of an em, from the pairs); the converter writes
+  `KerningValue` the same way. No sample shows this scale directly.
+- The schema allows `KerningValue` on character styles and ranges, not
+  on paragraph styles, so the converter leaves it out of paragraph
+  styles (public samples without IDML have it there).
+
 **`StartParagraph` (0x1B37).** In every pair the root style has 0 and
 IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
 2 rests on a sample and its print PDF:
@@ -429,7 +453,6 @@ styles:
   other attributes, in one pair);
 - `TreatIdeographicSpaceAsSpace` and `DiacriticPosition`.
 
-`KerningValue` is 0 wherever IDML writes it, so its scale is unknown.
 `OTFFigureStyle` code 3 and `ParagraphBreakType` code 2 occur only in
 a sample without IDML; the converter leaves them out.
 
