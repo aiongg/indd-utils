@@ -225,6 +225,24 @@ true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
 
+## Pasted smooth shades (0x5533)
+
+Objects of class 0x5533 hold shadings. Chunk 0x5531: a flag byte (1 =
+built-in key) and the name, then a u32. Chunk 0x5532 holds the shading;
+a constant shade has 92 bytes, with u32 28 (the length of what follows)
+at offset 60, then a u32 and three f64. IDML writes it as a
+`PastedSmoothShade` with `ContentsType="ConstantShade"` and `Contents`
+the base64 of the same u32 and three f64 in big-endian order
+(`AAAAAUBv4AAA…` for 1 and 255, 0, 0).
+
+Every trustworthy pair has one constant shade in IDML, and it is the
+class 0x5533 object of lowest UID with a constant shade (495 of 495);
+in 84 pairs the INDD has two more that IDML leaves out. The converter
+writes that one shade, and matches the IDML on all values in 495 of
+495 (name `$ID/` from flag 1 and an empty name; two contents values,
+255 and 1). The other shades in IDML are `AxialShade`s whose contents
+re-encode a longer structure in the same way; they are not decoded.
+
 ## Index sort options
 
 Chunk 0x1307E of the preferences object (class 0x2202) holds the index

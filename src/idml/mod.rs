@@ -1882,6 +1882,37 @@ impl Writer<'_> {
             ]);
             x.empty("Ink", &attrs);
         }
+        // The document's constant shade, with the values every IDML has
+        // on one (idml-values.md); its contents are the stored numbers in
+        // big-endian order (objects.md, pasted smooth shades).
+        if let Some(shade) = &self.doc.constant_shade
+            && let Some(node) = values::keyed("PastedSmoothShade", "ConstantShade")
+        {
+            let reference = format!("PastedSmoothShade/{}", uref(Some(shade.uid)));
+            let mut data = shade.count.to_be_bytes().to_vec();
+            for v in shade.values {
+                data.extend(v.to_be_bytes());
+            }
+            x.start("PastedSmoothShade")
+                .attr("Self", &reference)
+                .attr("ContentsType", "ConstantShade");
+            if let Some((builtin, name)) = &shade.name {
+                let name = if *builtin {
+                    format!("$ID/{name}")
+                } else {
+                    name.clone()
+                };
+                x.attr("Name", name);
+            }
+            x.attrs_missing(node.attrs.iter());
+            group_ref(&mut x, &reference);
+            x.start("Properties")
+                .start("Contents")
+                .cdata(&base64_lines(&data), CDATA_SECTION)
+                .end()
+                .end();
+            x.end();
+        }
         for (t, reference, name) in &self.doc.tints {
             let base = self.doc.swatches.get(&t.base).cloned().unwrap_or_default();
             x.start("Tint")

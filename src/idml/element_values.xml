@@ -308,4 +308,8 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Language Name="$ID/ta_IN" SingleQuotes="''" DoubleQuotes='""' />
 		<Language Name="$ID/te_IN" SingleQuotes="''" DoubleQuotes='""' />
 	</Keyed>
+	<Keyed Tag="PastedSmoothShade" Key="ContentsType">
+		<PastedSmoothShade ContentsType="AxialShade" ContentsVersion="0" SpotColorList="" ContentsEncoding="Ascii64Encoding" Name="$ID/" ColorEditable="true" ColorRemovable="true" Visible="false" SwatchCreatorID="7937" />
+		<PastedSmoothShade ContentsType="ConstantShade" ContentsVersion="0" SpotColorList="" ContentsEncoding="Ascii64Encoding" ContentsMatrix="1 0 0 1 0 0" ColorEditable="true" ColorRemovable="true" Visible="false" SwatchCreatorID="7937" />
+	</Keyed>
 </ElementValues>

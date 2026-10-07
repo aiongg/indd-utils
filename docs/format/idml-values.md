@@ -269,6 +269,13 @@ same value, in at least 3 files (a `Keyed` block of the values file):
 63 languages. Romanian and Japanese have two variants each and are left
 out.
 
+Pasted smooth shades are keyed the same way by `ContentsType`: every
+`ConstantShade` (and every `AxialShade`) has `ContentsVersion="0"`,
+`SpotColorList=""`, `ContentsEncoding="Ascii64Encoding"`,
+`ColorEditable` and `ColorRemovable` `true`, `Visible="false"` and
+`SwatchCreatorID="7937"`; constant shades also
+`ContentsMatrix="1 0 0 1 0 0"`.
+
 ### Paragraph and character styles
 
 The styles other than the root styles (5,505 paragraph and 2,284

@@ -82,7 +82,12 @@ LISTS = ["TrapPreset"]
 # (key attribute, attributes). For each key value, an attribute is kept
 # when every such element in every IDML has the same value, in at least
 # MIN_KEYED_FILES files.
-KEYED = {"Language": ("Name", ["SingleQuotes", "DoubleQuotes"])}
+KEYED = {
+    "Language": ("Name", ["SingleQuotes", "DoubleQuotes"]),
+    "PastedSmoothShade": ("ContentsType", [
+        "ContentsVersion", "SpotColorList", "ContentsEncoding", "ContentsMatrix",
+        "Name", "ColorEditable", "ColorRemovable", "Visible", "SwatchCreatorID"]),
+}
 MIN_KEYED_FILES = 3
 # Attributes that only some elements have, which the converter writes
 # where it decides to (for example from DOM 15 on, or when a chunk is

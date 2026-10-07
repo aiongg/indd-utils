@@ -53,6 +53,7 @@ pub mod class {
     pub const TOC_STYLE: u32 = 0x11605;
     pub const NAMED_GRID: u32 = 0xCD12;
     pub const ASSIGNMENT: u32 = 0x1BE01;
+    pub const SMOOTH_SHADE: u32 = 0x5533;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
@@ -163,6 +164,9 @@ pub mod chunk {
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;
+    /// Shading of a pasted smooth shade.
+    pub const SMOOTH_SHADE: u32 = 0x5532;
+    pub const SMOOTH_SHADE_NAME: u32 = 0x5531;
     /// Index sort groups, in the preferences object.
     pub const INDEX_GROUPS: u32 = 0x1307E;
     pub const XML_TAG_NAME: u32 = 0xBF2F;
@@ -597,6 +601,17 @@ pub struct Story {
     pub toc_style: Option<u32>,
 }
 
+/// A pasted smooth shade with a constant shading. See
+/// `docs/format/objects.md`, pasted smooth shades.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstantShade {
+    pub uid: u32,
+    pub count: u32,
+    pub values: [f64; 3],
+    /// Flag (built-in key) and name.
+    pub name: Option<(bool, String)>,
+}
+
 /// A table of contents style (class 0x11605), from chunk 0x11605: a flag
 /// byte and the name, three u32 (the third the title style), a flag byte
 /// and the title. See `docs/format/objects.md`.
@@ -667,6 +682,11 @@ pub struct Document {
     /// Index sort groups (preferences chunk 0x1307E), in order: name,
     /// include flag and header variant.
     pub index_groups: Vec<(String, bool, u16)>,
+    /// The constant shade the document lists (the class 0x5533 object of
+    /// lowest UID with a constant shade in chunk 0x5532): its UID and its
+    /// u32 and three f64; and its name (chunk 0x5531: a flag byte, 1 for
+    /// a built-in key, and the name).
+    pub constant_shade: Option<ConstantShade>,
     /// Assignment objects (class 0x1BE01), in UID order.
     pub assignments: Vec<u32>,
     /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
@@ -1376,6 +1396,7 @@ impl<'a> Reader<'a> {
             toc_styles: self.toc_styles(),
             named_grids: self.named_grids(),
             index_groups: self.index_groups(),
+            constant_shade: self.constant_shade(),
             assignments: {
                 let mut a: Vec<u32> = self
                     .db
@@ -2771,6 +2792,41 @@ impl<'a> Reader<'a> {
         } else {
             Vec::new()
         }
+    }
+
+    /// The first pasted smooth shade (class 0x5533) whose chunk 0x5532
+    /// holds a constant shade: 92 bytes, with u32 28 at offset 60 and then
+    /// a u32 and three f64. See `docs/format/objects.md`.
+    fn constant_shade(&self) -> Option<ConstantShade> {
+        let mut uids: Vec<u32> = self
+            .db
+            .classes()
+            .iter()
+            .filter(|&&(_, c)| c == class::SMOOTH_SHADE)
+            .map(|&(u, _)| u)
+            .collect();
+        uids.sort_unstable();
+        uids.into_iter().find_map(|uid| {
+            let d = self.chunk(uid, chunk::SMOOTH_SHADE).ok()??;
+            if d.len() != 92 || u32_at(&d, 60) != Some(28) {
+                return None;
+            }
+            let name = self
+                .chunk(uid, chunk::SMOOTH_SHADE_NAME)
+                .ok()
+                .flatten()
+                .and_then(|n| {
+                    let mut c = Cursor::new(&n);
+                    let builtin = c.flag().ok()? == 1;
+                    Some((builtin, c.string().ok()?))
+                });
+            Some(ConstantShade {
+                uid,
+                count: u32_at(&d, 64)?,
+                values: [f64_at(&d, 68)?, f64_at(&d, 76)?, f64_at(&d, 84)?],
+                name,
+            })
+        })
     }
 
     /// The named grids, in UID order.
