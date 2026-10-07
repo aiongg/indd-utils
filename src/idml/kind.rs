@@ -212,7 +212,7 @@ impl Writer<'_> {
                     .doc
                     .cell_styles
                     .get(&u)
-                    .map(|s| text("object", Self::table_style_ref("CellStyle", s))),
+                    .map(|s| text("object", self.table_style_ref("CellStyle", s))),
             },
             Kind::CjkSet => {
                 let u = v.as_u32()?;

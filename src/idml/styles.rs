@@ -110,8 +110,8 @@ impl Writer<'_> {
         styles: &BTreeMap<u32, crate::model::TableStyle>,
     ) {
         x.start(tag)
-            .attr("Self", Self::table_style_ref(tag, s))
-            .attr("Name", Self::table_style_name(s));
+            .attr("Self", self.table_style_ref(tag, s))
+            .attr("Name", self.table_style_name(s));
         let attrs = if tag == "CellStyle" {
             self.cell_attrs(&s.attrs)
         } else {
@@ -136,9 +136,9 @@ impl Writer<'_> {
         if let Some(base) = s.based_on.and_then(|b| styles.get(&b)) {
             // A root style is written as a string.
             let prop = if base.builtin && base.based_on.is_none() {
-                ("BasedOn", "string", Self::table_style_name(base).into())
+                ("BasedOn", "string", self.table_style_name(base).into())
             } else {
-                ("BasedOn", "object", Self::table_style_ref(tag, base).into())
+                ("BasedOn", "object", self.table_style_ref(tag, base).into())
             };
             Self::properties(x, &[prop]);
         }
@@ -162,16 +162,12 @@ impl Writer<'_> {
     }
 
     /// `CellStyle/...` or `TableStyle/...` reference of a style.
-    pub(super) fn table_style_ref(tag: &str, s: &crate::model::TableStyle) -> String {
-        format!("{tag}/{}", self_name(&Self::table_style_name(s)))
+    pub(super) fn table_style_ref(&self, tag: &str, s: &crate::model::TableStyle) -> String {
+        format!("{tag}/{}", self_name(&self.table_style_name(s)))
     }
 
-    pub(super) fn table_style_name(s: &crate::model::TableStyle) -> String {
-        if s.builtin {
-            builtin_key(&s.name)
-        } else {
-            s.name.clone()
-        }
+    pub(super) fn table_style_name(&self, s: &crate::model::TableStyle) -> String {
+        self.grouped_name(s.uid, &s.name, s.builtin)
     }
 
     /// The reference for an applied cell style UID; 0 is `[None]`.
@@ -182,7 +178,7 @@ impl Writer<'_> {
         self.doc
             .cell_styles
             .get(&uid)
-            .map(|s| Self::table_style_ref("CellStyle", s))
+            .map(|s| self.table_style_ref("CellStyle", s))
     }
 
     pub(super) fn styles(&self) -> String {
@@ -260,7 +256,7 @@ impl Writer<'_> {
             for uid in order {
                 let Some(s) = styles.get(&uid) else { continue };
                 let is_root = s.builtin && s.based_on.is_none() && s.name == name;
-                if is_root || !seen.insert(Self::table_style_ref(style, s)) {
+                if is_root || !seen.insert(self.table_style_ref(style, s)) {
                     continue;
                 }
                 self.table_style_element(&mut x, style, s, styles);
@@ -273,11 +269,7 @@ impl Writer<'_> {
             object_root.map_or("RootObjectStyleGroup".to_string(), |g| uref(Some(g.uid))),
         );
         for os in doc.object_styles.values() {
-            let name = if os.builtin {
-                builtin_key(&os.name)
-            } else {
-                os.name.clone()
-            };
+            let name = self.grouped_name(os.uid, &os.name, os.builtin);
             let root = os.builtin && os.name == "[None]" && os.based_on.is_none();
             let node = self.object_style_node(os, root);
             x.start("ObjectStyle")
@@ -290,16 +282,17 @@ impl Writer<'_> {
                 .child("Properties")
                 .map_or(Vec::new(), |p| p.children.clone());
             if !root && let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
-                let base_name = if base.builtin {
-                    builtin_key(&base.name)
-                } else {
-                    base.name.clone()
-                };
                 // The root "[None]" is written as a string.
                 let (ty, text) = if base.builtin && base.name == "[None]" {
-                    ("string", base_name)
+                    ("string", builtin_key(&base.name))
                 } else {
-                    ("object", format!("ObjectStyle/{}", self_name(&base_name)))
+                    (
+                        "object",
+                        format!(
+                            "ObjectStyle/{}",
+                            self_name(&self.grouped_name(base.uid, &base.name, base.builtin))
+                        ),
+                    )
                 };
                 props.insert(
                     0,
@@ -669,7 +662,7 @@ impl Writer<'_> {
     pub(super) fn style_element(&self, x: &mut Xml, s: &Style, tag: &str) {
         let doc = self.doc;
         let paragraph = s.paragraph;
-        let name = style_name(s);
+        let name = self.grouped_name(s.uid, &s.name, s.builtin);
         let (mut plain, mut props) = self.text_attrs(&s.attrs);
         if paragraph {
             // The schema allows KerningValue on character styles only.

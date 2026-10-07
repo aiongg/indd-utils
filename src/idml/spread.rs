@@ -334,11 +334,7 @@ impl Writer<'_> {
     /// The `AppliedObjectStyle` reference of an object style UID.
     pub(super) fn object_style_ref(&self, uid: u32) -> Option<String> {
         let os = self.doc.object_styles.get(&uid)?;
-        let name = if os.builtin {
-            builtin_key(&os.name)
-        } else {
-            os.name.clone()
-        };
+        let name = self.grouped_name(os.uid, &os.name, os.builtin);
         Some(format!("ObjectStyle/{}", self_name(&name)))
     }
 

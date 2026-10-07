@@ -93,6 +93,24 @@ impl Writer<'_> {
             .attr("DOMVersion", &self.dom);
     }
 
+    /// The IDML `Name` of a style: the names of its style groups and its
+    /// own, joined by `:`, with a `:` inside a name written `\:`, and
+    /// `$ID/` first for a built-in style. Its `Self` is this name escaped
+    /// with `self_name` (`docs/format/objects.md`, style groups).
+    fn grouped_name(&self, uid: u32, name: &str, builtin: bool) -> String {
+        let mut parts: Vec<String> = self
+            .group_path
+            .get(&uid)
+            .map_or(Vec::new(), |p| p.iter().map(|g| g.replace(':', "\\:")).collect());
+        parts.push(name.replace(':', "\\:"));
+        let joined = parts.join(":");
+        if builtin {
+            builtin_key(&joined)
+        } else {
+            joined
+        }
+    }
+
     fn style_ref(&self, uid: Option<u32>, paragraph: bool) -> String {
         let prefix = if paragraph {
             "ParagraphStyle"
@@ -100,11 +118,10 @@ impl Writer<'_> {
             "CharacterStyle"
         };
         match uid.and_then(|u| self.doc.styles.get(&u)) {
-            Some(s) => {
-                let mut parts = self.group_path.get(&s.uid).cloned().unwrap_or_default();
-                parts.push(style_name(s));
-                format!("{prefix}/{}", self_name(&parts.join(":")))
-            }
+            Some(s) => format!(
+                "{prefix}/{}",
+                self_name(&self.grouped_name(s.uid, &s.name, s.builtin))
+            ),
             None if paragraph => "ParagraphStyle/$ID/NormalParagraphStyle".into(),
             None => "CharacterStyle/$ID/[No character style]".into(),
         }

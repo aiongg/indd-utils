@@ -249,9 +249,16 @@ impl Writer<'_> {
                 .attr("Self", &id)
                 .attr("Name", &f.name);
             for font in &f.fonts {
-                let name = format!("{} {}", f.name, font.style);
+                // A font with an empty style name is named `Regular`, and
+                // its `Self` has the family name alone (fonts.md).
+                let (name, key) = if font.style.is_empty() {
+                    (format!("{} Regular", f.name), f.name.clone())
+                } else {
+                    let name = format!("{} {}", f.name, font.style);
+                    (name.clone(), name)
+                };
                 x.start("Font")
-                    .attr("Self", format!("{id}Fontn{name}"))
+                    .attr("Self", format!("{id}Fontn{key}"))
                     .attr("FontFamily", &f.name)
                     .attr("Name", &name)
                     .attr("PostScriptName", &font.postscript_name)
@@ -359,15 +366,8 @@ impl Writer<'_> {
         let styles: std::collections::HashSet<String> = self
             .doc
             .object_styles
-            .values()
-            .map(|os| {
-                let name = if os.builtin {
-                    builtin_key(&os.name)
-                } else {
-                    os.name.clone()
-                };
-                format!("ObjectStyle/{}", self_name(&name))
-            })
+            .keys()
+            .filter_map(|&u| self.object_style_ref(u))
             .collect();
         for n in nodes.iter_mut().filter(|n| n.tag == "PageItemDefault") {
             n.attrs

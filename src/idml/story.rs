@@ -341,7 +341,7 @@ impl Writer<'_> {
             )
             .attr("ColumnCount", t.columns.len().to_string());
         if let Some(st) = t.style.and_then(|u| self.doc.table_styles.get(&u)) {
-            x.attr("AppliedTableStyle", Self::table_style_ref("TableStyle", st));
+            x.attr("AppliedTableStyle", self.table_style_ref("TableStyle", st));
         }
         for (name, v) in self.table_attrs(&t.attrs) {
             x.attr(name, v);

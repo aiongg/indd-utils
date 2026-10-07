@@ -1289,6 +1289,26 @@ children; chunk 0x28D2 a flag byte and the name. IDML names every group
 `ParagraphStyle/<group>:<group>:<name>` with `:` escaped as `%3a`. All 412
 paragraph styles and 21 groups in the pairs match.
 
+**Style names.** Over the styles of the 489 trustworthy pairs, a style's
+IDML `Name` is its group path and its own name joined by `:` (1,170
+paragraph, 759 character, 8 object and 6 cell styles in groups, such as
+`Name="Listes:Liste non numérotée"`), and its `Self` is the tag and that
+name with `%` written `%25`, `:` written `%3a` and CR written `%0d`. Two
+more rules:
+
+- A `:` inside a style's own name is written `\:` in `Name`, so `\%3a`
+  in `Self`: `Name="ss01\: People"`, `Self="CharacterStyle/ss01\%3a
+  People"` (12 paragraph, 6 character and 3 object styles).
+- A built-in style inside a group has `$ID/` before the whole path:
+  `ParagraphStyle/$ID/INDEX%3aIndex Section Head` with
+  `Name="$ID/INDEX:Index Section Head"` (one paragraph and one character
+  style).
+
+The same holds for object styles and cell styles in groups
+(`ObjectStyle/Worksheet%3aworksheet`, `CellStyle/Standard
+Table%3aHeader Row`). Elsewhere `%3a` stays plain: languages are
+`Language/$ID/English%3a USA`.
+
 **Object styles** (class 0x1B901): chunk 0x1B907 is u32 based-on style,
 u8 1 for a built-in name, then the name. A page item's chunk 0x1B916 is
 its applied object style (`AppliedObjectStyle`, 671/671 rectangles). A

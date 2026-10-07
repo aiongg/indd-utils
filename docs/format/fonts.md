@@ -58,6 +58,10 @@ in-object string, and InDesign 3.0 has no version (`big-endian.md`).
 - `FontType`: 4,464 of 4,464 (code 6: 3,043, 1: 905, 7: 341, 8: 175).
   Codes 0 (54 fonts) and 3 (1 font) occur in files without an IDML; the
   converter leaves out `FontType` for them.
+- A font with an empty style name: in all 21 such IDML fonts over all
+  pairs (12 in the trustworthy pairs), `Name` is the family name and
+  ` Regular`, and `Self` is the family's `Self`, `Fontn` and the family
+  name, with no trailing space. All have `FontType="ATC"`.
 - `WritingScript`: 4,464 of 4,464 with the u32 after the font records
   (values 0, 1 and 33). Over all 654 pairs later in the corpus, 30,406
   of 30,410 fonts; the other four, one family in one file, have 0 in the
