@@ -61,7 +61,10 @@ impl Gradient {
         } else {
             format!(
                 "Gradient/{}",
-                self.name.replace('%', "%25").replace(':', "%3a")
+                self.name
+                    .replace('%', "%25")
+                    .replace(':', "%3a")
+                    .replace('\r', "%0d")
             )
         }
     }
@@ -175,7 +178,10 @@ impl Tint {
     pub fn reference(&self, base: &Color) -> String {
         format!(
             "Tint/{}",
-            self.idml_name(base).replace('%', "%25").replace(':', "%3a")
+            self.idml_name(base)
+                .replace('%', "%25")
+                .replace(':', "%3a")
+                .replace('\r', "%0d")
         )
     }
 
@@ -252,7 +258,10 @@ impl Color {
         } else {
             format!(
                 "Color/{}",
-                self.name.replace('%', "%25").replace(':', "%3a")
+                self.name
+                    .replace('%', "%25")
+                    .replace(':', "%3a")
+                    .replace('\r', "%0d")
             )
         }
     }

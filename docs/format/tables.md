@@ -23,7 +23,10 @@ owned by a table belongs to that table's cell.
 IDML names a table `<scope>i<table UID hex>`, where the scope is the story
 (`udcf`) or, for a nested table, the enclosing cell; cells are named
 `<table>i<cell ID hex>` and rows and columns `<table>Row<n>` and
-`<table>Column<n>`.
+`<table>Column<n>`, with the index *n* from 0 in lowercase hexadecimal
+(`…Row9`, `…Rowa`, `…Row10`; `Name` keeps the decimal index). All 112
+tables of the corpus pairs with more than 10 rows or columns, from DOM 8
+to 20, use hexadecimal; none uses decimal.
 
 ## Table object (class 0xB608)
 
@@ -82,6 +85,10 @@ covered positions to its right, and its row span 1.
 
 All 1,089 cells produced for the pairs match IDML `Name` (column:row),
 `RowSpan` and `ColumnSpan`.
+
+`CellType="TextTypeCell"` is on every cell from DOM 11 (11,097 of 11,097
+cells of the trustworthy pairs) and on none before (0 of 453 cells of
+DOM 8 and 10).
 
 ## Cell formatting
 

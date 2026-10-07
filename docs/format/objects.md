@@ -216,8 +216,11 @@ Chunk 0x304:
 | 18 | u8 flag, in-object string | `Name` |
 | after the name | u16 | `IgnoreWrap` |
 
-The internal layer is named `Internal_pages_layer_name` and has no IDML
-element. In all 1,053 layers of the trustworthy pairs the name starts at
+The internal layer is the first UID of the document's layer list
+(chunk 0x301 of UID 1) and has no IDML element: in 489 of 489
+trustworthy pairs that layer is not written. It is usually named
+`Internal_pages_layer_name` (467), but also `Pages` (20) or has an empty
+name (2), so the name does not identify it. In all 1,053 layers of the trustworthy pairs the name starts at
 offset 19, and each field above equals the IDML value for 1,053 of 1,053
 layers (127 locked, 55 hidden, 59 not printable, 4 with locked guides,
 1 without `UI`, 2 ignoring text wrap). `ShowGuides` and `Expendable` are
@@ -572,6 +575,12 @@ trustworthy pairs:
 - `Locked` is on the 36,817 items that are children of a spread or
   anchored in text, and on none of the 55,592 items inside a group or
   another page item.
+- `ItemLayer` is on the 35,276 items that are children of a `Spread`
+  or `MasterSpread` (35,276 of 35,276), and on none of the items inside
+  a group (48,289 of 48,291), inside a rectangle, oval or polygon (2,925
+  of 2,925) or anchored in text (1,999 of 1,999). The layer of a nested
+  item always equals its parent's. Counted over the 489 trustworthy pairs
+  of the corpus without the privately held samples.
 - The change counts, `OverriddenPageItemProps` and the layout
   constraints are in IDML from DOM 8 on: every page item of the
   distinct corpus IDML files from DOM 8 on has them, none of the DOM 7
@@ -1362,7 +1371,7 @@ the presence of its ID in every style:
 | 0x1B940 | `EnableStoryOptions` | 7 |
 | 0x1B960 | `EnableFrameFittingOptions` | 7 |
 | 0x1B93F | `EnableParagraphStyle` | 7 |
-| 0xADCB | `EnableTextFrameColumnRuleOptions` | 15 |
+| 0xADCB | `EnableTextFrameColumnRuleOptions` | 15.1 |
 | 0xCA2F | `EnableAnchoredObjectOptions` | 7 |
 | 0x1B942, 0x37C8, 0x37C9 | `EnableTextWrapAndOthers` | 7 |
 | 0xADCA | `EnableTextFrameFootnoteOptions` | 12 |
@@ -1373,7 +1382,21 @@ the presence of its ID in every style:
 
 Where a row has several IDs, they are all present or all absent in every
 style, so the corpus does not tell which one the attribute follows; the
-converter writes the attribute only when they agree. The four export
+converter writes the attribute only when they agree.
+
+Versions are those of the INDD header, major and minor. Over the 489
+trustworthy pairs: `EnableTextFrameColumnRuleOptions` is on no style in
+the 42 documents of 15.0 (four builds), and on every style in the 7 of
+15.1 and on all later ones. The footnote values of the text frame
+settings (`FootnotesSpanAcrossColumns`, `FootnotesMinimumSpacing`,
+`FootnotesSpaceBetween` of `TextFramePreference`) are on no style of
+DOM 12 (127 styles) or 13.0 (12 styles), and on every style from 13.1.
+
+**The root style `[None]`** has none of the `Enable…` attributes and none
+of the four `ObjectStyle…EffectsCategorySettings` elements in 489 of 489
+trustworthy references, though its INDD object has the category list.
+The converter still reads the list: the text frames that use `[None]`
+depend on it (text frame preferences). The four export
 attributes are equal in every style (84 true, 1,358 false). With the 88
 pairs of the earlier corpus, fill and stroke, and the general and
 baseline frame options, were not told apart; the larger corpus has
@@ -1780,6 +1803,11 @@ groups in chunk 0x1F61 (u32 count, UIDs). IDML writes a `ColorGroup` in
 others `false` (77 of 77 pairs; the DOM 7 pair has no chunk 0x1F61 and
 no groups). The root group is named `[Root Color Group]` with no `$ID/`,
 though its flag byte is 0.
+
+Before InDesign 11.3 (INDD header version), `Self` is the group's UID
+(`u<hex>`) instead: in 58 of the 59 trustworthy pairs of versions 10.0
+to 11.2 that have groups (one 11.0 file uses names), and names in 358 of
+358 pairs from 11.3 on.
 
 Each swatch of the list is a `ColorGroupSwatch` with
 `Self="u<group UID>ColorGroupSwatch<index in hex>"` and `SwatchItemRef`

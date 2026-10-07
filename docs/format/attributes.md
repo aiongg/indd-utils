@@ -522,6 +522,24 @@ IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
 One public template without an IDML has a style with code 4; with no
 reference, the converter leaves out codes other than 0 and 2.
 
+### Root styles and text defaults
+
+The root paragraph style `[No paragraph style]` and the document's text
+defaults (`TextDefault` in `Resources/Preferences.xml`) take their
+values from attribute lists like other styles, but IDML leaves some of
+them out. Over the 489 trustworthy pairs (`measurement.md`):
+
+| Value | IDML |
+|---|---|
+| `NextStyle` of the root paragraph style | never (0 of 489) |
+| `AllNestedStyles` of the root paragraph style | never (0 of 489) |
+| `AllNestedStyles` of `TextDefault` | only when the list has items: absent in 485, written in the 4 with items |
+| Empty `TabList` of the root paragraph style | DOM 8 on: 482 of 482; DOM 7: 0 of 7 |
+| `TabList` of `TextDefault` | DOM 8 on: in 482 of 482 (459 empty); DOM 7: 0 of 7 |
+
+The converter leaves out these values accordingly; it writes a
+non-empty `TabList` in any version.
+
 ### Paragraph borders and shading: corners and origins
 
 | ID | IDML | Styles with both (other than the root) |

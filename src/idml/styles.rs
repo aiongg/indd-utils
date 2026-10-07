@@ -57,6 +57,17 @@ pub(super) fn group_paths(doc: &Document) -> std::collections::HashMap<u32, Vec<
     out
 }
 
+/// Leaves out the list properties that IDML does not write on the root
+/// paragraph style and on `TextDefault`: an empty `AllNestedStyles`, and
+/// an empty `TabList` before DOM 8 (attributes.md, root styles and text
+/// defaults).
+pub(super) fn root_lists(props: &mut Vec<Property>, major: u32) {
+    props.retain(|(n, _, v)| {
+        let empty = matches!(v, PropValue::List(l) if l.is_empty());
+        !(empty && (*n == "AllNestedStyles" || (*n == "TabList" && major < 8)))
+    });
+}
+
 impl Writer<'_> {
     /// Observed values of a root style (see `values`) that are not in
     /// `written` (attributes) or `props` (Properties children): attributes,
@@ -325,6 +336,7 @@ impl Writer<'_> {
     /// the INDD in their place. See `docs/format/objects.md`.
     pub(super) fn object_style_node(&self, os: &crate::model::ObjectStyle, root: bool) -> Node {
         let major = self.doc.version.major;
+        let version = (major, self.doc.version.minor);
         let mut node = if root {
             values::root_style("ObjectStyle", major)
         } else {
@@ -353,34 +365,45 @@ impl Writer<'_> {
             _ => {}
         }
         let mut effects = Vec::new();
-        if let Some(on) = &os.enabled {
+        // The root `[None]` has no `Enable…` attributes and no effects
+        // category settings in IDML (objects.md, object style settings).
+        if let Some(on) = os.enabled.as_ref().filter(|_| !root) {
             // Each attribute is true when its category ID is in the list,
             // from the version on which IDML has it. Where several IDs
             // are present or absent together in every sample, the
             // attribute is written only when they agree.
             // See `docs/format/objects.md`, object style settings.
-            const CATEGORIES: &[(&[u32], u32, &[&str])] = &[
-                (&[0x1B933], 7, &["EnableFill"]),
-                (&[0x1B934], 7, &["EnableStroke"]),
-                (&[0x1B935, 0x1B936], 7, &["EnableStrokeAndCornerOptions"]),
-                (&[0x1B93E], 7, &["EnableTextFrameGeneralOptions"]),
-                (&[0xADC8], 7, &["EnableTextFrameBaselineOptions"]),
-                (&[0xADC9], 8, &["EnableTextFrameAutoSizingOptions"]),
-                (&[0x1B940], 7, &["EnableStoryOptions"]),
-                (&[0x1B960], 7, &["EnableFrameFittingOptions"]),
-                (&[0x1B93F], 7, &["EnableParagraphStyle"]),
-                (&[0xADCB], 15, &["EnableTextFrameColumnRuleOptions"]),
-                (&[0xCA2F], 7, &["EnableAnchoredObjectOptions"]),
-                (&[0x1B942, 0x37C8, 0x37C9], 7, &["EnableTextWrapAndOthers"]),
-                (&[0xADCA], 12, &["EnableTextFrameFootnoteOptions"]),
+            type Since = (u32, u32);
+            const CATEGORIES: &[(&[u32], Since, &[&str])] = &[
+                (&[0x1B933], (7, 0), &["EnableFill"]),
+                (&[0x1B934], (7, 0), &["EnableStroke"]),
+                (
+                    &[0x1B935, 0x1B936],
+                    (7, 0),
+                    &["EnableStrokeAndCornerOptions"],
+                ),
+                (&[0x1B93E], (7, 0), &["EnableTextFrameGeneralOptions"]),
+                (&[0xADC8], (7, 0), &["EnableTextFrameBaselineOptions"]),
+                (&[0xADC9], (8, 0), &["EnableTextFrameAutoSizingOptions"]),
+                (&[0x1B940], (7, 0), &["EnableStoryOptions"]),
+                (&[0x1B960], (7, 0), &["EnableFrameFittingOptions"]),
+                (&[0x1B93F], (7, 0), &["EnableParagraphStyle"]),
+                (&[0xADCB], (15, 1), &["EnableTextFrameColumnRuleOptions"]),
+                (&[0xCA2F], (7, 0), &["EnableAnchoredObjectOptions"]),
+                (
+                    &[0x1B942, 0x37C8, 0x37C9],
+                    (7, 0),
+                    &["EnableTextWrapAndOthers"],
+                ),
+                (&[0xADCA], (12, 0), &["EnableTextFrameFootnoteOptions"]),
                 (
                     &[0x6EA1, 0x6EA2, 0x6EA3, 0x6EA4, 0x6EA5, 0x6EA6, 0x6EA7],
-                    13,
+                    (13, 0),
                     &["EnableTransformAttributes"],
                 ),
                 (
                     &[0x1B97A, 0x1B97C, 0x1B97D, 0x1B97E],
-                    9,
+                    (9, 0),
                     &[
                         "EnableExportTagging",
                         "EnableObjectExportAltTextOptions",
@@ -391,7 +414,7 @@ impl Writer<'_> {
             ];
             for (ids, since, names) in CATEGORIES {
                 let first = on.contains(&ids[0]);
-                if major >= *since && ids.iter().all(|i| on.contains(i) == first) {
+                if version >= *since && ids.iter().all(|i| on.contains(i) == first) {
                     for name in *names {
                         attrs.push((name, first.to_string()));
                     }
@@ -435,9 +458,13 @@ impl Writer<'_> {
                 && span <= 1
             {
                 let span = (span == 1).to_string();
-                tf.push(("FootnotesSpanAcrossColumns", span.clone()));
-                tf.push(("FootnotesMinimumSpacing", num(min)));
-                tf.push(("FootnotesSpaceBetween", num(between)));
+                // In `TextFramePreference` from 13.1 (objects.md, object
+                // style settings).
+                if version >= (13, 1) {
+                    tf.push(("FootnotesSpanAcrossColumns", span.clone()));
+                    tf.push(("FootnotesMinimumSpacing", num(min)));
+                    tf.push(("FootnotesSpaceBetween", num(between)));
+                }
                 footnote = vec![
                     ("SpanFootnotesAcross", span),
                     ("MinimumSpacingOption", num(min)),
@@ -583,10 +610,18 @@ impl Writer<'_> {
             // The schema allows KerningValue on character styles only.
             plain.retain(|(k, _)| *k != "KerningValue");
         }
+        let is_root = s.builtin && s.based_on.is_none() && s.name.starts_with("[No ");
+        if is_root {
+            // The root paragraph style has no `NextStyle` and no
+            // `AllNestedStyles`, and an empty `TabList` only from DOM 8
+            // (attributes.md, root styles and text defaults).
+            props.retain(|(n, ..)| *n != "AllNestedStyles");
+            root_lists(&mut props, doc.version.major);
+        }
         x.start(tag)
             .attr("Self", self.style_ref(Some(s.uid), paragraph))
             .attr("Name", &name);
-        if paragraph {
+        if paragraph && !is_root {
             x.attr("NextStyle", self.style_ref(s.next.or(Some(s.uid)), true));
         }
         for (k, v) in &plain {
@@ -609,7 +644,7 @@ impl Writer<'_> {
         // Root styles also get the values every exported IDML has on them;
         // values read from the INDD take precedence.
         let mut extra = Vec::new();
-        if s.builtin && s.based_on.is_none() && s.name.starts_with("[No ") {
+        if is_root {
             let written: Vec<&str> = plain.iter().map(|(k, _)| *k).collect();
             let (attrs, more, _) = self.root_values(tag, &written, &props);
             for (k, v) in &attrs {

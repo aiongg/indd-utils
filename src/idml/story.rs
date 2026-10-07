@@ -348,7 +348,7 @@ impl Writer<'_> {
         }
         for (i, r) in t.rows.iter().enumerate() {
             x.start("Row")
-                .attr("Self", format!("{id}Row{i}"))
+                .attr("Self", format!("{id}Row{i:x}"))
                 .attr("Name", i.to_string());
             if let Some(h) = r.height {
                 x.attr("SingleRowHeight", num(h));
@@ -365,7 +365,7 @@ impl Writer<'_> {
             x.empty(
                 "Column",
                 &[
-                    ("Self", format!("{id}Column{i}")),
+                    ("Self", format!("{id}Column{i:x}")),
                     ("Name", i.to_string()),
                     ("SingleColumnWidth", num(*w)),
                 ],
@@ -377,8 +377,11 @@ impl Writer<'_> {
                 .attr("Self", &cell_id)
                 .attr("Name", format!("{}:{}", c.column, c.row))
                 .attr("RowSpan", c.row_span.to_string())
-                .attr("ColumnSpan", c.column_span.to_string())
-                .attr("CellType", "TextTypeCell");
+                .attr("ColumnSpan", c.column_span.to_string());
+            // From DOM 11 (tables.md).
+            if self.doc.version.major >= 11 {
+                x.attr("CellType", "TextTypeCell");
+            }
             if let Some(f) = &c.format {
                 for (name, v) in self.cell_attrs(&f.attrs) {
                     x.attr(name, v);

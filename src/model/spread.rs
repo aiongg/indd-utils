@@ -304,7 +304,9 @@ impl<'a> Reader<'a> {
         Ok(section)
     }
 
-    pub(super) fn layer(&self, uid: u32) -> Result<Layer, Error> {
+    /// A document layer; `internal` for the first layer of the document's
+    /// list.
+    pub(super) fn layer(&self, uid: u32, internal: bool) -> Result<Layer, Error> {
         let data = self.required(uid, chunk::LAYER_PROPS)?;
         let mut c = self.cursor(&data);
         let locked = c.u16()? != 0;
@@ -315,7 +317,7 @@ impl<'a> Reader<'a> {
         let settings = self.layer_settings(&data)?;
         Ok(Layer {
             uid,
-            internal: name == "Internal_pages_layer_name",
+            internal,
             name,
             visible,
             locked,

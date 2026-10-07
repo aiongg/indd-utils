@@ -49,9 +49,12 @@ impl Writer<'_> {
             .attr("xmlns:idPkg", PACKAGING_NS)
             .attr("DOMVersion", &self.dom)
             .attr("Self", "d")
-            .attr("StoryList", stories.join(" "))
-            .attr("Name", name)
-            .attr("ZeroPoint", "0 0");
+            .attr("StoryList", stories.join(" "));
+        // `Name` from DOM 13 (idml-values.md, document attributes).
+        if doc.version.major >= 13 {
+            x.attr("Name", name);
+        }
+        x.attr("ZeroPoint", "0 0");
         if let Some(l) = doc.active_layer {
             x.attr("ActiveLayer", uref(Some(l)));
         }
@@ -417,9 +420,16 @@ impl Writer<'_> {
 
     /// Colour groups and their swatches. See `docs/format/objects.md`.
     pub(super) fn color_groups(&self, x: &mut Xml) {
+        let v = self.doc.version;
         for (i, g) in self.doc.color_groups.iter().enumerate() {
+            // Named by UID before 11.3 (objects.md, colour groups).
+            let id = if (v.major, v.minor) < (11, 3) {
+                uref(Some(g.uid))
+            } else {
+                format!("ColorGroup/{}", self_name(&g.name))
+            };
             x.start("ColorGroup")
-                .attr("Self", format!("ColorGroup/{}", self_name(&g.name)))
+                .attr("Self", id)
                 .attr("Name", &g.name)
                 .attr("IsRootColorGroup", (i == 0).to_string());
             for (n, s) in g.swatches.iter().enumerate() {

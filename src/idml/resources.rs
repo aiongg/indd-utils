@@ -297,6 +297,16 @@ impl Writer<'_> {
         // Values every exported IDML has (docs/format/idml-values.md);
         // values read from the INDD take precedence.
         let mut nodes = values::preferences(self.doc.version.major);
+        // DOM 7 IDML has no EPUB and HTML export preferences
+        // (idml-values.md, preferences).
+        if self.doc.version.major < 8 {
+            nodes.retain(|n| {
+                !matches!(
+                    n.tag.as_str(),
+                    "EPubExportPreference" | "HTMLExportPreference"
+                )
+            });
+        }
         // Values every IDML of the version has in the larger corpus, where
         // the file above has none.
         for n in &mut nodes {
@@ -480,9 +490,10 @@ impl Writer<'_> {
             }
         }
         if let Some(a) = &prefs.text_defaults {
-            let (mut plain, props) = self.text_attrs(a);
+            let (mut plain, mut props) = self.text_attrs(a);
             // The schema allows KerningValue on character styles only.
             plain.retain(|(k, _)| *k != "KerningValue");
+            super::styles::root_lists(&mut props, self.doc.version.major);
             let i = ours_of(&mut ours, "TextDefault");
             ours[i]
                 .attrs

@@ -296,7 +296,9 @@ pub(super) fn variable_name(name: &str) -> String {
 /// Escape a name for use in a `Self` reference (`:` separates style
 /// groups there).
 pub(super) fn self_name(name: &str) -> String {
-    name.replace('%', "%25").replace(':', "%3a")
+    name.replace('%', "%25")
+        .replace(':', "%3a")
+        .replace('\r', "%0d")
 }
 
 impl Writer<'_> {

@@ -89,6 +89,9 @@ and table root styles are written as new elements in
 corpus pairs' IDML files. The converter writes it. The colour settings
 next to it are read from the INDD (`preferences.md`).
 
+`Name` (the package's file name) is on the `Document` element from DOM
+13 only: 321 of 321 trustworthy references from DOM 13, 0 of 168 before.
+
 ## Default numbering list
 
 The root paragraph style refers to `NumberingList/$ID/[Default]`. All 240
@@ -497,6 +500,11 @@ the auto-sizing values of `TextFramePreference` for DOM 8 to 11 and the
 values of `EPubExportPreference` and `HTMLExportPreference` that all
 files from DOM 8 on have. `PageItemDefault` values that name an object
 style are written only when the package has that style.
+
+**DOM 7.** The 7 DOM 7 references of the trustworthy pairs have no
+`EPubExportPreference` and no `HTMLExportPreference` (7 of 7), though
+`preference_values.xml` lists them for all versions (its source had one
+DOM 7 file). The converter leaves both out before DOM 8.
 
 Some of these values are probably stored in the INDD and may differ in a
 document outside the corpus; none of them is read from the INDD yet. A

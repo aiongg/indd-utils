@@ -131,10 +131,13 @@ impl<'a> Reader<'a> {
     /// An object that cannot be read is left out with a warning; the
     /// warnings are in `Document::warnings`.
     pub fn document(&self, version: Version) -> Result<Document, Error> {
+        // The first layer of the list is the internal layer, whatever its
+        // name (objects.md, layers).
         let layers = self
             .uid_list(DOC, chunk::DOC_LAYERS)?
             .into_iter()
-            .map(|uid| self.layer(uid))
+            .enumerate()
+            .map(|(i, uid)| self.layer(uid, i == 0))
             .collect::<Result<Vec<_>, _>>()?;
         let active_layer = self
             .chunk(DOC, chunk::DOC_ACTIVE_LAYER)?

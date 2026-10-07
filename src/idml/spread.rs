@@ -289,7 +289,9 @@ impl Writer<'_> {
         if let Some(r) = item.object_style.and_then(|u| self.object_style_ref(u)) {
             x.attr("AppliedObjectStyle", r);
         }
-        if let Some(layer) = item.layer {
+        // Only items directly on a spread have `ItemLayer` (objects.md,
+        // page item settings).
+        if let Some(layer) = item.layer.filter(|_| !nested) {
             x.attr("ItemLayer", uref(Some(layer)));
         }
         x.attr("ItemTransform", matrix(&item.transform));

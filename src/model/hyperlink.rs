@@ -97,7 +97,11 @@ pub struct Destination {
 impl Destination {
     /// The IDML `Self` (and reference) of the destination.
     pub fn reference(&self) -> String {
-        let escaped = self.name.replace('%', "%25").replace(':', "%3a");
+        let escaped = self
+            .name
+            .replace('%', "%25")
+            .replace(':', "%3a")
+            .replace('\r', "%0d");
         match self.kind {
             DestinationKind::Page { .. } => format!("HyperlinkPageDestination/{escaped}"),
             DestinationKind::Url { .. } => format!("HyperlinkURLDestination/{escaped}"),
