@@ -48,6 +48,16 @@ impl<'a> Reader<'a> {
         Ok(obj)
     }
 
+    /// The encoding of the document's object data.
+    pub fn enc(&self) -> Encoding {
+        self.db.encoding()
+    }
+
+    /// A cursor over object data (normally a chunk) of this document.
+    pub fn cursor<'d>(&self, data: &'d [u8]) -> Cursor<'d> {
+        self.db.encoding().cursor(data)
+    }
+
     /// Record a problem that does not stop the conversion.
     pub fn warn(&self, msg: String) {
         self.warnings.borrow_mut().push(msg);
@@ -68,7 +78,7 @@ impl<'a> Reader<'a> {
 
     pub(super) fn uid_list(&self, uid: u32, id: u32) -> Result<Vec<u32>, Error> {
         match self.chunk(uid, id)? {
-            Some(data) => Cursor::new(&data).u32_list(),
+            Some(data) => self.cursor(&data).u32_list(),
             None => Ok(Vec::new()),
         }
     }
@@ -77,7 +87,7 @@ impl<'a> Reader<'a> {
     pub(super) fn children(&self, uid: u32, id: u32) -> Result<Vec<u32>, Error> {
         match self.chunk(uid, id)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 c.skip(8)?;
                 c.u32_list()
             }

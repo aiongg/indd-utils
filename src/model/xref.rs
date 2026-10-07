@@ -2,7 +2,7 @@
 //! `docs/format/cross-references.md`.
 
 use crate::Error;
-use crate::object::{Cursor, Object};
+use crate::object::{Cursor, Encoding, Object};
 
 pub const CLASS: u32 = 0x1355E;
 pub const CHUNK: u32 = 0x13593;
@@ -53,14 +53,14 @@ impl CrossReferenceFormat {
         let Some(d) = obj.chunk(CHUNK) else {
             return Ok(None);
         };
-        parse(uid, d).map(Some)
+        parse(obj.encoding, uid, d).map(Some)
     }
 }
 
 /// Chunk 0x13593: flag byte and name, u32 character style, u16, u32 block
 /// count, blocks: u32 type, 10 bytes, flag byte and custom text.
-fn parse(uid: u32, data: &[u8]) -> Result<CrossReferenceFormat, Error> {
-    let mut c = Cursor::new(data);
+fn parse(enc: Encoding, uid: u32, data: &[u8]) -> Result<CrossReferenceFormat, Error> {
+    let mut c = enc.cursor(data);
     c.u8()?;
     let name = c.string()?;
     let character_style = c.u32()?;
@@ -114,7 +114,7 @@ mod tests {
         d.extend([0; 10]);
         d.push(1);
         d.extend(string(""));
-        let f = parse(0xA7, &d).unwrap();
+        let f = parse(crate::object::Encoding::default(), 0xA7, &d).unwrap();
         assert_eq!(f.name, "Page Number");
         assert_eq!(f.blocks.len(), 2);
         assert_eq!(f.blocks[0].text, "page ");

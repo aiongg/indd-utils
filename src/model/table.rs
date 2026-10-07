@@ -3,7 +3,7 @@
 use super::{Attrs, Reader, TextRun, Value};
 use crate::Error;
 use crate::audit::List;
-use crate::object::{Cursor, f64_at};
+use crate::object::{Cursor, Encoding};
 
 pub mod class {
     pub const CELL_STYLE: u32 = 0x2021A;
@@ -107,8 +107,8 @@ pub struct Table {
 
 /// Groups of rows or columns sharing attributes: u32 group count; per
 /// group u32 count, u16, u16 attribute count, attributes, 8 bytes.
-fn groups(data: &[u8]) -> Result<Vec<(usize, Attrs)>, Error> {
-    let mut c = Cursor::new(data);
+fn groups(enc: Encoding, data: &[u8]) -> Result<Vec<(usize, Attrs)>, Error> {
+    let mut c = enc.cursor(data);
     let n = c.u32()?;
     let mut out = Vec::new();
     for _ in 0..n {
@@ -141,7 +141,7 @@ impl Reader<'_> {
     fn counted_attrs(&self, uid: u32, id: u32) -> Result<Attrs, Error> {
         Ok(match self.chunk(uid, id)? {
             Some(d) if d.len() >= 2 => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let n = c.u16()? as usize;
                 Attrs::parse_text(&mut c, n, List::Table)?
             }
@@ -159,9 +159,10 @@ impl Reader<'_> {
         let Some(data) = self.chunk(uid, super::chunk::STYLE_INFO)? else {
             return Ok(None);
         };
-        let based_on = Cursor::new(&data[4.min(data.len())..]).u32()?;
+        let based_on = self.cursor(&data[4.min(data.len())..]).u32()?;
         // A flag byte (1 = built-in name), then a non-empty in-object string.
-        let Some((_, builtin, name)) = super::find_flagged_string(&data, 12, |n| !n.is_empty())
+        let Some((_, builtin, name)) =
+            super::find_flagged_string(self.enc(), &data, 12, |n| !n.is_empty())
         else {
             return Ok(None);
         };
@@ -179,7 +180,7 @@ impl Reader<'_> {
         let Some(d) = self.chunk(anchor, chunk::ANCHOR_TABLE)? else {
             return Ok(None);
         };
-        let uid = Cursor::new(&d).u32()?;
+        let uid = self.cursor(&d).u32()?;
         if self.class(uid) != Some(class::TABLE) {
             return Ok(None);
         }
@@ -188,18 +189,18 @@ impl Reader<'_> {
 
     fn table(&self, uid: u32) -> Result<Table, Error> {
         let size = self.required(uid, chunk::TABLE_SIZE)?;
-        let mut c = Cursor::new(&size);
+        let mut c = self.cursor(&size);
         let nrows = c.u32()? as usize;
         let ncols = c.u32()? as usize;
         let header_rows = c.u32()?;
         let footer_rows = c.u32()?;
 
         let column_groups = match self.chunk(uid, chunk::TABLE_COLUMNS)? {
-            Some(d) => groups(&d)?,
+            Some(d) => groups(self.enc(), &d)?,
             None => Vec::new(),
         };
         let row_groups = match self.chunk(uid, chunk::TABLE_ROWS)? {
-            Some(d) => groups(&d)?,
+            Some(d) => groups(self.enc(), &d)?,
             None => Vec::new(),
         };
         // The cell data has a row of grid positions for every table row,
@@ -244,7 +245,7 @@ impl Reader<'_> {
 
         let cells = cells_from_grid(&grid, &rows, &columns);
         let style = match self.chunk(uid, chunk::TABLE_STYLE)? {
-            Some(d) => super::uid_or_none(Cursor::new(&d).u32()?),
+            Some(d) => super::uid_or_none(self.cursor(&d).u32()?),
             None => None,
         };
         let attrs = self.counted_attrs(uid, chunk::TABLE_ATTRS)?;
@@ -263,7 +264,7 @@ impl Reader<'_> {
     /// Grid positions by row, from the cell strand's row groups.
     fn cell_grid(&self, table: u32) -> Result<Vec<Vec<Position>>, Error> {
         let parts = self.required(table, chunk::TABLE_PARTS)?;
-        let mut c = Cursor::new(&parts);
+        let mut c = self.cursor(&parts);
         let n = c.u32()?;
         let mut owner = None;
         for _ in 0..n {
@@ -279,17 +280,17 @@ impl Reader<'_> {
         let Some(list) = self.chunk(owner, super::chunk::STRAND_DATA)? else {
             return Ok(grid);
         };
-        let mut lc = Cursor::new(&list);
+        let mut lc = self.cursor(&list);
         let count = lc.u16()?;
         for _ in 0..count {
             lc.u32()?;
             let data = self.required(lc.u32()?, super::chunk::STRAND_RUNS)?;
-            let mut r = Cursor::new(&data);
+            let mut r = self.cursor(&data);
             r.skip(8)?;
             let groups = r.u16()?;
             for _ in 0..groups {
                 let size = r.u32()? as usize;
-                let mut g = Cursor::new(r.bytes(size)?);
+                let mut g = self.cursor(r.bytes(size)?);
                 // Attribute sets, each shared by a run of columns: u32
                 // number of columns, u16 1 if attributes follow (u16 count,
                 // attributes), u32 cell style priority, u32 cell style.
@@ -334,7 +335,9 @@ impl Reader<'_> {
                         .enumerate()
                         .map(|(k, (id, (aid, value)))| Position {
                             id,
-                            size: (aid == attr::CELL).then(|| cell_size(&value)).flatten(),
+                            size: (aid == attr::CELL)
+                                .then(|| cell_size(self.enc(), &value))
+                                .flatten(),
                             covered: aid == attr::COVERED,
                             format: formats.get(k).cloned(),
                         })
@@ -349,12 +352,13 @@ impl Reader<'_> {
 
 /// Attribute records keeping the raw payload of their second value.
 fn raw_attrs(c: &mut Cursor, n: usize) -> Result<Vec<(u32, Vec<u8>)>, Error> {
+    let enc = c.encoding();
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let id = c.u32()?;
         let size = c.u16()? as usize;
         let payload = c.bytes(size)?;
-        let mut p = Cursor::new(payload);
+        let mut p = enc.cursor(payload);
         let mut second = Vec::new();
         if size >= 2 {
             let count = p.u16()?;
@@ -373,8 +377,8 @@ fn raw_attrs(c: &mut Cursor, n: usize) -> Result<Vec<(u32, Vec<u8>)>, Error> {
 }
 
 /// Text area width and height of a cell record.
-fn cell_size(v: &[u8]) -> Option<(f64, f64)> {
-    let f = |o: usize| f64_at(v, o);
+fn cell_size(enc: Encoding, v: &[u8]) -> Option<(f64, f64)> {
+    let f = |o: usize| enc.f64_at(v, o);
     Some((f(32)?, f(40)?))
 }
 

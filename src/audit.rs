@@ -14,7 +14,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::{Container, Error, object};
+use crate::{Container, Error};
 
 /// Kinds of attribute lists, by where the converter parses them. IDs mean
 /// different things in different kinds, so they are counted per kind.
@@ -173,15 +173,14 @@ pub struct Audit {
 /// Convert `indd` (output discarded) and report what was not read.
 pub fn audit(indd: &[u8], name: &str) -> Result<Audit, Error> {
     let recorder = Recorder::start();
-    let result = crate::convert(indd, name, std::io::sink());
+    let result = crate::convert_into(indd, name, std::io::sink());
     let log = recorder.take();
 
     let container = Container::parse(indd)?;
-    let _order = object::use_byte_order(container.header.byte_order);
     let db = container.database()?;
     let mut out = Audit::default();
     match result {
-        Ok(w) => out.warnings = w,
+        Ok(w) => out.warnings = w.into_iter().map(|w| w.to_string()).collect(),
         Err(e) => out.error = Some(e.to_string()),
     }
     for uid in db.uids() {

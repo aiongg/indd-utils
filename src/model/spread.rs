@@ -250,7 +250,7 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(uid, color::chunk::COLOR_VALUE)? else {
             return Ok(None);
         };
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         if c.u32()? != 5 || c.u16()? != 3 {
             return Ok(None);
         }
@@ -272,7 +272,7 @@ impl<'a> Reader<'a> {
         // page number start, u32 numbering style, u32 continue, u32, then
         // u8 and string (alternate layout).
         if let Some(d) = self.chunk(uid, chunk::SECTION_INFO)? {
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             let parsed = (|| -> Result<(String, String, [u32; 4]), Error> {
                 c.u8()?;
                 let prefix = c.string()?;
@@ -306,12 +306,12 @@ impl<'a> Reader<'a> {
 
     pub(super) fn layer(&self, uid: u32) -> Result<Layer, Error> {
         let data = self.required(uid, chunk::LAYER_PROPS)?;
-        let mut c = Cursor::new(&data);
+        let mut c = self.cursor(&data);
         let locked = c.u16()? != 0;
         let visible = c.u16()? != 0;
         c.skip(14)?;
         // A string follows; its position varies, so search for the tag.
-        let name = find_string(&data, 18)?;
+        let name = find_string(self.enc(), &data, 18)?;
         let settings = self.layer_settings(&data)?;
         Ok(Layer {
             uid,
@@ -327,14 +327,14 @@ impl<'a> Reader<'a> {
     /// all corpus pairs: u16 printable at 4, u16 lock guides at 6, u32
     /// colour at 10, u16 UI at 14; after the name, u16 ignore wrap.
     pub(super) fn layer_settings(&self, data: &[u8]) -> Result<Option<LayerSettings>, Error> {
-        if crate::object::big_endian() || data.len() < 23 || data[19] != 2 {
+        if self.enc().big_endian() || data.len() < 23 || data[19] != 2 {
             return Ok(None);
         }
-        let mut c = Cursor::new(&data[19..]);
+        let mut c = self.cursor(&data[19..]);
         c.string()?;
         let ignore_wrap = c.u16()? != 0;
-        let flag = |at: usize| u16_at(data, at).is_some_and(|v| v != 0);
-        let color = match u32_at(data, 10) {
+        let flag = |at: usize| self.enc().u16_at(data, at).is_some_and(|v| v != 0);
+        let color = match self.enc().u32_at(data, 10) {
             Some(u) => self.ui_color(u)?,
             None => None,
         };
@@ -361,16 +361,16 @@ impl<'a> Reader<'a> {
 
     pub(super) fn spread(&self, uid: u32) -> Result<Spread, Error> {
         let transform = match self.chunk(uid, chunk::SPREAD_TRANSFORM)? {
-            Some(d) => Matrix::read(&mut Cursor::new(&d))?,
+            Some(d) => Matrix::read(&mut self.cursor(&d))?,
             None => Matrix::IDENTITY,
         };
         let binding_location = match self.chunk(uid, chunk::SPREAD_BINDING)? {
-            Some(d) => Cursor::new(&d).u32()?,
+            Some(d) => self.cursor(&d).u32()?,
             None => 0,
         };
         let master_name = match self.chunk(uid, chunk::MASTER_NAME)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 c.u8()?;
                 let prefix = c.string()?;
                 c.u8()?;
@@ -380,7 +380,7 @@ impl<'a> Reader<'a> {
             None => None,
         };
         let children = self.required(uid, chunk::SPREAD_CHILDREN)?;
-        let mut c = Cursor::new(&children);
+        let mut c = self.cursor(&children);
         c.skip(8)?;
         let spread_layers = c.u32_list()?;
         let mut pages = Vec::new();
@@ -388,7 +388,7 @@ impl<'a> Reader<'a> {
         let mut guides = Vec::new();
         for sl in spread_layers {
             let layer = match self.chunk(sl, chunk::SPREAD_LAYER_LAYER)? {
-                Some(d) => Cursor::new(&d).u32()?,
+                Some(d) => self.cursor(&d).u32()?,
                 None => 0,
             };
             for child in self.children(sl, chunk::SPREAD_LAYER_CHILDREN)? {
@@ -404,7 +404,7 @@ impl<'a> Reader<'a> {
             }
         }
         if let Some(d) = self.chunk(uid, chunk::SPREAD_TAB_ORDERS)? {
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             let n = c.u32()?;
             for _ in 0..n {
                 let page = c.u32()?;
@@ -415,14 +415,14 @@ impl<'a> Reader<'a> {
             }
         }
         let flattener_resolution = match self.chunk(uid, chunk::SPREAD_FLATTENER)? {
-            Some(d) => match (f64_at(&d, 20), f64_at(&d, 28)) {
+            Some(d) => match (self.enc().f64_at(&d, 20), self.enc().f64_at(&d, 28)) {
                 (Some(a), Some(b)) => Some([a, b]),
                 _ => None,
             },
             None => None,
         };
         let short = |id: u32| -> Result<Option<u16>, Error> {
-            Ok(self.chunk(uid, id)?.and_then(|d| u16_at(&d, 0)))
+            Ok(self.chunk(uid, id)?.and_then(|d| self.enc().u16_at(&d, 0)))
         };
         Ok(Spread {
             uid,
@@ -453,9 +453,9 @@ impl<'a> Reader<'a> {
             ));
             return Ok(None);
         }
-        let f = |o: usize| Cursor::new(&d[o..]).f64();
-        let u = |o: usize| Cursor::new(&d[o..]).u32();
-        let h = |o: usize| Cursor::new(&d[o..]).u16();
+        let f = |o: usize| self.cursor(&d[o..]).f64();
+        let u = |o: usize| self.cursor(&d[o..]).u32();
+        let h = |o: usize| self.cursor(&d[o..]).u16();
         Ok(Some(Guide {
             uid,
             position: f(0)?,
@@ -468,11 +468,11 @@ impl<'a> Reader<'a> {
             layer,
             locked: self
                 .chunk(uid, chunk::ITEM_LOCKED)?
-                .is_some_and(|d| u32_at(&d, 0) == Some(1)),
+                .is_some_and(|d| self.enc().u32_at(&d, 0) == Some(1)),
             zone: if d.len() >= 52 { Some(f(44)?) } else { None },
             overridden: match self.chunk(uid, chunk::ITEM_OVERRIDE)? {
                 Some(o) => {
-                    let mut c = Cursor::new(&o);
+                    let mut c = self.cursor(&o);
                     let master = c.u32()?;
                     Some((master, c.u32_list()?))
                 }
@@ -488,16 +488,16 @@ impl<'a> Reader<'a> {
             Some(d) => d,
             None => self.required(uid, chunk::ITEM_TRANSFORM)?,
         };
-        let transform = Matrix::read(&mut Cursor::new(&transform))?;
+        let transform = Matrix::read(&mut self.cursor(&transform))?;
         let b = match self.chunk(uid, chunk::PAGE_BOUNDS)? {
             Some(d) => d,
             None => self.required(uid, chunk::OLD_PAGE_BOUNDS)?,
         };
-        let mut c = Cursor::new(&b);
+        let mut c = self.cursor(&b);
         let bounds = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
         let (master, master_transform) = match self.chunk(uid, chunk::PAGE_MASTER)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let m = c.u32()?;
                 c.skip(2)?;
                 // The matrix is missing in files from InDesign 3.0 and 4.0.
@@ -511,7 +511,7 @@ impl<'a> Reader<'a> {
         };
         let margins = match self.chunk(uid, chunk::PAGE_MARGINS)? {
             Some(d) if d.len() >= 34 => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 Some(Margins {
                     left: c.f64()?,
                     top: c.f64()?,
@@ -524,7 +524,7 @@ impl<'a> Reader<'a> {
         };
         let columns = match self.chunk(uid, chunk::PAGE_COLUMNS)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let n = c.u32()? as usize;
                 if n > d.len() / 8 {
                     return Err(Error::Corrupt(format!("page {uid}: {n} column positions")));
@@ -540,7 +540,7 @@ impl<'a> Reader<'a> {
         };
         let grid = match self.chunk(uid, chunk::PAGE_GRID)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let font = c.u32()?;
                 c.u8()?;
                 let font_style = c.string()?;
@@ -557,8 +557,8 @@ impl<'a> Reader<'a> {
         };
         // u32 count, then (unless it is 0) the two lists.
         let overrides = match self.chunk(uid, chunk::PAGE_OVERRIDES)? {
-            Some(d) if u32_at(&d, 0).is_some_and(|n| n > 0) => {
-                let mut c = Cursor::new(&d[4..]);
+            Some(d) if self.enc().u32_at(&d, 0).is_some_and(|n| n > 0) => {
+                let mut c = self.cursor(&d[4..]);
                 let items = c.u32_list()?;
                 let with = c.u32_list()?;
                 items.into_iter().zip(with).collect()
@@ -569,14 +569,14 @@ impl<'a> Reader<'a> {
             overrides,
             use_master_grid: self
                 .chunk(uid, chunk::PAGE_GRID_USE)?
-                .and_then(|d| u16_at(&d, 4))
+                .and_then(|d| self.enc().u16_at(&d, 4))
                 .map(|v| v != 0),
             layout_rule: self
                 .chunk(uid, chunk::PAGE_LAYOUT_RULE)?
-                .and_then(|d| u32_at(&d, 4)),
+                .and_then(|d| self.enc().u32_at(&d, 4)),
             color: match self
                 .chunk(uid, chunk::PAGE_COLOR)?
-                .and_then(|d| u32_at(&d, 0))
+                .and_then(|d| self.enc().u32_at(&d, 0))
             {
                 Some(code) => self.ui_color_ref(code)?,
                 None => UiColorRef::UseMaster,

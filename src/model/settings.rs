@@ -72,7 +72,7 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(uid, chunk::BULLETS)? else {
             return Ok(Vec::new());
         };
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         if c.u16()? != 1 {
             return Ok(Vec::new());
         }
@@ -141,9 +141,9 @@ impl<'a> Reader<'a> {
             ));
             return Ok(None);
         }
-        let f = |o: usize| Cursor::new(&d[o..]).f64();
-        let u = |o: usize| Cursor::new(&d[o..]).u32();
-        let binding = Cursor::new(&d[64..]).u16()?;
+        let f = |o: usize| self.cursor(&d[o..]).f64();
+        let u = |o: usize| self.cursor(&d[o..]).u32();
+        let binding = self.cursor(&d[64..]).u16()?;
         if binding > 1 {
             self.warn(format!(
                 "document preferences: page binding code {binding} is not known; left out"
@@ -164,7 +164,7 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(doc, chunk::DOC_USERS)? else {
             return Ok(Vec::new());
         };
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         let n = c.u32()?;
         if n as usize > d.len() / 9 {
             return Err(Error::Corrupt(format!("{n} document users")));
@@ -197,10 +197,10 @@ impl<'a> Reader<'a> {
         let Ok(Some(d)) = self.chunk(uid, chunk::INDEX_GROUPS) else {
             return Vec::new();
         };
-        if crate::object::big_endian() {
+        if self.enc().big_endian() {
             return Vec::new();
         }
-        let Some(count) = u32_at(&d, 0) else {
+        let Some(count) = self.enc().u32_at(&d, 0) else {
             return Vec::new();
         };
         let mut out: Vec<(String, bool, u16)> = Vec::new();
@@ -208,7 +208,7 @@ impl<'a> Reader<'a> {
             if d[i] != 1 || d[i + 1] != 2 {
                 continue;
             }
-            let mut c = Cursor::new(&d[i + 1..]);
+            let mut c = self.cursor(&d[i + 1..]);
             let Ok(name) = c.string() else { continue };
             if !(name.starts_with("kIndexGroup_") || name.starts_with("kWRIndexGroup_"))
                 || out.iter().any(|(n, _, _)| *n == name)
@@ -216,7 +216,7 @@ impl<'a> Reader<'a> {
                 continue;
             }
             let at = i + 1 + c.pos();
-            let (Some(&include), Some(header)) = (d.get(at), u16_at(&d, at + 2)) else {
+            let (Some(&include), Some(header)) = (d.get(at), self.enc().u16_at(&d, at + 2)) else {
                 continue;
             };
             out.push((name, include != 0, header));
@@ -242,7 +242,7 @@ impl<'a> Reader<'a> {
         uids.sort_unstable();
         uids.into_iter().find_map(|uid| {
             let d = self.chunk(uid, chunk::SMOOTH_SHADE).ok()??;
-            if d.len() != 92 || u32_at(&d, 60) != Some(28) {
+            if d.len() != 92 || self.enc().u32_at(&d, 60) != Some(28) {
                 return None;
             }
             let name = self
@@ -250,14 +250,18 @@ impl<'a> Reader<'a> {
                 .ok()
                 .flatten()
                 .and_then(|n| {
-                    let mut c = Cursor::new(&n);
+                    let mut c = self.cursor(&n);
                     let builtin = c.flag().ok()? == 1;
                     Some((builtin, c.string().ok()?))
                 });
             Some(ConstantShade {
                 uid,
-                count: u32_at(&d, 64)?,
-                values: [f64_at(&d, 68)?, f64_at(&d, 76)?, f64_at(&d, 84)?],
+                count: self.enc().u32_at(&d, 64)?,
+                values: [
+                    self.enc().f64_at(&d, 68)?,
+                    self.enc().f64_at(&d, 76)?,
+                    self.enc().f64_at(&d, 84)?,
+                ],
                 name,
             })
         })
@@ -274,7 +278,7 @@ impl<'a> Reader<'a> {
                 let Some(d) = self.chunk(uid, chunk::NAMED_GRID)? else {
                     return Ok(None);
                 };
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 c.u32()?;
                 let builtin = c.flag()? == 1;
                 Ok(Some((uid, builtin, c.string()?)))
@@ -300,7 +304,7 @@ impl<'a> Reader<'a> {
         if d.len() <= 1 {
             return Ok(None);
         }
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         c.flag()?;
         let name = c.string()?;
         // Then the primary and secondary names, u16 ID, and two vendors

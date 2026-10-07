@@ -6,7 +6,7 @@
 
 use crate::Error;
 use crate::audit::{self, List};
-use crate::object::{Cursor, f64_from, i32_from, u16_from, u32_from};
+use crate::object::{Cursor, Encoding};
 
 /// Value type codes.
 pub mod ty {
@@ -178,15 +178,15 @@ impl Attrs {
     }
 
     /// A page item list (chunk 0x6E03): u32 count, then records.
-    pub fn parse(data: &[u8], list: List) -> Result<Attrs, Error> {
-        let mut c = Cursor::new(data);
+    pub fn parse(enc: Encoding, data: &[u8], list: List) -> Result<Attrs, Error> {
+        let mut c = enc.cursor(data);
         let n = c.u32()? as usize;
         Attrs::records(&mut c, n, decode, list)
     }
 
     /// A page item attribute list with a u16 count, as object styles hold.
-    pub fn parse_short(data: &[u8], list: List) -> Result<Attrs, Error> {
-        let mut c = Cursor::new(data);
+    pub fn parse_short(enc: Encoding, data: &[u8], list: List) -> Result<Attrs, Error> {
+        let mut c = enc.cursor(data);
         let n = c.u16()? as usize;
         Attrs::records(&mut c, n, decode, list)
     }
@@ -200,14 +200,15 @@ impl Attrs {
     fn records(
         c: &mut Cursor,
         n: usize,
-        decode: fn(u32, u32, &[u8]) -> Value,
+        decode: fn(Encoding, u32, u32, &[u8]) -> Value,
         list: List,
     ) -> Result<Attrs, Error> {
+        let enc = c.encoding();
         let mut out = Vec::with_capacity(n.min(1024));
         for _ in 0..n {
             let id = c.u32()?;
             let size = c.u16()? as usize;
-            let mut p = Cursor::new(c.bytes(size)?);
+            let mut p = enc.cursor(c.bytes(size)?);
             // A record without values (for example a merged-cell marker).
             if size < 2 {
                 continue;
@@ -219,9 +220,9 @@ impl Attrs {
                 let len = p.u16()? as usize;
                 let data = p.bytes(len)?;
                 match (i, &first) {
-                    (0, _) => first = Some(decode(id, t, data)),
+                    (0, _) => first = Some(decode(enc, id, t, data)),
                     (1, Some(Value::Ref(r))) if t == ty::CODE && len == 4 => {
-                        let code = u32_from(data.try_into().unwrap());
+                        let code = enc.u32_from(data.try_into().unwrap());
                         first = Some(Value::RefOrCode(*r, code));
                     }
                     _ => {}
@@ -273,16 +274,16 @@ fn text_layout(id: u32) -> Option<Layout> {
 /// A text, table or cell attribute value. Values of the attributes in
 /// [`text_layout`] are decoded by their layout (`Other` if they do not
 /// fit it); the others are numbers of 8, 4 or 2 bytes.
-fn decode_text(id: u32, t: u32, data: &[u8]) -> Value {
+fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
     let Some(layout) = text_layout(id) else {
         return match data.len() {
-            8 => Value::Double(f64_from(data.try_into().unwrap())),
-            4 => Value::Ref(u32_from(data.try_into().unwrap())),
-            2 => Value::Enum(u16_from(data.try_into().unwrap())),
+            8 => Value::Double(enc.f64_from(data.try_into().unwrap())),
+            4 => Value::Ref(enc.u32_from(data.try_into().unwrap())),
+            2 => Value::Enum(enc.u16_from(data.try_into().unwrap())),
             _ => Value::Other(t, data.to_vec()),
         };
     };
-    let mut c = Cursor::new(data);
+    let mut c = enc.cursor(data);
     let value = match layout {
         Layout::Point if data.len() == 16 => {
             (|| Ok::<_, Error>(Value::Point(c.f64()?, c.f64()?)))().ok()
@@ -304,7 +305,7 @@ fn decode_text(id: u32, t: u32, data: &[u8]) -> Value {
         Layout::NestedStyles | Layout::StyleList => c.u32().ok().map(|count| Value::StyleList {
             count,
             nested: match layout {
-                Layout::NestedStyles => nested_styles(&mut Cursor::new(data)),
+                Layout::NestedStyles => nested_styles(&mut enc.cursor(data)),
                 _ => None,
             },
         }),
@@ -373,30 +374,30 @@ fn nested_styles(c: &mut Cursor) -> Option<Vec<NestedStyle>> {
 /// u32 count, then three f64 per stop. See `docs/format/transparency.md`.
 pub const OPACITY_STOPS: [u32; 3] = [0x1EB8C, 0x1EB95, 0x1EB9E];
 
-fn decode(id: u32, t: u32, data: &[u8]) -> Value {
-    let f64_at = |o: usize| f64_from(data[o..o + 8].try_into().unwrap());
+fn decode(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
+    let f = |o: usize| enc.f64_from(data[o..o + 8].try_into().unwrap());
     if OPACITY_STOPS.contains(&id)
         && let Some(n) = data
             .get(..4)
-            .map(|b| u32_from(b.try_into().unwrap()) as usize)
+            .map(|b| enc.u32_from(b.try_into().unwrap()) as usize)
         && n > 0
         && data.len() == 4 + n * 24
     {
         return Value::Stops(
             (0..n)
-                .map(|i| [0, 1, 2].map(|k| f64_at(4 + (3 * i + k) * 8)))
+                .map(|i| [0, 1, 2].map(|k| f(4 + (3 * i + k) * 8)))
                 .collect(),
         );
     }
     match (t, data.len()) {
-        (ty::DOUBLE, 8) => Value::Double(f64_at(0)),
-        (ty::INT, 4) => Value::Int(i32_from(data.try_into().unwrap())),
-        (ty::ENUM, 2) => Value::Enum(u16_from(data.try_into().unwrap())),
-        (ty::REF, 4) => Value::Ref(u32_from(data.try_into().unwrap())),
-        (ty::POINT, 16) => Value::Point(f64_at(0), f64_at(8)),
+        (ty::DOUBLE, 8) => Value::Double(f(0)),
+        (ty::INT, 4) => Value::Int(enc.i32_from(data.try_into().unwrap())),
+        (ty::ENUM, 2) => Value::Enum(enc.u16_from(data.try_into().unwrap())),
+        (ty::REF, 4) => Value::Ref(enc.u32_from(data.try_into().unwrap())),
+        (ty::POINT, 16) => Value::Point(f(0), f(8)),
         // Other 4-byte types are references or codes (for example a
         // corner effect ID); keep the number.
-        (_, 4) => Value::Ref(u32_from(data.try_into().unwrap())),
+        (_, 4) => Value::Ref(enc.u32_from(data.try_into().unwrap())),
         _ => Value::Other(t, data.to_vec()),
     }
 }
@@ -418,7 +419,7 @@ mod tests {
         d.extend_from_slice(&0x6E63u32.to_le_bytes());
         d.extend_from_slice(&6u16.to_le_bytes());
         d.extend_from_slice(&[0; 6]);
-        let a = Attrs::parse(&d, List::Item).unwrap();
+        let a = Attrs::parse(Encoding::default(), &d, List::Item).unwrap();
         assert_eq!(a.get(0x6E65), Some(&Value::Double(0.25)));
     }
 
@@ -437,7 +438,7 @@ mod tests {
         d.extend_from_slice(&0x6E63u32.to_le_bytes());
         d.extend_from_slice(&6u16.to_le_bytes());
         d.extend_from_slice(&[0; 6]);
-        let a = Attrs::parse(&d, List::Item).unwrap();
+        let a = Attrs::parse(Encoding::default(), &d, List::Item).unwrap();
         assert_eq!(a.get(0x6E6E), Some(&Value::RefOrCode(0, 0x5A39)));
     }
 
@@ -454,7 +455,7 @@ mod tests {
 
     fn text_value(id: u32, value: &[u8]) -> Value {
         let d = text_record(id, value);
-        let a = Attrs::parse_text(&mut Cursor::new(&d), 1, List::Text).unwrap();
+        let a = Attrs::parse_text(&mut Encoding::default().cursor(&d), 1, List::Text).unwrap();
         a.get(id).unwrap().clone()
     }
 
@@ -562,7 +563,7 @@ mod tests {
         d.extend(0u32.to_le_bytes());
         d.extend((v.len() as u16).to_le_bytes());
         d.extend(&v);
-        let a = Attrs::parse(&d, List::Item).unwrap();
+        let a = Attrs::parse(Encoding::default(), &d, List::Item).unwrap();
         assert_eq!(
             a.get(0x1EB8C),
             Some(&Value::Stops(vec![[0.15, 0.5, 100.0], [0.85, 1.0, 0.0]]))

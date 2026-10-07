@@ -129,7 +129,7 @@ impl<'a> Reader<'a> {
         let Some(data) = self.chunk(uid, chunk::STYLE_INFO)? else {
             return Ok(None);
         };
-        let mut c = Cursor::new(&data);
+        let mut c = self.cursor(&data);
         let next = c.u32()?;
         let based_on = c.u32()?;
         // The header before the name is 4 bytes shorter in files from
@@ -137,14 +137,14 @@ impl<'a> Reader<'a> {
         // flag byte (1 = built-in name), then an in-object string. Four
         // bytes before the flag, a u16 is 1 for paragraph styles and 0 for
         // character styles; the u16 after it is not identified.
-        let Some((at, builtin, name)) = find_flagged_string(&data, 12, |_| true) else {
+        let Some((at, builtin, name)) = find_flagged_string(self.enc(), &data, 12, |_| true) else {
             return Err(Error::Corrupt(format!("style {uid}: no name")));
         };
-        let paragraph = Cursor::new(&data[at - 4..]).u16()? != 0;
-        let imported = Cursor::new(&data[at - 2..]).u16()? != 0;
+        let paragraph = self.cursor(&data[at - 4..]).u16()? != 0;
+        let imported = self.cursor(&data[at - 2..]).u16()? != 0;
         let shortcut = if at >= 10 {
             Some((
-                Cursor::new(&data[at - 10..]).u32()?,
+                self.cursor(&data[at - 10..]).u32()?,
                 data[at - 6],
                 data[at - 5],
             ))
@@ -153,17 +153,17 @@ impl<'a> Reader<'a> {
         };
         // A 36-character in-object string after the name: a GUID.
         const GUID: [u8; 6] = [2, 0, 36, 0, 36, 0x40];
-        let unique_id = if crate::object::big_endian() {
+        let unique_id = if self.enc().big_endian() {
             None
         } else {
             data[at..]
                 .windows(GUID.len())
                 .position(|w| w == GUID)
-                .and_then(|i| Cursor::new(&data[at + i..]).string().ok())
+                .and_then(|i| self.cursor(&data[at + i..]).string().ok())
         };
         let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {
             Some(d) if d.len() >= 2 => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let n = c.u16()? as usize;
                 Attrs::parse_text(&mut c, n, List::Style).unwrap_or_default()
             }
@@ -194,7 +194,7 @@ impl<'a> Reader<'a> {
                 let Some(d) = self.chunk(uid, chunk::TOC_STYLE)? else {
                     return Ok(None);
                 };
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let builtin = c.flag()? == 1;
                 let name = c.string()?;
                 c.skip(8)?;
@@ -232,7 +232,7 @@ impl<'a> Reader<'a> {
     /// cell or table styles): its kind (chunk 0x28C2) and children.
     pub(super) fn style_root_group(&self, uid: u32) -> Result<StyleGroup, Error> {
         let kind = match self.chunk(uid, chunk::ROOT_GROUP_KIND)? {
-            Some(d) => Cursor::new(&d).u32()?,
+            Some(d) => self.cursor(&d).u32()?,
             None => 0,
         };
         let mut children = Vec::new();
@@ -258,7 +258,7 @@ impl<'a> Reader<'a> {
     pub(super) fn style_group(&self, uid: u32) -> Result<StyleGroup, Error> {
         let name = match self.chunk(uid, chunk::STYLE_GROUP_NAME)? {
             Some(d) if d.len() > 1 => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 c.flag()?;
                 c.string()?
             }
@@ -279,13 +279,13 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? else {
             return Ok(None);
         };
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         let based_on = c.u32()?;
         let builtin = c.flag()? == 1;
         let name = c.string()?;
         let u32_chunk = |id: u32| -> Result<Option<u32>, Error> {
             match self.chunk(uid, id)? {
-                Some(d) if d.len() >= 4 => Ok(Some(Cursor::new(&d).u32()?)),
+                Some(d) if d.len() >= 4 => Ok(Some(self.cursor(&d).u32()?)),
                 _ => Ok(None),
             }
         };
@@ -295,11 +295,15 @@ impl<'a> Reader<'a> {
             builtin,
             based_on: uid_or_none(based_on),
             fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
-                Some(d) => Attrs::parse_short(&d, List::ObjectStyleFitting).unwrap_or_default(),
+                Some(d) => {
+                    Attrs::parse_short(self.enc(), &d, List::ObjectStyleFitting).unwrap_or_default()
+                }
                 None => Attrs::default(),
             },
             attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
-                Some(d) => Attrs::parse_short(&d, List::ObjectStyle).unwrap_or_default(),
+                Some(d) => {
+                    Attrs::parse_short(self.enc(), &d, List::ObjectStyle).unwrap_or_default()
+                }
                 None => Attrs::default(),
             },
             // The layout is known for these sizes only
@@ -312,25 +316,25 @@ impl<'a> Reader<'a> {
                     ));
                     None
                 }
-                d => d.as_deref().map(ObjectStyleFrame::read),
+                d => d.map(|d| ObjectStyleFrame::read(self.enc(), &d)),
             },
             story: self
                 .chunk(uid, chunk::OBJECT_STYLE_STORY)?
-                .and_then(|d| StorySettings::read(&d)),
+                .and_then(|d| StorySettings::read(self.enc(), &d)),
             direction: match self.chunk(uid, chunk::OBJECT_STYLE_DIRECTION)? {
-                Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
+                Some(d) if d.len() >= 2 => Some(self.cursor(&d).u16()?),
                 _ => None,
             },
             text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
             contour_type: u32_chunk(chunk::OBJECT_STYLE_CONTOUR)?,
             enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
-                Some(d) => Some(Cursor::new(&d).u32_list()?),
+                Some(d) => Some(self.cursor(&d).u32_list()?),
                 None => None,
             },
             paragraph_style: u32_chunk(chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?,
             anchor: self
                 .chunk(uid, chunk::ANCHOR_SETTINGS)?
-                .map(|d| AnchorSettings::read(&d)),
+                .map(|d| AnchorSettings::read(self.enc(), &d)),
         }))
     }
 }
@@ -349,10 +353,10 @@ pub struct AnchorSettings {
 }
 
 impl AnchorSettings {
-    pub(super) fn read(d: &[u8]) -> AnchorSettings {
-        let u = |o: usize| u16_at(d, o).unwrap_or_default();
+    pub(super) fn read(enc: Encoding, d: &[u8]) -> AnchorSettings {
+        let u = |o: usize| enc.u16_at(d, o).unwrap_or_default();
         AnchorSettings {
-            offset: (d.len() >= 54).then(|| (f64_at(d, 0).unwrap_or_default(), u(52))),
+            offset: (d.len() >= 54).then(|| (enc.f64_at(d, 0).unwrap_or_default(), u(52))),
             fields: (d.len() >= 58).then(|| ([u(46), u(50), u(56)], [u(40), u(48)])),
         }
     }
@@ -381,15 +385,15 @@ pub struct ObjectStyleFrame {
 }
 
 impl ObjectStyleFrame {
-    pub(super) fn read(d: &[u8]) -> ObjectStyleFrame {
-        let f = |o: usize| f64_at(d, o);
+    pub(super) fn read(enc: Encoding, d: &[u8]) -> ObjectStyleFrame {
+        let f = |o: usize| enc.f64_at(d, o);
         ObjectStyleFrame {
             column_fixed_width: f(0),
             column_gutter: f(8),
             insets: (|| Some([f(34)?, f(42)?, f(50)?, f(58)?]))(),
-            column_count: u32_at(d, 66),
-            footnotes: (|| Some((u16_at(d, 144)?, f(146)?, f(154)?)))(),
-            column_rule: (|| Some((f(190)?, u32_at(d, 198)?, f(210)?)))(),
+            column_count: enc.u32_at(d, 66),
+            footnotes: (|| Some((enc.u16_at(d, 144)?, f(146)?, f(154)?)))(),
+            column_rule: (|| Some((f(190)?, enc.u32_at(d, 198)?, f(210)?)))(),
         }
     }
 }
@@ -403,10 +407,10 @@ pub struct StorySettings {
 }
 
 impl StorySettings {
-    pub(super) fn read(d: &[u8]) -> Option<StorySettings> {
+    pub(super) fn read(enc: Encoding, d: &[u8]) -> Option<StorySettings> {
         Some(StorySettings {
-            orientation: u16_at(d, 0)?,
-            frame_type: u16_at(d, 14)?,
+            orientation: enc.u16_at(d, 0)?,
+            frame_type: enc.u16_at(d, 14)?,
         })
     }
 }

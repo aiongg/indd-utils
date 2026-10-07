@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::Error;
-use crate::object::Cursor;
+use crate::object::Encoding;
 
 pub mod class {
     /// Node type of the document node, the parent of the root element.
@@ -57,6 +57,7 @@ pub struct Node {
 
 /// Read the nodes of a store, following the pages from `first_page`.
 pub fn read_store(
+    enc: Encoding,
     first_page: u32,
     mut page_data: impl FnMut(u32) -> Result<Option<Vec<u8>>, Error>,
 ) -> Result<Vec<Node>, Error> {
@@ -66,7 +67,7 @@ pub fn read_store(
     while page != 0 && !seen.contains(&page) {
         seen.push(page);
         let Some(data) = page_data(page)? else { break };
-        page = read_page(&data, &mut out)?;
+        page = read_page(enc, &data, &mut out)?;
     }
     Ok(out)
 }
@@ -74,8 +75,8 @@ pub fn read_store(
 /// One store page (chunk 0x16127): u32 next page, u32 previous page, u32
 /// story, u32, u32 *n*, *n* node IDs, u32 node count, then the nodes, each
 /// u32 type, u32 size and the node data. Returns the next page.
-fn read_page(data: &[u8], out: &mut Vec<Node>) -> Result<u32, Error> {
-    let mut c = Cursor::new(data);
+fn read_page(enc: Encoding, data: &[u8], out: &mut Vec<Node>) -> Result<u32, Error> {
+    let mut c = enc.cursor(data);
     let next = c.u32()?;
     c.skip(12)?;
     let n = c.u32()? as usize;
@@ -86,15 +87,15 @@ fn read_page(data: &[u8], out: &mut Vec<Node>) -> Result<u32, Error> {
         let size = c.u32()? as usize;
         let body = c.bytes(size)?;
         if kind == class::DOCUMENT_NODE || kind == class::ELEMENT {
-            out.push(parse_node(kind, body)?);
+            out.push(parse_node(enc, kind, body)?);
         }
     }
     Ok(next)
 }
 
 /// Node data: u16 count, then that many (u32 ID, u32 length, data) parts.
-fn parse_node(kind: u32, body: &[u8]) -> Result<Node, Error> {
-    let mut c = Cursor::new(body);
+fn parse_node(enc: Encoding, kind: u32, body: &[u8]) -> Result<Node, Error> {
+    let mut c = enc.cursor(body);
     let n = c.u16()?;
     let mut node = None;
     let mut markers = (NONE, NONE);
@@ -105,7 +106,7 @@ fn parse_node(kind: u32, body: &[u8]) -> Result<Node, Error> {
         match id {
             chunk::NODE => node = Some(data),
             chunk::MARKERS if len >= 8 => {
-                let mut m = Cursor::new(data);
+                let mut m = enc.cursor(data);
                 markers = (m.u32()?, m.u32()?);
             }
             _ => {}
@@ -117,13 +118,13 @@ fn parse_node(kind: u32, body: &[u8]) -> Result<Node, Error> {
     let fixed = [22, 20, 4]
         .into_iter()
         .find(|&n| {
-            let mut c = Cursor::new(data);
+            let mut c = enc.cursor(data);
             c.skip(n + 24).is_ok()
                 && c.u32()
                     .is_ok_and(|k| (k as usize).checked_mul(8) == Some(c.remaining()))
         })
         .ok_or_else(|| Error::Corrupt("XML node of unknown layout".into()))?;
-    let mut c = Cursor::new(data);
+    let mut c = enc.cursor(data);
     let tag = c.u32()?;
     let content = c.u32()?;
     c.skip(fixed)?;
@@ -155,10 +156,10 @@ fn parse_node(kind: u32, body: &[u8]) -> Result<Node, Error> {
 /// value, u32 marker ID, u32 length (1), u16 flags (1 = has a left child,
 /// 2 = has a right child). The root's value is its position; a left child
 /// is *value* before its parent, a right child *value* after it.
-pub fn marker_positions(data: &[u8]) -> Result<BTreeMap<u32, usize>, Error> {
+pub fn marker_positions(enc: Encoding, data: &[u8]) -> Result<BTreeMap<u32, usize>, Error> {
     let bad = || Error::Corrupt("XML marker tree is inconsistent".into());
     let mut out = BTreeMap::new();
-    let mut c = Cursor::new(data);
+    let mut c = enc.cursor(data);
     if c.u16()? == 0 {
         return Ok(out);
     }
@@ -212,12 +213,18 @@ mod tests {
         d.extend(tree_node(5, 6, 0));
         d.extend(tree_node(1, 7, 0));
         d.extend([0x37, 0, 0, 0, 0, 0, 0, 0]);
-        let got: Vec<_> = marker_positions(&d).unwrap().into_iter().collect();
+        let got: Vec<_> = marker_positions(crate::object::Encoding::default(), &d)
+            .unwrap()
+            .into_iter()
+            .collect();
         assert_eq!(got, [(5, 7), (6, 2), (7, 9), (9, 8)]);
         assert!(
-            marker_positions(&[0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
-                .unwrap()
-                .is_empty()
+            marker_positions(
+                crate::object::Encoding::default(),
+                &[0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+            )
+            .unwrap()
+            .is_empty()
         );
     }
 
@@ -241,7 +248,7 @@ mod tests {
         body.extend(chunk::NODE.to_le_bytes());
         body.extend((node.len() as u32).to_le_bytes());
         body.extend(&node);
-        let n = parse_node(class::ELEMENT, &body).unwrap();
+        let n = parse_node(crate::object::Encoding::default(), class::ELEMENT, &body).unwrap();
         assert_eq!(n.key, (0x9C, 0x1F));
         assert_eq!(n.parent, (0x9C, 0xF));
         assert_eq!(n.children, [(0xE4, 4)]);

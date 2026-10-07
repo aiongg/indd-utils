@@ -135,7 +135,7 @@ impl<'a> Reader<'a> {
             .collect::<Result<Vec<_>, _>>()?;
         let active_layer = self
             .chunk(DOC, chunk::DOC_ACTIVE_LAYER)?
-            .map(|d| Cursor::new(&d).u32())
+            .map(|d| self.cursor(&d).u32())
             .transpose()?;
         let (spreads, master_spreads) = self.document_spreads()?;
         let stories = self.document_stories()?;
@@ -168,7 +168,7 @@ impl<'a> Reader<'a> {
             .map(|uid| self.section(uid))
             .collect::<Result<Vec<_>, _>>()?;
         let bookmark_order = match self.chunk(DOC, hyperlink::chunk::DOCUMENT_LISTS)? {
-            Some(d) => hyperlink::document_bookmarks(&d, version.major)?,
+            Some(d) => hyperlink::document_bookmarks(self.enc(), &d, version.major)?,
             None => Vec::new(),
         };
         let composite_fonts = objects
@@ -267,7 +267,7 @@ impl<'a> Reader<'a> {
     fn xml_story(&self) -> Result<Option<Story>, Error> {
         Ok(match self.chunk(DOC, xml::chunk::NODE_REF)? {
             Some(d) if d.len() >= 4 => {
-                let s = Cursor::new(&d).u32()?;
+                let s = self.cursor(&d).u32()?;
                 match self.class(s) {
                     Some(class::STORY) => Some(self.story(s)?),
                     _ => None,
@@ -478,7 +478,7 @@ impl<'a> Reader<'a> {
                 Ok(match self.chunk(uid, font::chunk::FAMILY)? {
                     Some(d) => Some(FontFamily {
                         uid,
-                        name: find_string(&d, 0)?,
+                        name: find_string(self.enc(), &d, 0)?,
                         fonts: Vec::new(),
                         writing_script: 0,
                     }),
@@ -544,20 +544,20 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? else {
             return Ok(None);
         };
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         let n = c.u32()? as usize;
         // Files from InDesign 2.0 to 4.0 hold a flag byte and an in-object
         // string instead.
         let name = match c.segments(n) {
             Ok(name) => name,
             Err(_) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 c.flag()?;
                 c.string()?
             }
         };
         let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
-            Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
+            Some(d) if d.len() >= 4 => self.ui_color(self.cursor(&d).u32()?)?,
             _ => None,
         };
         Ok(Some((name, color)))

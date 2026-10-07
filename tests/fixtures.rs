@@ -156,7 +156,7 @@ fn big_endian_fixtures_convert() {
     ] {
         let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         let mut out = Vec::new();
-        indd::convert(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        indd::convert_into(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert_eq!(&out[..4], b"PK\x03\x04", "{rel}");
         let text = String::from_utf8_lossy(&out);
         for e in expected {
@@ -177,7 +177,7 @@ fn little_endian_fixtures_convert() {
     ] {
         let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         let mut out = Vec::new();
-        indd::convert(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        indd::convert_into(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert_eq!(&out[..4], b"PK\x03\x04", "{rel}");
         assert_eq!(&out[30..38], b"mimetype", "{rel}: mimetype must be first");
         let text = String::from_utf8_lossy(&out);
@@ -195,7 +195,7 @@ fn style_kind_is_a_u16() {
     };
     let bytes = std::fs::read(root.join("scml-template/scml.indt")).unwrap();
     let mut out = Vec::new();
-    indd::convert(&bytes, "test.indd", &mut out).unwrap();
+    indd::convert_into(&bytes, "test.indd", &mut out).unwrap();
     let text = String::from_utf8_lossy(&out);
     assert!(text.contains(r#"<CharacterStyle Self="CharacterStyle/abbr" Name="abbr" "#));
     // The u16 after the kind is the imported flag.
@@ -217,7 +217,6 @@ fn audit_accounts_for_every_object() {
         let a = indd::audit::audit(&bytes, rel).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert_eq!(a.error, None, "{rel}");
         let c = indd::Container::parse(&bytes).unwrap();
-        let _order = indd::object::use_byte_order(c.header.byte_order);
         let db = c.database().unwrap();
         let with_data = db
             .uids()
@@ -228,7 +227,53 @@ fn audit_accounts_for_every_object() {
         // The document object is always read.
         assert!(a.classes[&Some(0xE01)].read > 0, "{rel}");
         // Auditing reports the same warnings as converting.
-        let warnings = indd::convert(&bytes, rel, std::io::sink()).unwrap();
+        let warnings: Vec<String> = indd::convert(&bytes, rel)
+            .unwrap()
+            .warnings
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         assert_eq!(a.warnings, warnings, "{rel}");
     }
+}
+
+/// Big- and little-endian files converted at the same time on several
+/// threads give the same packages and warnings as converted one by one:
+/// a conversion keeps no global or thread-local state.
+#[test]
+fn conversions_on_several_threads_are_independent() {
+    let Some(root) = fixtures() else {
+        return;
+    };
+    let files: Vec<Vec<u8>> = [
+        "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
+        "scml-template/scml.indt",
+        "xmp-toolkit-bluesquare/BlueSquare.indd",
+        "lizdenys-minizine/indesign-minizine-template.indd",
+    ]
+    .iter()
+    .map(|rel| std::fs::read(root.join(rel)).unwrap())
+    .collect();
+    let one_by_one: Vec<_> = files
+        .iter()
+        .map(|b| indd::convert(b, "test.indd").unwrap())
+        .collect();
+    let parallel: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = files
+            .iter()
+            .map(|b| s.spawn(move || indd::convert(b, "test.indd").unwrap()))
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for (a, b) in one_by_one.iter().zip(&parallel) {
+        assert_eq!(a.idml, b.idml);
+        assert_eq!(a.warnings, b.warnings);
+    }
+}
+
+#[test]
+fn results_can_be_sent_between_threads() {
+    fn send_sync<T: Send + Sync>() {}
+    send_sync::<indd::Conversion>();
+    send_sync::<indd::Error>();
 }

@@ -2,7 +2,7 @@
 //! See `docs/format/fonts.md` and `docs/format/objects.md`.
 
 use crate::Error;
-use crate::object::{Cursor, u16_from};
+use crate::object::Cursor;
 
 pub mod class {
     pub const COMPOSITE_FONT: u32 = 0xCB02;
@@ -71,10 +71,11 @@ impl CompositeFontEntry {
     /// Chunk 0xCB03: name, u32 font family, font style, four f64, u16 1,
     /// u16 range count, ranges (first, last, first), four u16.
     pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<CompositeFontEntry>, Error> {
+        let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::COMPOSITE_FONT_ENTRY) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(d);
+        let mut c = enc.cursor(d);
         let name = flagged_name(&mut c)?;
         let font_family = c.u32()?;
         let font_style = flagged_name(&mut c)?;
@@ -114,19 +115,20 @@ impl CompositeFont {
     /// the entry UIDs, which end the chunk. Returns the name and the
     /// entry UIDs.
     pub fn read(obj: &crate::Object) -> Result<Option<(String, Vec<u32>)>, Error> {
+        let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::COMPOSITE_FONT) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(d);
+        let mut c = enc.cursor(d);
         let name = flagged_name(&mut c)?;
         let start = c.pos();
         let Some(p) = (start..d.len().saturating_sub(1)).find(|&p| {
-            let n = u16_from([d[p], d[p + 1]]) as usize;
+            let n = enc.u16_from([d[p], d[p + 1]]) as usize;
             n > 0 && p + 2 + 4 * n == d.len()
         }) else {
             return Ok(Some((name, Vec::new())));
         };
-        let mut c = Cursor::new(&d[p..]);
+        let mut c = enc.cursor(&d[p..]);
         let n = c.u16()?;
         let entries = (0..n).map(|_| c.u32()).collect::<Result<Vec<_>, _>>()?;
         Ok(Some((name, entries)))
@@ -147,13 +149,14 @@ pub struct CjkTable {
 
 impl CjkTable {
     pub fn read(uid: u32, cls: u32, obj: &crate::Object) -> Result<Option<CjkTable>, Error> {
+        let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::TABLE_NAME) else {
             return Ok(None);
         };
-        let name = flagged_name(&mut Cursor::new(d))?;
+        let name = flagged_name(&mut enc.cursor(d))?;
         let chars = match obj.chunk(chunk::KINSOKU_CHARS) {
             Some(d) if cls == class::CUSTOM_KINSOKU => {
-                let mut c = Cursor::new(d);
+                let mut c = enc.cursor(d);
                 let counts = [c.u16()?, c.u16()?, c.u16()?, c.u16()?, c.u16()?];
                 let mut lists: [String; 5] = Default::default();
                 for (list, n) in lists.iter_mut().zip(counts) {

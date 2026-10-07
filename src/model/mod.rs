@@ -49,7 +49,7 @@ pub use variable::TextVariable;
 pub use xref::CrossReferenceFormat;
 
 use crate::audit::List;
-use crate::object::{Cursor, Object, f64_at, i16_from, u16_at, u16_from, u32_at, u32_from};
+use crate::object::{Cursor, Encoding, Object};
 use crate::{Database, Error, Version};
 
 #[cfg(test)]

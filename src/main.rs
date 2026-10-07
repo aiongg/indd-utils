@@ -271,8 +271,6 @@ fn parse_uid(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
 fn dump(path: &str, uids: &[u32], limit: usize) -> CliResult {
     let bytes = std::fs::read(path)?;
     let c = indd::Container::parse(&bytes)?;
-    let _order = indd::object::use_byte_order(c.header.byte_order);
-    let _tag = indd::object::use_string_tag(indd::object::string_tag_for(c.header.version));
     let db = c.database()?;
     let mut out = std::io::stdout().lock();
     for &uid in uids {
@@ -317,7 +315,7 @@ fn convert(input: &str, output: &str) -> CliResult {
         .file_name()
         .map_or_else(|| input.to_string(), |n| n.to_string_lossy().into_owned());
     let file = std::io::BufWriter::new(std::fs::File::create(output)?);
-    for warning in indd::convert(&bytes, &name, file)? {
+    for warning in indd::convert_into(&bytes, &name, file)? {
         eprintln!("warning: {warning}");
     }
     Ok(())

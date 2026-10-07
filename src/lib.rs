@@ -2,6 +2,32 @@
 //!
 //! The format is undocumented. Everything this crate knows about it is
 //! recorded in `docs/format/`; see `CLEANROOM.md` for how it was learned.
+//!
+//! The main entry points convert an INDD file to IDML:
+//!
+//! ```no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let conversion = indd::convert_file("brochure.indd")?;
+//! std::fs::write("brochure.idml", &conversion.idml)?;
+//! for warning in &conversion.warnings {
+//!     eprintln!("warning: {warning}");
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Bytes that are not an INDD file give an error:
+//!
+//! ```
+//! let bytes = vec![0u8; 4096];
+//! let err = indd::convert(&bytes, "empty.indd").unwrap_err();
+//! assert!(matches!(err, indd::Error::NotIndd));
+//! ```
+//!
+//! A conversion keeps no global or thread-local state, so documents can be
+//! converted on several threads at once. Lower layers are public for tools
+//! that inspect files: [`Header`], [`Container`], [`Database`], [`Object`]
+//! and the [`model`].
 
 pub mod audit;
 pub mod container;
@@ -14,7 +40,7 @@ pub mod object;
 pub use container::{Container, ContigObject, MasterPage};
 pub use database::{Database, Entry};
 pub use header::{ByteOrder, Header, Version};
-pub use object::{Chunk, Cursor, Object};
+pub use object::{Chunk, Cursor, Encoding, Object};
 
 #[derive(Debug)]
 pub enum Error {
@@ -102,16 +128,69 @@ pub fn read_header(path: impl AsRef<std::path::Path>) -> Result<Header, Error> {
     Header::parse(&buf[..got])
 }
 
-/// Convert INDD bytes to an IDML package written to `out`. `name` is the
-/// document name recorded in the package (normally the INDD file name).
-/// Returns warnings about content that could not be converted.
-pub fn convert(indd: &[u8], name: &str, out: impl std::io::Write) -> Result<Vec<String>, Error> {
+/// A problem that did not stop a conversion: content that was left out
+/// or could not be converted exactly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Warning {
+    message: String,
+}
+
+impl Warning {
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl std::fmt::Display for Warning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+/// The result of a conversion: the IDML package and the warnings.
+#[derive(Debug, Clone)]
+pub struct Conversion {
+    /// The IDML package (a ZIP file).
+    pub idml: Vec<u8>,
+    pub warnings: Vec<Warning>,
+}
+
+/// Convert INDD bytes to an IDML package. `name` is the document name the
+/// package records (normally the INDD file name).
+///
+/// The conversion keeps no state outside its own call, so documents can
+/// be converted on several threads at once.
+pub fn convert(indd: &[u8], name: &str) -> Result<Conversion, Error> {
+    let mut idml = Vec::new();
+    let warnings = convert_into(indd, name, &mut idml)?;
+    Ok(Conversion { idml, warnings })
+}
+
+/// Convert the INDD file at `path`. The package records the file name as
+/// the document name.
+pub fn convert_file(path: impl AsRef<std::path::Path>) -> Result<Conversion, Error> {
+    let path = path.as_ref();
+    let indd = std::fs::read(path)?;
+    let name = path
+        .file_name()
+        .map_or_else(|| path.to_string_lossy(), |n| n.to_string_lossy());
+    convert(&indd, &name)
+}
+
+/// Convert INDD bytes to an IDML package written to `out`, and return the
+/// warnings. See [`convert`].
+pub fn convert_into(
+    indd: &[u8],
+    name: &str,
+    out: impl std::io::Write,
+) -> Result<Vec<Warning>, Error> {
     let container = Container::parse(indd)?;
-    let _order = object::use_byte_order(container.header.byte_order);
-    let _tag = object::use_string_tag(object::string_tag_for(container.header.version));
     let db = container.database()?;
     let doc = model::Reader::new(&db).document(container.header.version)?;
     let mut warnings = doc.warnings.clone();
     warnings.extend(idml::write(&doc, name, out)?);
-    Ok(warnings)
+    Ok(warnings
+        .into_iter()
+        .map(|message| Warning { message })
+        .collect())
 }

@@ -170,7 +170,7 @@ fn every_corpus_file_converts() {
     let mut failures = Vec::new();
     for p in &files {
         let bytes = std::fs::read(p).unwrap();
-        match indd::convert(&bytes, "test.indd", std::io::sink()) {
+        match indd::convert_into(&bytes, "test.indd", std::io::sink()) {
             Err(e) if !known_unreadable(&e) => failures.push(format!("{}: {e}", p.display())),
             _ => {}
         }

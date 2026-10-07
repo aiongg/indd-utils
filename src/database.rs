@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use crate::container::PAGE_SIZE;
+use crate::object::Encoding;
 use crate::{Container, Error};
 
 /// Page types, from the u32 at 0xFF4 of every database page.
@@ -77,6 +78,8 @@ pub struct Database<'a> {
     classes: Vec<(u32, u32)>,
     /// UIDs listed in the third tree. They have no class entry.
     unclassed: Vec<u32>,
+    /// The encoding of object data.
+    encoding: Encoding,
 }
 
 fn corrupt(msg: impl Into<String>) -> Error {
@@ -92,6 +95,7 @@ impl<'a> Database<'a> {
             entries: Vec::new(),
             classes: Vec::new(),
             unclassed: Vec::new(),
+            encoding: Encoding::of(&container.header),
         };
         let directory = db.u32(master + MASTER_LOGICAL_DIR)?;
         let db_pages = container.master().db_pages;
@@ -318,7 +322,13 @@ impl<'a> Database<'a> {
             uid,
             class: self.class_of(uid),
             bytes,
+            encoding: self.encoding,
         }))
+    }
+
+    /// The encoding of object data in this database.
+    pub fn encoding(&self) -> Encoding {
+        self.encoding
     }
 
     /// The complete byte stream of object `uid`, or `None` if it doesn't exist.
@@ -381,6 +391,7 @@ pub(crate) mod synthetic {
             entries,
             classes,
             unclassed: Vec::new(),
+            encoding: Encoding::default(),
         }
     }
 
@@ -439,6 +450,7 @@ mod tests {
             entries: Vec::new(),
             classes: Vec::new(),
             unclassed: Vec::new(),
+            encoding: Encoding::default(),
         }
     }
 

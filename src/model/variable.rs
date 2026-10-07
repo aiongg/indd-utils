@@ -2,7 +2,7 @@
 //! (class 0xCA64). See `docs/format/text-variables.md`.
 
 use crate::Error;
-use crate::object::{Cursor, Object, u32_at, u32_from};
+use crate::object::{Cursor, Encoding, Object};
 
 pub mod chunk {
     /// Definition: name, text, type and settings.
@@ -51,7 +51,7 @@ impl TextVariable {
         let Some(data) = obj.chunk(chunk::DEFINITION) else {
             return Ok(None);
         };
-        parse(uid, data).map(Some)
+        parse(obj.encoding, uid, data).map(Some)
     }
 }
 
@@ -64,8 +64,8 @@ fn counted(c: &mut Cursor) -> Result<String, Error> {
 }
 
 /// Chunk 0x28BD: name, text, u32 type, then 20 bytes.
-fn parse(uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
-    let mut c = Cursor::new(data);
+fn parse(enc: Encoding, uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
+    let mut c = enc.cursor(data);
     let name = counted(&mut c)?;
     let text = counted(&mut c)?;
     let kind = c.u32()?;
@@ -76,11 +76,11 @@ fn parse(uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
         && match kind {
             // Dates: the first u32 is 0 or 0xCAB3 in the samples.
             0xCAA1 | 0xCAAB | 0xCAAC => {
-                (zero(&rest[..4]) || u32_at(rest, 0) == Some(0xCAB3)) && zero(&rest[4..])
+                (zero(&rest[..4]) || enc.u32_at(rest, 0) == Some(0xCAB3)) && zero(&rest[4..])
             }
-            0xCAC0 => u32_at(rest, 0) == Some(0x8C64) && zero(&rest[4..]),
+            0xCAC0 => enc.u32_at(rest, 0) == Some(0x8C64) && zero(&rest[4..]),
             0xCAAA => {
-                style = Some(u32_from(rest[4..8].try_into().unwrap()));
+                style = Some(enc.u32_from(rest[4..8].try_into().unwrap()));
                 zero(&rest[..4]) && zero(&rest[8..])
             }
             _ => zero(rest) && text.is_empty(),
@@ -105,9 +105,10 @@ pub struct Instance {
 
 impl Instance {
     pub fn read(uid: u32, obj: &Object) -> Result<Instance, Error> {
+        let enc = obj.encoding;
         let name = match obj.chunk(chunk::INSTANCE_NAME) {
             Some(d) if d.len() > 1 => {
-                let mut c = Cursor::new(d);
+                let mut c = enc.cursor(d);
                 c.flag()?;
                 c.string()?
             }
@@ -137,7 +138,7 @@ mod tests {
         d.extend(0xCAA1u32.to_le_bytes());
         d.extend([0xB3, 0xCA, 0, 0]);
         d.extend([0; 16]);
-        let v = parse(0x84, &d).unwrap();
+        let v = parse(crate::object::Encoding::default(), 0x84, &d).unwrap();
         assert_eq!(v.name, "Output Date");
         assert_eq!(v.text, "dd.MM.yy");
         assert_eq!(v.type_name(), Some("OutputDateType"));
@@ -152,12 +153,16 @@ mod tests {
         d.extend([0; 4]);
         d.extend(0x81u32.to_le_bytes());
         d.extend([0; 12]);
-        let v = parse(0x89, &d).unwrap();
+        let v = parse(crate::object::Encoding::default(), 0x89, &d).unwrap();
         assert_eq!(v.style, Some(0x81));
         assert!(v.as_in_samples);
         // Another value in a field not identified.
         let last = d.len() - 1;
         d[last] = 1;
-        assert!(!parse(0x89, &d).unwrap().as_in_samples);
+        assert!(
+            !parse(crate::object::Encoding::default(), 0x89, &d)
+                .unwrap()
+                .as_in_samples
+        );
     }
 }

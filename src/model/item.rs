@@ -276,7 +276,7 @@ impl<'a> Reader<'a> {
         if d.len() < 48 {
             return Ok(Some(None));
         }
-        let Matrix([a, b, c, dd, _, _]) = Matrix::read(&mut Cursor::new(&d))?;
+        let Matrix([a, b, c, dd, _, _]) = Matrix::read(&mut self.cursor(&d))?;
         Ok(Some(match [a, b, c, dd] {
             [1.0, 0.0, 0.0, 1.0] => Some(Orientation::Horizontal),
             [0.0, 1.0, -1.0, 0.0] => Some(Orientation::Vertical),
@@ -301,25 +301,25 @@ impl<'a> Reader<'a> {
             return Ok(None);
         }
         let minimum_sizes = (just.len() >= 48).then(|| {
-            let flag = |at| u16_at(&just, at).is_some_and(|v| v != 0);
+            let flag = |at| self.enc().u16_at(&just, at).is_some_and(|v| v != 0);
             (
                 [flag(26), flag(36)],
                 [
-                    f64_at(&just, 28).unwrap_or(0.0),
-                    f64_at(&just, 38).unwrap_or(0.0),
+                    self.enc().f64_at(&just, 28).unwrap_or(0.0),
+                    self.enc().f64_at(&just, 38).unwrap_or(0.0),
                 ],
                 flag(46),
             )
         });
         let column_rule = match self.chunk(mcf, chunk::FRAME_COLUMN_RULE)? {
-            Some(d) => match (f64_at(&d, 28), u32_at(&d, 36)) {
+            Some(d) => match (self.enc().f64_at(&d, 28), self.enc().u32_at(&d, 36)) {
                 (Some(w), Some(c)) => Some((w, c)),
                 _ => None,
             },
             None => None,
         };
         let footnotes = match self.chunk(mcf, chunk::FRAME_FOOTNOTES)? {
-            Some(d) => match (f64_at(&d, 4), f64_at(&d, 12)) {
+            Some(d) => match (self.enc().f64_at(&d, 4), self.enc().f64_at(&d, 12)) {
                 (Some(a), Some(b)) => Some([a, b]),
                 _ => None,
             },
@@ -329,30 +329,30 @@ impl<'a> Reader<'a> {
         // right, bottom.
         let inset = match self.chunk(frame, chunk::FRAME_INSET)? {
             Some(d) if d.len() >= 44 => {
-                let f = |at| f64_at(&d, at).unwrap_or(0.0);
+                let f = |at| self.enc().f64_at(&d, at).unwrap_or(0.0);
                 [f(20), f(12), f(36), f(28)]
             }
             _ => [0.0; 4],
         };
         Ok(Some(TextFramePreferences {
-            column_count: Cursor::new(&cols).u32()?,
-            column_gutter: Cursor::new(&cols[4..]).f64()?,
-            column_fixed_width: Cursor::new(&cols[14..]).f64()?,
-            first_baseline_offset: Cursor::new(&just).u16()?,
-            vertical_justification: Cursor::new(&just[2..]).u16()?,
-            vertical_balance_columns: Cursor::new(&just[20..]).u16()? != 0,
-            auto_sizing_type: Cursor::new(&just[22..]).u16()?,
-            auto_sizing_reference_point: Cursor::new(&just[24..]).u16()?,
+            column_count: self.cursor(&cols).u32()?,
+            column_gutter: self.cursor(&cols[4..]).f64()?,
+            column_fixed_width: self.cursor(&cols[14..]).f64()?,
+            first_baseline_offset: self.cursor(&just).u16()?,
+            vertical_justification: self.cursor(&just[2..]).u16()?,
+            vertical_balance_columns: self.cursor(&just[20..]).u16()? != 0,
+            auto_sizing_type: self.cursor(&just[22..]).u16()?,
+            auto_sizing_reference_point: self.cursor(&just[24..]).u16()?,
             use_fixed_width: cols.get(12).is_some_and(|&b| b != 0),
             max_width: if cols.len() >= 40 {
-                f64_at(&cols, 32)
+                self.enc().f64_at(&cols, 32)
             } else {
                 None
             },
             minimum_sizes,
             ignore_wrap: self
                 .chunk(mcf, chunk::FRAME_IGNORE_WRAP)?
-                .and_then(|d| u16_at(&d, 0))
+                .and_then(|d| self.enc().u16_at(&d, 0))
                 .map(|v| v != 0),
             column_rule,
             column_rule_override: self
@@ -372,7 +372,7 @@ impl<'a> Reader<'a> {
         };
         let name = match self.chunk(uid, name_chunk)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let builtin = c.flag()? == 1;
                 Some(ItemName {
                     builtin,
@@ -385,7 +385,7 @@ impl<'a> Reader<'a> {
             let Some(d) = self.chunk(uid, id)? else {
                 return Ok(Vec::new());
             };
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             let n = c.u32()? as usize;
             if n > d.len() / 8 {
                 return Err(Error::Corrupt(format!("item {uid}: {n} change counts")));
@@ -394,7 +394,7 @@ impl<'a> Reader<'a> {
         };
         let overridden = match self.chunk(uid, chunk::ITEM_OVERRIDE)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 let master = c.u32()?;
                 Some((master, c.u32_list()?))
             }
@@ -404,10 +404,10 @@ impl<'a> Reader<'a> {
             name,
             hidden: self
                 .chunk(uid, chunk::ITEM_VISIBLE)?
-                .is_some_and(|d| d.len() >= 2 && Cursor::new(&d).u16().ok() == Some(0)),
+                .is_some_and(|d| d.len() >= 2 && self.cursor(&d).u16().ok() == Some(0)),
             locked: self
                 .chunk(uid, chunk::ITEM_LOCKED)?
-                .is_some_and(|d| d.len() >= 4 && Cursor::new(&d).u32().ok() == Some(1)),
+                .is_some_and(|d| d.len() >= 4 && self.cursor(&d).u32().ok() == Some(1)),
             layout_constraints: self
                 .chunk(uid, chunk::ITEM_LAYOUT_CONSTRAINTS)?
                 .and_then(|d| d.first().copied()),
@@ -419,7 +419,7 @@ impl<'a> Reader<'a> {
             overridden,
             graphic_frame: self
                 .chunk(uid, chunk::ITEM_CONTENT)?
-                .is_some_and(|d| d.len() >= 2 && Cursor::new(&d).u16().ok() == Some(1)),
+                .is_some_and(|d| d.len() >= 2 && self.cursor(&d).u16().ok() == Some(1)),
         })
     }
 
@@ -437,7 +437,7 @@ impl<'a> Reader<'a> {
         if d.len() < 44 {
             return Ok(None);
         }
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         let mode = c.u32()?;
         c.skip(4)?;
         let offsets = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
@@ -461,7 +461,7 @@ impl<'a> Reader<'a> {
         let Some(data) = self.chunk(uid, chunk::ITEM_PATHS)? else {
             return Ok(Vec::new());
         };
-        let mut c = Cursor::new(&data);
+        let mut c = self.cursor(&data);
         let n = c.u32()?;
         let mut paths = Vec::new();
         for _ in 0..n {
@@ -545,10 +545,10 @@ impl<'a> Reader<'a> {
     ) -> Result<Option<PageItem>, Error> {
         // Groups without chunk 0x151 have their transform in chunk 0x40D.
         let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
-            Some(d) => Matrix::read(&mut Cursor::new(&d))?,
+            Some(d) => Matrix::read(&mut self.cursor(&d))?,
             None => match self.chunk(uid, chunk::GROUP_TRANSFORM)? {
                 Some(d) if cls == Some(class::GROUP) && d.len() >= 48 => {
-                    Matrix::read(&mut Cursor::new(&d))?
+                    Matrix::read(&mut self.cursor(&d))?
                 }
                 _ => Matrix::IDENTITY,
             },
@@ -575,11 +575,11 @@ impl<'a> Reader<'a> {
         }
         let paths = self.paths(uid)?;
         let attrs = match self.chunk(uid, chunk::ITEM_ATTRS)? {
-            Some(d) => Attrs::parse(&d, List::Item).unwrap_or_default(),
+            Some(d) => Attrs::parse(self.enc(), &d, List::Item).unwrap_or_default(),
             None => Attrs::default(),
         };
         let object_style = match self.chunk(uid, chunk::ITEM_OBJECT_STYLE)? {
-            Some(d) => uid_or_none(Cursor::new(&d).u32()?),
+            Some(d) => uid_or_none(self.cursor(&d).u32()?),
             None => None,
         };
         let kind = if cls == Some(class::GROUP) {
@@ -605,7 +605,7 @@ impl<'a> Reader<'a> {
         } else {
             let code = self
                 .chunk(uid, chunk::ITEM_SHAPE)?
-                .and_then(|d| u32_at(&d, 2));
+                .and_then(|d| self.enc().u32_at(&d, 2));
             ItemKind::Shape(classify(&paths, code))
         };
         Ok(Some(PageItem {
@@ -636,18 +636,18 @@ impl<'a> Reader<'a> {
             _ => return Ok(None),
         };
         let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
-            Some(d) => Matrix::read(&mut Cursor::new(&d))?,
+            Some(d) => Matrix::read(&mut self.cursor(&d))?,
             None => Matrix::IDENTITY,
         };
         let bounds = match self.chunk(uid, chunk::GRAPHIC_BOUNDS)? {
             Some(d) => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 [c.f64()?, c.f64()?, c.f64()?, c.f64()?]
             }
             None => [0.0; 4],
         };
         let link = match self.chunk(uid, chunk::GRAPHIC_LINK)? {
-            Some(d) if d.len() >= 12 => self.link(Cursor::new(&d[8..]).u32()?)?,
+            Some(d) if d.len() >= 12 => self.link(self.cursor(&d[8..]).u32()?)?,
             _ => None,
         };
         let (link, contents) = match link {
@@ -660,7 +660,7 @@ impl<'a> Reader<'a> {
                 };
                 let data = match id {
                     Some(id) => match self.chunk(uid, id)? {
-                        Some(d) if d.len() >= 4 => self.raw_data(Cursor::new(&d).u32()?)?,
+                        Some(d) if d.len() >= 4 => self.raw_data(self.cursor(&d).u32()?)?,
                         _ => None,
                     },
                     None => None,
@@ -677,25 +677,25 @@ impl<'a> Reader<'a> {
             contents,
             text_wrap: self.text_wrap(uid)?,
             contour_type: match self.chunk(uid, chunk::CONTOUR_OPTION)? {
-                Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                Some(d) if d.len() >= 4 => Some(self.cursor(&d).u32()?),
                 _ => None,
             },
             clipping: match self.chunk(uid, chunk::CLIPPING_PATH)? {
                 Some(d) if d.len() >= 26 => {
-                    let f = |o: usize| Cursor::new(&d[o..]).f64();
+                    let f = |o: usize| self.cursor(&d[o..]).f64();
                     Some(ClippingPath {
-                        kind: Cursor::new(&d).u32()?,
+                        kind: self.cursor(&d).u32()?,
                         tolerance: f(4)?,
                         inset: f(12)?,
                         threshold: d[20],
-                        index: i16_from([d[23], d[24]]),
+                        index: self.enc().i16_from([d[23], d[24]]),
                         high_resolution: d[25],
                     })
                 }
                 _ => None,
             },
             photoshop_clipping: match self.chunk(uid, chunk::PHOTOSHOP_CLIPPING)? {
-                Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
+                Some(d) if d.len() >= 2 => Some(self.cursor(&d).u16()?),
                 _ => None,
             },
         }))
@@ -722,10 +722,10 @@ impl<'a> Reader<'a> {
         if info.len() < 12 {
             return Ok(None);
         }
-        let resource = Cursor::new(&info[8..]).u32()?;
+        let resource = self.cursor(&info[8..]).u32()?;
         let (uri, data) = match self.chunk(resource, chunk::LINK_RESOURCE_URI)? {
             Some(d) if d.len() >= 5 => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 c.u8()?;
                 let n = c.u32()? as usize;
                 let uri = String::from_utf8_lossy(c.bytes(n.min(c.remaining()))?).into_owned();
@@ -760,11 +760,11 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(column, chunk::COLUMN_FRAME_LIST)? else {
             return Ok(none);
         };
-        let list = Cursor::new(&d).u32()?;
+        let list = self.cursor(&d).u32()?;
         let Some(d) = self.chunk(list, chunk::FRAME_LIST_FRAMES)? else {
             return Ok(none);
         };
-        let mut c = Cursor::new(&d);
+        let mut c = self.cursor(&d);
         let story = uid_or_none(c.u32()?);
         let columns = c.u32_list()?;
         // Columns belong to frames: column -> multi-column frame -> spline item.
@@ -772,11 +772,11 @@ impl<'a> Reader<'a> {
             let Some(h) = self.chunk(col, chunk::ITEM_HIERARCHY)? else {
                 return Ok(None);
             };
-            let mcf = Cursor::new(&h[4..]).u32()?;
+            let mcf = self.cursor(&h[4..]).u32()?;
             let Some(h) = self.chunk(mcf, chunk::ITEM_HIERARCHY)? else {
                 return Ok(None);
             };
-            Ok(uid_or_none(Cursor::new(&h[4..]).u32()?))
+            Ok(uid_or_none(self.cursor(&h[4..]).u32()?))
         };
         let mut frames: Vec<u32> = Vec::new();
         for col in columns.iter().copied() {

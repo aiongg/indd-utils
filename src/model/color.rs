@@ -1,7 +1,6 @@
 //! Colours and swatches. See `docs/format/objects.md`.
 
 use crate::Error;
-use crate::object::Cursor;
 
 pub mod class {
     pub const COLOR: u32 = 0x1F05;
@@ -87,19 +86,20 @@ impl Gradient {
     }
 
     pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Gradient>, Error> {
+        let enc = obj.encoding;
         let (Some(stops), Some(name)) = (
             obj.chunk(chunk::GRADIENT_STOPS),
             obj.chunk(chunk::GRADIENT_NAME),
         ) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(stops);
+        let mut c = enc.cursor(stops);
         let n = c.u16()? as usize;
         let colors = (0..n).map(|_| c.u32()).collect::<Result<Vec<_>, _>>()?;
         let locations = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
         let midpoints = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
         let kind = c.u32()?;
-        let mut nc = Cursor::new(name);
+        let mut nc = enc.cursor(name);
         let builtin_name = nc.flag()? == 1;
         let name = nc.string()?;
         let flags = nc.u32()?;
@@ -135,6 +135,7 @@ pub struct Tint {
 
 impl Tint {
     pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Tint>, Error> {
+        let enc = obj.encoding;
         if obj.chunk(chunk::COLOR_NAME).is_some() {
             return Ok(None);
         }
@@ -144,8 +145,8 @@ impl Tint {
         ) else {
             return Ok(None);
         };
-        let base = Cursor::new(base).u32()?;
-        let mut c = Cursor::new(tint);
+        let base = enc.cursor(base).u32()?;
+        let mut c = enc.cursor(tint);
         let value = c.f64()?;
         let color_override = c.u32()?;
         if base == 0 || value < 0.0 {
@@ -302,12 +303,13 @@ impl Color {
     }
 
     pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Color>, Error> {
+        let enc = obj.encoding;
         let (Some(name), Some(value)) =
             (obj.chunk(chunk::COLOR_NAME), obj.chunk(chunk::COLOR_VALUE))
         else {
             return Ok(None);
         };
-        let mut c = Cursor::new(name);
+        let mut c = enc.cursor(name);
         let builtin_name = c.flag()? == 1;
         let name_str = c.string()?;
         let flags = c.u32()?;
@@ -320,7 +322,7 @@ impl Color {
             .transpose()?;
         let alternate = match obj.chunk(chunk::COLOR_ALTERNATE) {
             Some(d) => {
-                let mut a = Cursor::new(d);
+                let mut a = enc.cursor(d);
                 let space = a.u32()?;
                 let n = a.u16()?;
                 Some((
@@ -330,7 +332,7 @@ impl Color {
             }
             None => None,
         };
-        let mut v = Cursor::new(value);
+        let mut v = enc.cursor(value);
         let space = match v.u32()? {
             5 => Space::Rgb,
             6 => Space::Cmyk,
@@ -341,11 +343,11 @@ impl Color {
         let n = v.u16()?;
         let values = (0..n).map(|_| v.f64()).collect::<Result<Vec<_>, _>>()?;
         let model = match obj.chunk(chunk::COLOR_MODEL) {
-            Some(d) => Cursor::new(d).u32()?,
+            Some(d) => enc.cursor(d).u32()?,
             None => 0,
         };
         let color_override = match obj.chunk(chunk::COLOR_OVERRIDE) {
-            Some(d) if d.len() >= 12 => Cursor::new(&d[8..]).u32()?,
+            Some(d) if d.len() >= 12 => enc.cursor(&d[8..]).u32()?,
             _ => 0,
         };
         Ok(Some(Color {
@@ -374,6 +376,75 @@ impl Color {
             Some((7, v)) => Some(("LAB", v.clone())),
             Some(_) => None,
         }
+    }
+}
+
+/// An ink (class 0x1F07). Chunk 0x1F0D: flag byte and name, then fields
+/// at offsets from the end of the name: f64 neutral density at 14, u32
+/// trap order − 1 at 26, f64 frequency at 32, f64 angle at 40.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ink {
+    pub uid: u32,
+    /// The IDML name, with `$ID/` for a built-in name.
+    pub name: String,
+    /// `None` when the stored value is outside the 0.001–10 the IDML
+    /// schema allows (−1 in some files; `objects.md`).
+    pub neutral_density: Option<f64>,
+    pub trap_order: u32,
+    pub frequency: f64,
+    pub angle: f64,
+}
+
+impl Ink {
+    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Ink>, Error> {
+        let enc = obj.encoding;
+        let Some(d) = obj.chunk(chunk::INK) else {
+            return Ok(None);
+        };
+        let mut c = enc.cursor(d);
+        let builtin = c.flag()? == 1;
+        let name = c.string()?;
+        let end = c.pos();
+        if d.len() < end + 48 {
+            return Ok(None);
+        }
+        let f = |o: usize| enc.cursor(&d[end + o..]).f64();
+        Ok(Some(Ink {
+            uid,
+            name: if builtin { format!("$ID/{name}") } else { name },
+            neutral_density: Some(f(14)?).filter(|v| (0.001..=10.0).contains(v)),
+            trap_order: enc.cursor(&d[end + 26..]).u32()? + 1,
+            frequency: f(32)?,
+            angle: f(40)?,
+        }))
+    }
+}
+
+/// A colour group (class 0x1F39): chunk 0x13C is a flag byte and the name,
+/// chunk 0x1F60 a UID list of its swatches.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColorGroup {
+    pub uid: u32,
+    pub name: String,
+    pub swatches: Vec<u32>,
+}
+
+impl ColorGroup {
+    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<ColorGroup>, Error> {
+        let enc = obj.encoding;
+        let Some(d) = obj.chunk(chunk::COLOR_GROUP_NAME) else {
+            return Ok(None);
+        };
+        let name = enc.cursor(&d[1.min(d.len())..]).string()?;
+        let swatches = match obj.chunk(chunk::COLOR_GROUP_SWATCHES) {
+            Some(d) => enc.cursor(d).u32_list()?,
+            None => Vec::new(),
+        };
+        Ok(Some(ColorGroup {
+            uid,
+            name,
+            swatches,
+        }))
     }
 }
 
@@ -447,72 +518,5 @@ mod tests {
         assert_eq!(g.idml_midpoint(2), None);
         // 90 % is outside what IDML allows.
         assert_eq!(g.idml_midpoint(3), None);
-    }
-}
-
-/// An ink (class 0x1F07). Chunk 0x1F0D: flag byte and name, then fields
-/// at offsets from the end of the name: f64 neutral density at 14, u32
-/// trap order − 1 at 26, f64 frequency at 32, f64 angle at 40.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Ink {
-    pub uid: u32,
-    /// The IDML name, with `$ID/` for a built-in name.
-    pub name: String,
-    /// `None` when the stored value is outside the 0.001–10 the IDML
-    /// schema allows (−1 in some files; `objects.md`).
-    pub neutral_density: Option<f64>,
-    pub trap_order: u32,
-    pub frequency: f64,
-    pub angle: f64,
-}
-
-impl Ink {
-    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Ink>, Error> {
-        let Some(d) = obj.chunk(chunk::INK) else {
-            return Ok(None);
-        };
-        let mut c = Cursor::new(d);
-        let builtin = c.flag()? == 1;
-        let name = c.string()?;
-        let end = c.pos();
-        if d.len() < end + 48 {
-            return Ok(None);
-        }
-        let f = |o: usize| Cursor::new(&d[end + o..]).f64();
-        Ok(Some(Ink {
-            uid,
-            name: if builtin { format!("$ID/{name}") } else { name },
-            neutral_density: Some(f(14)?).filter(|v| (0.001..=10.0).contains(v)),
-            trap_order: Cursor::new(&d[end + 26..]).u32()? + 1,
-            frequency: f(32)?,
-            angle: f(40)?,
-        }))
-    }
-}
-
-/// A colour group (class 0x1F39): chunk 0x13C is a flag byte and the name,
-/// chunk 0x1F60 a UID list of its swatches.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ColorGroup {
-    pub uid: u32,
-    pub name: String,
-    pub swatches: Vec<u32>,
-}
-
-impl ColorGroup {
-    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<ColorGroup>, Error> {
-        let Some(d) = obj.chunk(chunk::COLOR_GROUP_NAME) else {
-            return Ok(None);
-        };
-        let name = Cursor::new(&d[1.min(d.len())..]).string()?;
-        let swatches = match obj.chunk(chunk::COLOR_GROUP_SWATCHES) {
-            Some(d) => Cursor::new(d).u32_list()?,
-            None => Vec::new(),
-        };
-        Ok(Some(ColorGroup {
-            uid,
-            name,
-            swatches,
-        }))
     }
 }

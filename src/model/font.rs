@@ -1,7 +1,7 @@
 //! Font families (class 0x3E03). See `docs/format/fonts.md`.
 
 use crate::Error;
-use crate::object::{Cursor, Object};
+use crate::object::{Encoding, Object};
 
 pub mod chunk {
     /// Family name and font records.
@@ -54,14 +54,14 @@ impl FontFamily {
         };
         // Files from InDesign 3.0 and 4.0 use older font records; one is
         // taken only if it reads the chunk to its end.
-        let mut family = match parse(uid, data, Record::Current) {
+        let mut family = match parse(obj.encoding, uid, data, Record::Current) {
             Ok(f) => f,
-            Err(e) => parse(uid, data, Record::Version4)
-                .or_else(|_| parse(uid, data, Record::Version3))
+            Err(e) => parse(obj.encoding, uid, data, Record::Version4)
+                .or_else(|_| parse(obj.encoding, uid, data, Record::Version3))
                 .map_err(|_| e)?,
         };
         if let Some(ids) = obj.chunk(chunk::TYPEKIT_IDS) {
-            for (font, id) in family.fonts.iter_mut().zip(typekit_ids(ids)?) {
+            for (font, id) in family.fonts.iter_mut().zip(typekit_ids(obj.encoding, ids)?) {
                 font.typekit_id = id;
             }
         }
@@ -81,8 +81,8 @@ enum Record {
 
 /// Chunk 0x3E05: u8, u16, name, u8, native name, 6 bytes, u16 font count,
 /// font records, u32 writing script.
-fn parse(uid: u32, data: &[u8], record: Record) -> Result<FontFamily, Error> {
-    let mut c = Cursor::new(data);
+fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFamily, Error> {
+    let mut c = enc.cursor(data);
     c.skip(3)?;
     let name = c.string()?;
     c.skip(1)?;
@@ -141,8 +141,8 @@ fn parse(uid: u32, data: &[u8], record: Record) -> Result<FontFamily, Error> {
 
 /// Chunk 0x3EEB: u32 count, then per font a flag byte (1 = `$ID/` key)
 /// and a string.
-fn typekit_ids(data: &[u8]) -> Result<Vec<String>, Error> {
-    let mut c = Cursor::new(data);
+fn typekit_ids(enc: Encoding, data: &[u8]) -> Result<Vec<String>, Error> {
+    let mut c = enc.cursor(data);
     let n = c.u32()?;
     let mut out = Vec::new();
     for _ in 0..n {
@@ -187,7 +187,13 @@ mod tests {
         d.extend(0x400Bu16.to_le_bytes());
         d.extend(b"Version 2.1");
         d.extend(1u32.to_le_bytes());
-        let f = parse(0x9E, &d, Record::Current).unwrap();
+        let f = parse(
+            crate::object::Encoding::default(),
+            0x9E,
+            &d,
+            Record::Current,
+        )
+        .unwrap();
         assert_eq!(f.name, "Myriad Pro");
         assert_eq!(f.writing_script, 1);
         let font = &f.fonts[0];
@@ -205,6 +211,9 @@ mod tests {
         d.extend(string(""));
         d.push(0);
         d.extend(string("TkD-1-ab"));
-        assert_eq!(typekit_ids(&d).unwrap(), ["$ID/", "TkD-1-ab"]);
+        assert_eq!(
+            typekit_ids(crate::object::Encoding::default(), &d).unwrap(),
+            ["$ID/", "TkD-1-ab"]
+        );
     }
 }

@@ -163,7 +163,7 @@ impl<'a> Reader<'a> {
 
     pub(super) fn story(&self, uid: u32) -> Result<Story, Error> {
         let data = self.required(uid, chunk::STORY_STRANDS)?;
-        let mut c = Cursor::new(&data);
+        let mut c = self.cursor(&data);
         c.skip(6)?;
         let mut strands = vec![c.u32()?];
         strands.extend(c.u32_list()?);
@@ -187,9 +187,9 @@ impl<'a> Reader<'a> {
                 && let Some(tree) = self.chunk(strand, hyperlink::chunk::RANGE_TREE)?
                 && tree.len() >= 4
             {
-                let first = u32_from(tree[..4].try_into().unwrap());
+                let first = self.enc().u32_from(tree[..4].try_into().unwrap());
                 let pages = |uid| self.chunk(uid, hyperlink::chunk::RANGE_PAGE);
-                match hyperlink::source_ranges(first, pages) {
+                match hyperlink::source_ranges(self.enc(), first, pages) {
                     Ok(r) => sources.extend(r),
                     Err(e) => self.warn(format!("story {uid}: hyperlink sources left out: {e}")),
                 }
@@ -197,14 +197,14 @@ impl<'a> Reader<'a> {
             let Some(list) = self.chunk(strand, chunk::STRAND_DATA)? else {
                 continue;
             };
-            let mut c = Cursor::new(&list);
+            let mut c = self.cursor(&list);
             let n = c.u16()?;
             let mut base = 0usize;
             for _ in 0..n {
                 let data_len = c.u32()? as usize;
                 let data_uid = c.u32()?;
                 let runs = self.required(data_uid, chunk::STRAND_RUNS)?;
-                let mut r = Cursor::new(&runs);
+                let mut r = self.cursor(&runs);
                 let kind = r.u32()?;
                 r.skip(4)?;
                 let count = r.u16()?;
@@ -213,7 +213,7 @@ impl<'a> Reader<'a> {
                 for _ in 0..count {
                     let size = r.u32()? as usize;
                     let rec = r.bytes(size)?;
-                    let mut rc = Cursor::new(rec);
+                    let mut rc = self.cursor(rec);
                     let len = rc.u32()? as usize;
                     let start = pos;
                     pos += len;
@@ -293,7 +293,7 @@ impl<'a> Reader<'a> {
         };
         let xml_element = match self.chunk(uid, xml::chunk::NODE_REF)? {
             Some(d) if d.len() >= 8 => {
-                let mut c = Cursor::new(&d);
+                let mut c = self.cursor(&d);
                 Some((c.u32()?, c.u32()?))
             }
             _ => None,
@@ -310,7 +310,7 @@ impl<'a> Reader<'a> {
                 class::ANCHOR => {
                     let settings = self
                         .chunk(item, chunk::ANCHOR_SETTINGS)?
-                        .map(|d| AnchorSettings::read(&d));
+                        .map(|d| AnchorSettings::read(self.enc(), &d));
                     for child in self.children(item, chunk::ANCHOR_CHILDREN)? {
                         if let Some(mut pi) = self.page_item(child, None)? {
                             pi.anchor = settings.clone();
@@ -399,12 +399,12 @@ impl<'a> Reader<'a> {
             // is the TOC style.
             toc_style: match self
                 .chunk(uid, chunk::STORY_TOC)?
-                .and_then(|d| u32_at(&d, 0))
+                .and_then(|d| self.enc().u32_at(&d, 0))
                 .and_then(uid_or_none)
             {
                 Some(toc) => self
                     .chunk(toc, chunk::TOC_STYLE_OF)?
-                    .and_then(|d| u32_at(&d, 0))
+                    .and_then(|d| self.enc().u32_at(&d, 0))
                     .and_then(uid_or_none),
                 None => None,
             },
@@ -424,16 +424,16 @@ impl<'a> Reader<'a> {
     ) -> Result<BTreeMap<usize, XmlMarker>, Error> {
         let mut out = BTreeMap::new();
         let first = match self.chunk(uid, xml::chunk::STORE)? {
-            Some(d) if d.len() >= 4 => Cursor::new(&d).u32()?,
+            Some(d) if d.len() >= 4 => self.cursor(&d).u32()?,
             _ => return Ok(out),
         };
-        let nodes = xml::read_store(first, |p| self.chunk(p, xml::chunk::PAGE))?;
+        let nodes = xml::read_store(self.enc(), first, |p| self.chunk(p, xml::chunk::PAGE))?;
         if nodes.is_empty() {
             return Ok(out);
         }
         let positions = match marker_strand.map(|s| self.chunk(s, xml::chunk::MARKER_TREE)) {
             Some(r) => match r? {
-                Some(d) => xml::marker_positions(&d)?,
+                Some(d) => xml::marker_positions(self.enc(), &d)?,
                 None => BTreeMap::new(),
             },
             None => BTreeMap::new(),
@@ -529,7 +529,7 @@ impl<'a> Reader<'a> {
                 Some(xml::class::CONTENT_HOLDER) => {
                     match self.chunk(node.content, chunk::ITEM_HIERARCHY)? {
                         Some(d) if d.len() >= 8 => {
-                            (uid_or_none(Cursor::new(&d[4..]).u32()?), false)
+                            (uid_or_none(self.cursor(&d[4..]).u32()?), false)
                         }
                         _ => (None, false),
                     }

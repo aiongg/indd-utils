@@ -5,7 +5,7 @@
 use super::{Attrs, Reader, chunk, class};
 use crate::Error;
 use crate::audit::List;
-use crate::object::{Cursor, big_endian};
+use crate::object::{Cursor, Encoding};
 
 /// A value for an element of `Resources/Preferences.xml` or a document
 /// setting in `designmap.xml`.
@@ -56,6 +56,7 @@ fn flagged(c: &mut Cursor) -> Result<(u8, String), Error> {
 /// Print settings (chunk 0xA4C, and 0xAF2 for booklets): see
 /// `docs/format/preferences.md`, print preferences.
 fn print_prefs(
+    enc: Encoding,
     d: &[u8],
     element: &'static str,
     values: &mut Vec<PrefValue>,
@@ -69,7 +70,7 @@ fn print_prefs(
             value,
         })
     };
-    let mut c = Cursor::new(d);
+    let mut c = enc.cursor(d);
     let has_record = c.u8()? != 0;
     c.u8()?;
     let n = c.u32()? as usize;
@@ -137,18 +138,18 @@ fn print_prefs(
         props.push((element, "PaperSize", PrefProp::Text(ty, text)));
     }
     let q = c.pos();
-    let f = |o: usize| Cursor::new(&d[q + o..]).f64();
+    let f = |o: usize| enc.cursor(&d[q + o..]).f64();
     set("PaperWidthRange", format!("{} {}", num(f(8)?), num(f(16)?)));
     set(
         "PaperHeightRange",
         format!("{} {}", num(f(32)?), num(f(40)?)),
     );
-    match Cursor::new(&d[q + 84..]).u16()? {
+    match enc.cursor(&d[q + 84..]).u16()? {
         0 => set("PrintPageOrientation", "Portrait".into()),
         1 => set("PrintPageOrientation", "Landscape".into()),
         _ => {}
     }
-    set("Copies", Cursor::new(&d[q + 104..]).u32()?.to_string());
+    set("Copies", enc.cursor(&d[q + 104..]).u32()?.to_string());
     match d.get(q + 118) {
         Some(0) => set("PrintBlankPages", "false".into()),
         Some(1) => set("PrintBlankPages", "true".into()),
@@ -271,7 +272,7 @@ impl Reader<'_> {
         let mut text_defaults = None;
         // The layouts below are those of InDesign CS5 (7.0) and later in
         // little-endian files: the versions the corpus pairs show.
-        if major < 7 || big_endian() {
+        if major < 7 || self.enc().big_endian() {
             return Ok(Prefs::default());
         }
         let Some(&(uid, _)) = self
@@ -293,7 +294,7 @@ impl Reader<'_> {
         // A u16 flag; `absent` is the value of documents without the chunk.
         let flag = |id: u32, absent: bool| -> Result<Option<String>, Error> {
             Ok(match get(id)? {
-                Some(d) if d.len() == 2 => match Cursor::new(&d).u16()? {
+                Some(d) if d.len() == 2 => match self.cursor(&d).u16()? {
                     0 => Some("false".into()),
                     1 => Some("true".into()),
                     _ => None,
@@ -313,7 +314,7 @@ impl Reader<'_> {
             }
         }
         if let Some(d) = get(id::COLOR_PROFILES)? {
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             c.u16()?;
             let n = c.u32()? as usize;
             c.skip(4 * n)?;
@@ -324,7 +325,7 @@ impl Reader<'_> {
                         Some("$ID/".to_string())
                     } else if self.class(profile) == Some(class::COLOR_PROFILE) {
                         match self.chunk(profile, id::PROFILE_NAME)? {
-                            Some(s) if s.len() > 1 => Cursor::new(&s[1..]).string().ok(),
+                            Some(s) if s.len() > 1 => self.cursor(&s[1..]).string().ok(),
                             _ => None,
                         }
                     } else {
@@ -338,7 +339,7 @@ impl Reader<'_> {
         }
         let intent = match get(id::COLOR_INTENT)? {
             None => Some("UseColorSettings"),
-            Some(d) if d.len() >= 4 => match Cursor::new(&d[2..]).u16()? {
+            Some(d) if d.len() >= 4 => match self.cursor(&d[2..]).u16()? {
                 0 => Some("Perceptual"),
                 2 => Some("RelativeColorimetric"),
                 11 => Some("UseColorSettings"),
@@ -358,7 +359,7 @@ impl Reader<'_> {
 
         // View settings.
         if let Some(d) = get(id::VIEW)?.filter(|d| d.len() == 56) {
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             let units: Vec<u32> = (0..6).map(|_| c.u32()).collect::<Result<_, _>>()?;
             for (i, names) in [
                 &["HorizontalMeasurementUnits"][..],
@@ -422,7 +423,7 @@ impl Reader<'_> {
 
         // Document setup beyond `DocumentPreferences`.
         if let Some(d) = get(chunk::DOCUMENT_PREFERENCES)?.filter(|d| d.len() >= 146) {
-            let f = |o: usize| Cursor::new(&d[o..]).f64();
+            let f = |o: usize| self.cursor(&d[o..]).f64();
             let b = |o: usize| (d[o] != 0).to_string();
             set("DocumentPreference", "DocumentBleedUniformSize", b(102));
             set("DocumentPreference", "SlugInsideOrLeftOffset", num(f(104)?));
@@ -438,7 +439,7 @@ impl Reader<'_> {
 
         // Text preferences and the default text frame columns.
         if let Some(d) = get(id::TEXT)?.filter(|d| d.len() >= 174) {
-            let f = |o: usize| Cursor::new(&d[o..]).f64();
+            let f = |o: usize| self.cursor(&d[o..]).f64();
             let b = |o: usize| (d[o] != 0).to_string();
             for (o, name) in [
                 (0, "SmallCap"),
@@ -469,7 +470,7 @@ impl Reader<'_> {
             set(
                 "TextFramePreference",
                 "TextColumnCount",
-                Cursor::new(&d[112..]).u32()?.to_string(),
+                self.cursor(&d[112..]).u32()?.to_string(),
             );
             const BASELINE: [&str; 5] = [
                 "LeadingOffset",
@@ -503,7 +504,7 @@ impl Reader<'_> {
         // Default margins and columns of new pages.
         let margins = match get(id::MARGINS)? {
             Some(d) if d.len() >= 32 => {
-                let f = |o: usize| Cursor::new(&d[o..]).f64();
+                let f = |o: usize| self.cursor(&d[o..]).f64();
                 Some([f(0)?, f(8)?, f(16)?, f(24)?])
             }
             Some(_) => None,
@@ -516,7 +517,7 @@ impl Reader<'_> {
             set("MarginPreference", "Bottom", num(bottom));
         }
         let columns = match get(id::COLUMNS)? {
-            Some(d) if d.len() >= 12 => Some((Cursor::new(&d).u32()?, Cursor::new(&d[4..]).f64()?)),
+            Some(d) if d.len() >= 12 => Some((self.cursor(&d).u32()?, self.cursor(&d[4..]).f64()?)),
             Some(_) => None,
             None => Some((1, 12.0)),
         };
@@ -536,7 +537,7 @@ impl Reader<'_> {
         // Pasteboard: f64 horizontal and vertical margins.
         let pasteboard = match get(id::PASTEBOARD)? {
             Some(d) if d.len() >= 16 => {
-                let f = |o: usize| Cursor::new(&d[o..]).f64();
+                let f = |o: usize| self.cursor(&d[o..]).f64();
                 Some((f(0)?, f(8)?))
             }
             Some(_) => None,
@@ -557,7 +558,7 @@ impl Reader<'_> {
         // Default XML tags: name (u32 length, text segments) and u32 UID of
         // an interface colour, for story, table, (untagged), cell, image.
         if let Some(d) = get(id::XML_TAGS)? {
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             for (name, color) in [
                 (Some("DefaultStoryTagName"), "DefaultStoryTagColor"),
                 (Some("DefaultTableTagName"), "DefaultTableTagColor"),
@@ -586,9 +587,9 @@ impl Reader<'_> {
         {
             Some(&(u, _)) => match self.chunk(u, id::ITEM_DEFAULTS)? {
                 Some(d) if d.len() >= 12 => {
-                    let n = Cursor::new(&d[8..]).u32()? as usize;
+                    let n = self.cursor(&d[8..]).u32()? as usize;
                     d.get(12 + 12 * n..)
-                        .and_then(|rest| Attrs::parse(rest, List::Item).ok())
+                        .and_then(|rest| Attrs::parse(self.enc(), rest, List::Item).ok())
                 }
                 _ => None,
             },
@@ -606,7 +607,7 @@ impl Reader<'_> {
                 let (mut v, mut p, mut r) = (Vec::new(), Vec::new(), Vec::new());
                 // A layout the corpus does not show leaves the element as
                 // observed.
-                if print_prefs(&d, element, &mut v, &mut p, &mut r).is_ok() {
+                if print_prefs(self.enc(), &d, element, &mut v, &mut p, &mut r).is_ok() {
                     for pv in v {
                         set(pv.element, pv.name, pv.value);
                     }
@@ -618,7 +619,7 @@ impl Reader<'_> {
 
         // Grids.
         if let Some(d) = get(id::BASELINE_GRID)?.filter(|d| d.len() >= 26) {
-            let f = |o: usize| Cursor::new(&d[o..]).f64();
+            let f = |o: usize| self.cursor(&d[o..]).f64();
             set("GridPreference", "BaselineDivision", num(f(2)?));
             set("GridPreference", "BaselineStart", num(f(10)?));
             set(
@@ -629,8 +630,8 @@ impl Reader<'_> {
         }
         let (h, hs, v, vs) = match get(id::DOCUMENT_GRID)? {
             Some(d) if d.len() >= 32 => {
-                let f = |o: usize| Cursor::new(&d[o..]).f64();
-                let u = |o: usize| Cursor::new(&d[o..]).u32();
+                let f = |o: usize| self.cursor(&d[o..]).f64();
+                let u = |o: usize| self.cursor(&d[o..]).u32();
                 (f(8)?, u(16)?, f(20)?, u(28)?)
             }
             Some(_) => (f64::NAN, 0, f64::NAN, 0),
@@ -651,7 +652,7 @@ impl Reader<'_> {
         // (u32 length, then text segments), the point size and the UID
         // of an interface colour.
         if let Some(d) = get(id::WATERMARK)?.filter(|d| d.len() > 10) {
-            let mut c = Cursor::new(&d[10..]);
+            let mut c = self.cursor(&d[10..]);
             let n = c.u32()? as usize;
             let family = c.segments(n)?;
             let n = c.u32()? as usize;
@@ -667,7 +668,7 @@ impl Reader<'_> {
 
         // Text defaults: a text attribute list, as styles have.
         if let Some(d) = get(chunk::STYLE_ATTRS)?.filter(|d| d.len() >= 2) {
-            let mut c = Cursor::new(&d);
+            let mut c = self.cursor(&d);
             let n = c.u16()? as usize;
             text_defaults = Attrs::parse_text(&mut c, n, List::Style).ok();
         }
@@ -675,7 +676,9 @@ impl Reader<'_> {
             values,
             colors,
             text_defaults,
-            anchor: anchor.as_deref().map(super::AnchorSettings::read),
+            anchor: anchor
+                .as_deref()
+                .map(|d| super::AnchorSettings::read(self.enc(), d)),
             item_defaults,
             props,
             print_records,

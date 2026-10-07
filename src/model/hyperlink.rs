@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::Error;
-use crate::object::{Cursor, Object};
+use crate::object::{Cursor, Encoding, Object};
 
 pub mod class {
     pub const HYPERLINK: u32 = 0x13501;
@@ -130,10 +130,11 @@ const SAMPLE_APPEARANCE: &[[u8; 18]] = &[
 
 impl Hyperlink {
     pub fn read(uid: u32, obj: &Object) -> Result<Option<Hyperlink>, Error> {
+        let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::HYPERLINK) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(d);
+        let mut c = enc.cursor(d);
         let source = c.u32()?;
         c.skip(2)?;
         let hidden = c.u16()? != 0;
@@ -158,16 +159,17 @@ impl Hyperlink {
 
 impl TextSource {
     pub fn read(uid: u32, obj: &Object) -> Result<Option<TextSource>, Error> {
+        let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::TEXT_SOURCE) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(d);
+        let mut c = enc.cursor(d);
         let hidden = c.u8()? != 0;
         c.skip(5)?;
         let name = flagged_string(&mut c)?;
         let character_style = match obj.chunk(chunk::TEXT_SOURCE_RANGE) {
             Some(r) => {
-                let mut c = Cursor::new(r);
+                let mut c = enc.cursor(r);
                 c.skip(8)?;
                 Some(c.u32()?).filter(|&s| s != 0)
             }
@@ -185,6 +187,7 @@ impl TextSource {
 
 impl Destination {
     pub fn read(uid: u32, class: u32, obj: &Object) -> Result<Option<Destination>, Error> {
+        let enc = obj.encoding;
         let id = if class == class::PAGE_DESTINATION {
             chunk::PAGE_DESTINATION
         } else {
@@ -193,7 +196,7 @@ impl Destination {
         let Some(d) = obj.chunk(id) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(d);
+        let mut c = enc.cursor(d);
         let hidden = c.u8()? != 0;
         c.skip(1)?;
         let name = flagged_string(&mut c)?;
@@ -202,14 +205,14 @@ impl Destination {
             let Some(v) = obj.chunk(chunk::PAGE_DESTINATION_VIEW) else {
                 return Ok(None);
             };
-            let mut c = Cursor::new(v);
+            let mut c = enc.cursor(v);
             let page = c.u32()?;
             let zoom = Some(c.f64()?).filter(|z| (0.05..=40.0).contains(z));
             let view = c.u32()?;
             DestinationKind::Page { page, zoom, view }
         } else {
             let url = match obj.chunk(chunk::URL) {
-                Some(u) => flagged_string(&mut Cursor::new(u))?,
+                Some(u) => flagged_string(&mut enc.cursor(u))?,
                 None => name.clone(),
             };
             DestinationKind::Url { url }
@@ -226,10 +229,11 @@ impl Destination {
 
 impl Bookmark {
     pub fn read(uid: u32, obj: &Object) -> Result<Option<Bookmark>, Error> {
+        let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::BOOKMARK) else {
             return Ok(None);
         };
-        let mut c = Cursor::new(d);
+        let mut c = enc.cursor(d);
         let name = flagged_string(&mut c)?;
         c.skip(4)?;
         let parent = c.u32()?;
@@ -249,8 +253,8 @@ impl Bookmark {
 /// u16, then UID lists of text sources, hyperlinks and bookmarks. In 3.0
 /// to 5.0 files: UID lists of text sources, destinations, hyperlinks and
 /// bookmarks (`docs/format/hyperlinks.md`).
-pub fn document_bookmarks(data: &[u8], major: u32) -> Result<Vec<u32>, Error> {
-    let mut c = Cursor::new(data);
+pub fn document_bookmarks(enc: Encoding, data: &[u8], major: u32) -> Result<Vec<u32>, Error> {
+    let mut c = enc.cursor(data);
     if major <= 5 {
         for _ in 0..3 {
             c.u32_list()?;
@@ -284,8 +288,8 @@ struct Node {
 
 /// Read the nodes of one range tree page (chunk 0x16127) into `nodes`, by
 /// node index. Returns the next page's UID (0 for none).
-fn read_page(data: &[u8], nodes: &mut BTreeMap<u32, Node>) -> Result<u32, Error> {
-    let mut c = Cursor::new(data);
+fn read_page(enc: Encoding, data: &[u8], nodes: &mut BTreeMap<u32, Node>) -> Result<u32, Error> {
+    let mut c = enc.cursor(data);
     let next = c.u32()?;
     c.skip(12)?;
     let n = c.u32()? as usize;
@@ -298,7 +302,7 @@ fn read_page(data: &[u8], nodes: &mut BTreeMap<u32, Node>) -> Result<u32, Error>
         if class != class::RANGE_NODE || size != 60 {
             continue;
         }
-        let mut b = Cursor::new(body);
+        let mut b = enc.cursor(body);
         b.skip(12)?;
         let mut refs = [0u32; 4];
         for r in &mut refs {
@@ -327,6 +331,7 @@ fn read_page(data: &[u8], nodes: &mut BTreeMap<u32, Node>) -> Result<u32, Error>
 /// its parent, a right child `value` after it; the root's value is its
 /// start.
 pub fn source_ranges(
+    enc: Encoding,
     first_page: u32,
     mut page_data: impl FnMut(u32) -> Result<Option<Vec<u8>>, Error>,
 ) -> Result<Vec<SourceRange>, Error> {
@@ -336,7 +341,7 @@ pub fn source_ranges(
     while page != 0 && !seen.contains(&page) {
         seen.push(page);
         let Some(data) = page_data(page)? else { break };
-        page = read_page(&data, &mut nodes)?;
+        page = read_page(enc, &data, &mut nodes)?;
     }
     let mut out = Vec::new();
     let roots: Vec<u32> = nodes
@@ -410,7 +415,10 @@ mod tests {
         page.extend(node(2, 1, 0, 0, 138, 22, 0xA));
         page.extend(node(0, 2, 1, 3, 260, 38, 0xB));
         page.extend(node(2, 3, 0, 0, 120, 15, 0xC));
-        let ranges = source_ranges(7, |_| Ok(Some(page.clone()))).unwrap();
+        let ranges = source_ranges(crate::object::Encoding::default(), 7, |_| {
+            Ok(Some(page.clone()))
+        })
+        .unwrap();
         let got: Vec<_> = ranges.iter().map(|r| (r.start, r.len, r.source)).collect();
         assert_eq!(got, [(122, 22, 0xA), (260, 38, 0xB), (380, 15, 0xC)]);
     }
