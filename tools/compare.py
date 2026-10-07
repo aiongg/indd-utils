@@ -33,9 +33,11 @@ shortfalls and details to trustworthy pairs, --stale N lists stale pairs.
 Last comes the headline (docs/measurement.md): value coverage, the share
 of reference values the conversion reproduces, over trustworthy pairs and
 over all pairs; document scores (pairs with coverage >= 99 % and >= 99.9 %);
-and the biggest gaps (--gaps N). pairs.tsv, gaps.tsv and gaps-all.tsv go to
---out (default target/compare), with values.tsv and values-all.tsv, which
-list every key with its values and how many are reproduced.
+extra values (values the output has and the reference does not); and the
+biggest gaps (--gaps N). pairs.tsv, gaps.tsv and gaps-all.tsv go to --out
+(default target/compare), with values.tsv and values-all.tsv, which list
+every key with its values and how many are reproduced, and extras.tsv and
+extras-all.tsv, which list the extra values by key.
 
 --shortfalls N lists the N element types and attributes that fall short
 (missing elements; wrong or missing attribute values; differing story
@@ -169,7 +171,9 @@ def idml_modify_date(idml):
 
 def stale_reasons(indd_date, idml_date, indd_uids, ref_el, ref_st, our_st):
     """Why a pair's IDML may not show the same save as its INDD (empty if
-    there is no sign of that). See docs/measurement.md for the evidence."""
+    there is no sign of that). `indd_uids` maps each UID in the INDD
+    database to its class (None for a slot without a class). See
+    docs/measurement.md for the evidence."""
     out = []
     if indd_date is None or idml_date is None:
         out.append("no ModifyDate")
@@ -178,8 +182,10 @@ def stale_reasons(indd_date, idml_date, indd_uids, ref_el, ref_st, our_st):
     elif indd_date - idml_date > STALE_AFTER:
         out.append("INDD saved over an hour after the IDML")
     ref_uids = {int(s[1:], 16) for _, s in ref_el if re.fullmatch(r"u[0-9a-f]+", s)}
-    if indd_uids is not None and ref_uids - indd_uids:
+    if indd_uids is not None and ref_uids - indd_uids.keys():
         out.append("IDML objects not in the INDD")
+    if indd_uids is not None and any(indd_uids.get(u, 0) is None for u in ref_uids):
+        out.append("IDML objects deleted in the INDD")
     if set(our_st) - set(ref_st):
         out.append("INDD stories not in the IDML")
     return out
@@ -324,7 +330,31 @@ EXCLUDED = [
      "colour the exporting InDesign gives each user, not the colour in the INDD"),
     ("Assignment", "Name",
      "the exporting InDesign's name for unassigned content, which depends on its language"),
+    ("Link", "LinkImportTime", "local time of the exporting computer; the INDD stores UTC"),
+    ("Link", "LinkImportModificationTime",
+     "local time of the exporting computer; the INDD stores UTC"),
+    ("*", "BitmapPrinting", "evaluated by the exporting computer; not stored in the INDD"),
 ]
+
+# Attributes of a Link that describe the linked file as InDesign found it
+# when it exported the IDML. When the IDML's LinkResourceURI differs from
+# the converter's (which comes from the INDD), the link was resolved to
+# another file on the exporting computer, and these values of that link
+# are left out (docs/measurement.md).
+RELINKED = re.compile(r"LinkResource.*|LinkImport.*")
+
+# Font technology suffix that IDML adds to some family names, depending on
+# the fonts installed on the exporting computer (docs/measurement.md).
+FONT_SUFFIX = re.compile(r" \((OTF|TT|T1)\)$")
+
+
+def font_name(tag, key, v):
+    """A value with the font technology suffix removed if it names a font
+    family: FontFamily Name, Font FontFamily, AppliedFont and BulletsFont."""
+    if (tag, key) in (("FontFamily", "Name"), ("Font", "FontFamily")) or \
+            key.endswith(("P.AppliedFont", "P.BulletsFont")):
+        return FONT_SUFFIX.sub("", v)
+    return v
 
 
 @functools.cache
@@ -356,6 +386,7 @@ def values(tag, el):
 # Gap keys for values that could not be compared one by one.
 NO_ELEMENT = "(element not produced)"
 NO_TEXT = "(story text differs)"
+NOT_IN_REFERENCE = "(element not in reference)"
 ELEMENT = "(element)"
 
 
@@ -367,11 +398,18 @@ class Stats:
         # Value coverage: reference values, and those reproduced exactly.
         self.values = 0
         self.reproduced = 0
+        # Links whose resource values are left out (RELINKED).
+        self.relinked = 0
         # (tag, key) -> values wrong / missing, and documents affected.
         self.gap_wrong = Counter()
         self.gap_missing = Counter()
         self.gap_docs = Counter()
         self.gap_total = Counter()
+        # Values the output has and the reference does not, by (tag, key),
+        # and documents affected.
+        self.extra = 0
+        self.extra_values = Counter()
+        self.extra_docs = Counter()
         # (pair, reproduced, values) for each pair.
         self.pairs = []
         self.found = Counter()
@@ -384,7 +422,10 @@ class Stats:
         self.docs += other.docs
         self.values += other.values
         self.reproduced += other.reproduced
-        for c in ("gap_wrong", "gap_missing", "gap_docs", "gap_total"):
+        self.extra += other.extra
+        self.relinked += other.relinked
+        for c in ("gap_wrong", "gap_missing", "gap_docs", "gap_total", "extra_values",
+                  "extra_docs"):
             getattr(self, c).update(getattr(other, c))
         self.pairs += other.pairs
         self.found.update(other.found)
@@ -411,6 +452,11 @@ class Stats:
         documents first, then most values."""
         rows = [(k, d, self.gap_wrong[k], self.gap_missing[k]) for k, d in self.gap_docs.items()]
         return sorted(rows, key=lambda r: (-r[1], -(r[2] + r[3]), r[0]))
+
+    def extras(self):
+        """(tag, key), documents, extra values; most documents first."""
+        rows = [(k, d, self.extra_values[k]) for k, d in self.extra_docs.items()]
+        return sorted(rows, key=lambda r: (-r[1], -r[2], r[0]))
 
     def story_line(self):
         st = sum(self.story_ok.values())
@@ -488,12 +534,14 @@ def compare_pair(name, ref, ours, examples, show):
 def value_coverage(p, ref, ours):
     """Count reference values and the reproduced ones into `p`: element
     presence, attribute and <Properties> values, story text, and the start
-    and attributes of each text range."""
+    and attributes of each text range. Also count the values the output has
+    and the reference does not (extra values), with the same keys."""
     ref_el, ref_st, ref_rg = ref
     our_el, our_st, our_rg = ours
     total = Counter()
     wrong = Counter()
     missing = Counter()
+    extra = Counter()
 
     def compare(tag, theirs, mine):
         for k, v in theirs.items():
@@ -502,8 +550,10 @@ def value_coverage(p, ref, ours):
             o = mine.get(k)
             if o is None:
                 missing[key] += 1
-            elif norm(o) != norm(v):
+            elif norm(font_name(tag, k, o)) != norm(font_name(tag, k, v)):
                 wrong[key] += 1
+        for k in mine.keys() - theirs.keys():
+            extra[(tag, k)] += 1
 
     for (tag, s), el in ref_el.items():
         theirs = values(tag, el)
@@ -514,7 +564,15 @@ def value_coverage(p, ref, ours):
             missing[(tag, NO_ELEMENT)] += n
             continue
         total[(tag, ELEMENT)] += 1
-        compare(tag, theirs, values(tag, mine))
+        mine = values(tag, mine)
+        if tag == "Link" and mine.get("LinkResourceURI") not in (None, theirs.get("LinkResourceURI")):
+            theirs = {k: v for k, v in theirs.items() if not RELINKED.fullmatch(k)}
+            mine = {k: v for k, v in mine.items() if not RELINKED.fullmatch(k)}
+            p.relinked += 1
+        compare(tag, theirs, mine)
+    for (tag, s), el in our_el.items():
+        if (tag, s) not in ref_el:
+            extra[(tag, NOT_IN_REFERENCE)] += 1 + len(values(tag, el))
     for sid, text in ref_st.items():
         key = ("Story", "(text)")
         total[key] += 1
@@ -522,6 +580,10 @@ def value_coverage(p, ref, ours):
             missing[key] += 1
         elif our_st[sid] != text:
             wrong[key] += 1
+    for sid in our_st.keys() - ref_st.keys():
+        extra[("Story", "(text)")] += 1
+        extra[("TextRange", NOT_IN_REFERENCE)] += sum(1 + len(a) for a in
+                                                      our_rg.get(sid, {}).values())
     for sid, rgs in ref_rg.items():
         if our_st.get(sid) != ref_st.get(sid):
             n = sum(1 + len(a) for a in rgs.values())
@@ -537,6 +599,8 @@ def value_coverage(p, ref, ours):
                 continue
             total[("TextRange", ELEMENT)] += 1
             compare("TextRange", attrs, mine[start])
+        for start in mine.keys() - rgs.keys():
+            extra[("TextRange", NOT_IN_REFERENCE)] += 1 + len(mine[start])
     n = sum(total.values())
     bad = sum(wrong.values()) + sum(missing.values())
     p.values += n
@@ -545,6 +609,9 @@ def value_coverage(p, ref, ours):
     p.gap_wrong.update(wrong)
     p.gap_missing.update(missing)
     p.gap_docs.update(k for k in total if wrong[k] or missing[k])
+    p.extra += sum(extra.values())
+    p.extra_values.update(extra)
+    p.extra_docs.update(k for k, v in extra.items() if v)
 
 
 def main():
@@ -603,8 +670,12 @@ def main():
         r = convert(indd, out)
         x = subprocess.run([args.bin, "xmp", indd], capture_output=True)
         u = subprocess.run([args.bin, "uids", indd], capture_output=True, text=True)
-        uids = ({int(line.split("\t")[0]) for line in u.stdout.splitlines()}
-                if u.returncode == 0 else None)
+        uids = None
+        if u.returncode == 0:
+            uids = {}
+            for line in u.stdout.splitlines():
+                uid, cls = line.split("\t")
+                uids[int(uid)] = None if cls == "-" else int(cls, 16)
         dates = (modify_date(x.stdout) if x.returncode == 0 else None, idml_modify_date(idml))
         return r, dates, uids
 
@@ -751,6 +822,13 @@ def write_gaps(path, st):
             f.write(f"{key[0]}\t{key[1]}\t{docs}\t{w}\t{m}\t{st.gap_total[key]}\n")
 
 
+def write_extras(path, st):
+    with open(path, "w") as f:
+        f.write("tag\tkey\tdocuments\textra\n")
+        for key, docs, n in st.extras():
+            f.write(f"{key[0]}\t{key[1]}\t{docs}\t{n}\n")
+
+
 def write_values(path, st):
     """Every key with its values and how many are reproduced, for checking
     that a change reproduces no fewer values of any key."""
@@ -768,12 +846,16 @@ def headline(args, every, trusted, pair_rows):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     with open(out / "pairs.tsv", "w") as f:
-        f.write("path\ttrusted\tcoverage\treproduced\tvalues\tstale reasons\n")
+        f.write("path\ttrusted\tcoverage\treproduced\tvalues\textra\tstories"
+                "\tstories_identical\tstale reasons\n")
         for name, p, reasons in sorted(pair_rows, key=lambda r: r[1].coverage()):
             f.write(f"{name}\t{not reasons}\t{p.coverage():.5f}\t{p.reproduced}\t{p.values}"
+                    f"\t{p.extra}\t{sum(p.story_ok.values())}\t{p.story_ok['ok']}"
                     f"\t{'; '.join(reasons)}\n")
     write_gaps(out / "gaps.tsv", trusted)
     write_gaps(out / "gaps-all.tsv", every)
+    write_extras(out / "extras.tsv", trusted)
+    write_extras(out / "extras-all.tsv", every)
     write_values(out / "values.tsv", trusted)
     write_values(out / "values-all.tsv", every)
     print("\nheadline (docs/measurement.md):")
@@ -784,6 +866,9 @@ def headline(args, every, trusted, pair_rows):
               f"{st.document_score(0.99)}/{st.docs} ({st.document_score(0.99) / n:.1%}), "
               f">= 99.9 %: {st.document_score(0.999)}/{st.docs} "
               f"({st.document_score(0.999) / n:.1%})")
+        print(f"    extra values (in the output, not in the reference): {st.extra} "
+              f"({st.extra / (st.values or 1):.2%} of reference values); "
+              f"links resolved to another file at export: {st.relinked}")
         print(f"    per pair: lowest {st.quantile(0):.1%}, 10th percentile {st.quantile(0.1):.1%}, "
               f"median {st.quantile(0.5):.1%}, 90th percentile {st.quantile(0.9):.1%}, "
               f"highest {st.quantile(1):.1%}")
@@ -795,6 +880,11 @@ def headline(args, every, trusted, pair_rows):
     print("\nvalue gaps, trustworthy pairs, by values (documents, values wrong, missing, of values):")
     for key, docs, w, m in sorted(rows, key=lambda r: -(r[2] + r[3]))[:args.gaps // 2]:
         print(f"  {docs:5} {w:7} {m:7} {trusted.gap_total[key]:8}  {gap_name(key)[:90]}")
+    rows = trusted.extras()
+    print(f"\nextra values, trustworthy pairs, by documents affected "
+          f"(documents, extra values; all in {out / 'extras.tsv'}):")
+    for key, docs, n in rows[:args.gaps // 2]:
+        print(f"  {docs:5} {n:7}  {gap_name(key)[:90]}")
 
 
 if __name__ == "__main__":

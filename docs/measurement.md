@@ -27,6 +27,7 @@ A pair is **stale** if any of these holds. The others are **trustworthy**.
 | INDD saved over an hour after the IDML | Same dates | The INDD's date is more than 1 hour after the IDML's |
 | No ModifyDate | Same dates | Either file has no `xmp:ModifyDate` |
 | IDML objects not in the INDD | `Self="u…"` identifiers in the IDML; UIDs in the INDD database (`indd uids`) | The IDML names a UID that the INDD database does not have |
+| IDML objects deleted in the INDD | Same identifiers; UIDs whose INDD slot has no class (`indd uids` prints class `-`) | The IDML names such a UID |
 | INDD stories not in the IDML | The INDD's story list, as converted; the IDML's stories | The INDD has a story that the IDML does not |
 
 Pairs whose IDML `DOMVersion` has a different major version from the INDD
@@ -39,6 +40,13 @@ in the INDD database. In the other 23, between 1 and 1,361 IDML UIDs are
 missing from the INDD, so the IDML describes objects that the INDD no
 longer (or never) had.
 
+**Deleted slots.** A UID can be in the INDD database without a class (the
+third tree; `database.md`). In 25 of 654 pairs the IDML names such a
+UID: the IDML has an object that the INDD has deleted. In 6 of these 25
+no other signal fires. Their IDMLs name 1 to 185 such objects each, 218
+in all: 116 `PDF`, 54 `Image`, 23 `EPS`, 5 `TextFrame`, 5 `Story`, 2
+`Rectangle`, 2 `Link` and 1 `Page`.
+
 **ModifyDate.** InDesign writes `xmp:ModifyDate` both when it saves an INDD
 and when it exports an IDML. A document exported and then saved within a few
 minutes (as when packaging) has a small positive gap. The table counts
@@ -46,7 +54,7 @@ pairs by gap (INDD date minus IDML date), split by whether their content
 visibly differs: the presence signals above fire, or a story's text is
 less than 90 % similar to the converter's text for the same story
 (`difflib` ratio, ignoring U+FEFF, which the converter writes for
-anchors).
+anchors). It was measured before the deleted-slot signal was added.
 
 | Gap | Content same | Content differs |
 |---|---:|---:|
@@ -76,13 +84,13 @@ whose minor version is lower than the INDD header's.
 
 ### Result
 
-The rule flags 159 of 654 pairs; 495 are trustworthy.
+The rule flags 165 of 654 pairs; 489 are trustworthy.
 
 | Group | Pairs | Stories with identical text | Pairs with a differing story |
 |---|---:|---:|---:|
-| Trustworthy | 495 | 18,823 of 18,929 (99.4 %) | 49 (10 %) |
-| Stale by a presence signal | 33 | 724 of 1,209 (59.9 %) | 22 (67 %) |
-| Stale by ModifyDate only (INDD over 1 hour later) | 125 | 5,626 of 5,802 (97.0 %) | 40 (32 %) |
+| Trustworthy | 489 | 18,509 of 18,610 (99.5 %) | 47 (10 %) |
+| Stale by a presence signal | 51 | 2,000 of 2,547 (78.5 %) | 29 (57 %) |
+| Stale by ModifyDate only (INDD over 1 hour later) | 113 | 4,664 of 4,783 (97.5 %) | 35 (31 %) |
 | Stale by ModifyDate only (IDML newer) | 1 | 12 of 12 | 0 |
 
 Spot checks of the pairs flagged by ModifyDate alone show edits made after
@@ -130,6 +138,27 @@ the directory).
 **Document score** is the share of trustworthy pairs whose coverage is at
 least 99 %, and at least 99.9 %.
 
+### Extra values
+
+Coverage counts only values that the reference has, so writing more never
+lowers it. **Extra values** count the other direction: values the output
+has and the reference does not, with the same definitions as above:
+
+| Extra value | Counted as |
+|---|---|
+| Attribute or `<Properties>` child of an element both have | 1, under (element, attribute) |
+| Element (or child element, or preference) that only the output has | 1 plus its values, under (element, `(element not in reference)`) |
+| Text range that only the output has, in a story whose text is identical | 1 plus its attributes, under (`TextRange`, `(element not in reference)`) |
+| Story that only the output has | 1 for its text, plus its text ranges |
+
+An extra value is not always wrong: IDML leaves out some values that
+equal a default, and the converter may write them. It is still output
+that the reference does not confirm. The headline prints the number of
+extra values and their share of the reference values;
+`extras.tsv` (trustworthy pairs) and `extras-all.tsv` list them by key
+with the number of documents affected, and `pairs.tsv` has a column for
+each pair. Values left out (below) are left out of both counts.
+
 ### Values left out
 
 Some values describe the computer that exported the IDML or the IDML
@@ -142,6 +171,25 @@ are left out of the counts (`EXCLUDED` in `compare.py`).
 | `idPkg:Story`, `idPkg:Spread` and the other part references in `designmap.xml` | `src` | The file names of the parts inside the IDML package. The IDML writer chooses them; they are not document content. |
 | `Assignment` | `Name` | The INDD stores the name of the assignment that holds unassigned InCopy content in the language of the computer that made the document (`Unassigned InCopy Content`, `Contenu InCopy non affecté`, …). IDML writes `$ID/UnassignedInCopy` when the exporting InDesign recognises it (476 of 495 trustworthy pairs) and the stored name otherwise (`objects.md`, assignments). |
 | `DocumentUser` | `UserColor` | The colour of each user of the document as the exporting InDesign shows it. The INDD stores a colour for each user (`objects.md`, document users), but the IDML colour does not follow from it: users stored with the same colour get different IDML colours in different files. |
+| `Link` | `LinkImportTime`, `LinkImportModificationTime` | Local time of the exporting computer. The INDD stores each time as a count of 100 ns intervals since 1601-01-01 (the `LinkImportStamp` text `file <n> <size>` repeats the first one in 4,686 of 4,686 links). Read as UTC, it differs from the IDML time by a whole number of hours in 9,009 of 9,385 time values. The offset differs between documents (−8 to +13 hours) and, in 71 of 284 documents, between links of one document with the season of the date: the daylight-saving rule of the exporting computer's time zone. The INDD does not store the time zone. |
+| `PrintPreference`, `PrintBookletPrintPreference` | `BitmapPrinting` | No byte of the print settings, the preferences object or the document object follows it. It follows the platform of the stored print record (Windows record: 102 `false`, 13 `true`; Cocoa: 213 `true`, 4 `false`; Carbon: 57 `true`, 19 `false`; none: 84 `true`, 2 `false`), so the exporting InDesign most likely evaluates it. |
+
+Two more rules adjust the comparison for values that depend on the
+exporting computer:
+
+- **Links resolved to another file at export.** When InDesign exports,
+  it looks for each linked file and writes what it finds. If the IDML's
+  `LinkResourceURI` differs from the converter's (which comes from the
+  INDD), the file was found in another folder or replaced by a newer one,
+  and the link's `LinkResource…` and `LinkImport…` attributes describe
+  that file, not the INDD. They are left out for that link. The headline
+  prints how many links this affects (329 in trustworthy pairs).
+- **Font technology suffix.** IDML adds ` (OTF)`, ` (TT)` or ` (T1)` to
+  some font family names, depending on the fonts installed where it was
+  exported (`fonts.md`; the same family has the suffix in some documents
+  and not in others, and the strings occur in no INDD file). Family names
+  (`FontFamily` `Name`, `Font` `FontFamily`, `AppliedFont`,
+  `BulletsFont`) are compared with that suffix removed from both values.
 
 A value enters this list only with a reason of this kind. Values that are
 hard to decode, or that the converter does not write yet, stay in the
@@ -156,6 +204,9 @@ Each value that is not reproduced is counted against a key:
 number of documents affected and the number of values wrong and missing.
 `compare.py` prints the top 30 keys by documents affected (`--gaps N`) and
 the top 15 by values.
+
+`extras.tsv` and `extras-all.tsv` list the extra values by key the same
+way, and `compare.py` prints the top keys by documents affected.
 
 `values.tsv` and `values-all.tsv` list every key with its number of
 values and how many are reproduced, wrong and missing. Comparing them

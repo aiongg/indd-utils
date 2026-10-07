@@ -67,10 +67,11 @@ separately (rule and evidence: `docs/measurement.md`).
   measure of progress; run it after every change. It reports all pairs and
   the trustworthy ones (`--stale N` lists stale pairs, `--trusted` limits
   the tables to trustworthy pairs).
-- Headline numbers (value coverage, document scores, ranked gaps; defined
-  in `docs/measurement.md`): `cargo build --release && python3 -I
-  tools/compare.py --exclude own/`. It prints them last and writes
-  `pairs.tsv`, `gaps.tsv` and `gaps-all.tsv` to `target/compare/`.
+- Headline numbers (value coverage, extra values, document scores, ranked
+  gaps; defined in `docs/measurement.md`): `cargo build --release &&
+  python3 -I tools/compare.py --exclude own/`. It prints them last and
+  writes `pairs.tsv`, `gaps*.tsv`, `values*.tsv` and `extras*.tsv` to
+  `target/compare/`.
 - `python3 -I tools/diff_outputs.py [OLD [NEW]]`: build two revisions
   (default `HEAD` and the working tree `.`) under `~/.cache/indd-diff/`,
   convert every corpus file with both and report which outputs differ
