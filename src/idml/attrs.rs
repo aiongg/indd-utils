@@ -132,6 +132,11 @@ pub(super) const STROKE_TYPES: &[(u32, &str)] = &[
     (0xB01A, "Triple_Stroke"),
 ];
 
+/// Codes of built-in stroke styles seen only in cells and tables, in
+/// addition to `STROKE_TYPES`. See `docs/format/tables.md`.
+pub(super) const TABLE_STROKE_TYPES: &[(u32, &str)] =
+    &[(0x5A3F, "Japanese Dots"), (0xB007, "ThickThick")];
+
 /// The stroke styles every corpus IDML lists in `Graphic.xml`, in order.
 /// See `docs/format/idml-values.md`.
 pub(super) const BUILTIN_STROKE_STYLES: &[&str] = &[
@@ -562,42 +567,149 @@ pub(super) fn join_numbers(v: &[u32]) -> String {
     v.iter().map(u32::to_string).collect::<Vec<_>>().join(" ")
 }
 
-/// Cell attributes of a cell attribute set: ID, IDML attributes, kind.
-/// See `docs/format/tables.md`.
+/// Cell attributes of a cell attribute set other than the edges: ID,
+/// IDML attributes, kind. IDML names that start with `Text` are written
+/// from DOM 11 only. See `docs/format/tables.md`.
 pub(super) const CELL_ATTRS: &[(u32, &[&str], Kind)] = &[
     (0xB62C, &["TextTopInset", "TopInset"], Kind::Number),
     (0xB62B, &["TextLeftInset", "LeftInset"], Kind::Number),
     (0xB62E, &["TextBottomInset", "BottomInset"], Kind::Number),
     (0xB62D, &["TextRightInset", "RightInset"], Kind::Number),
+    (0x10470, &["GraphicLeftInset"], Kind::Number),
+    (0x10471, &["GraphicTopInset"], Kind::Number),
+    (0x10472, &["GraphicRightInset"], Kind::Number),
+    (0x10473, &["GraphicBottomInset"], Kind::Number),
     (0xB63D, &["FillColor"], Kind::Swatch),
     (0xB63E, &["FillTint"], Kind::Number),
+    (0xB639, &["OverprintFill"], Kind::Enum(&[(0, "false")])),
     (
         0xB677,
         &["VerticalJustification"],
-        Kind::Enum(&[(1, "CenterAlign"), (2, "BottomAlign")]),
+        Kind::Enum(&[
+            (0, "TopAlign"),
+            (1, "CenterAlign"),
+            (2, "BottomAlign"),
+            (3, "JustifyAlign"),
+        ]),
     ),
+    (
+        0xB676,
+        &["FirstBaselineOffset"],
+        Kind::Enum(&[(0, "LeadingOffset"), (1, "AscentOffset")]),
+    ),
+    (0xB6E1, &["WritingDirection"], Kind::Enum(&[(1, "true")])),
+    (0xB675, &["RotationAngle"], Kind::Number),
     (0xB6DE, &["ClipContentToCell"], Kind::Enum(&[(0, "false")])),
-    (0xB645, &["LeftEdgeStrokeWeight"], Kind::Number),
-    (0xB64D, &["LeftEdgeStrokeType"], Kind::StrokeType),
-    (0xB649, &["LeftEdgeStrokeColor"], Kind::Swatch),
-    (0xB6A8, &["LeftEdgeStrokeTint"], Kind::Number),
-    (0xB6F9, &["LeftEdgeStrokePriority"], Kind::Integer),
-    (0xB647, &["TopEdgeStrokeWeight"], Kind::Number),
-    (0xB64F, &["TopEdgeStrokeType"], Kind::StrokeType),
-    (0xB64A, &["TopEdgeStrokeColor"], Kind::Swatch),
-    (0xB6AA, &["TopEdgeStrokeTint"], Kind::Number),
-    (0xB6FB, &["TopEdgeStrokePriority"], Kind::Integer),
-    (0xB646, &["RightEdgeStrokeWeight"], Kind::Number),
-    (0xB64E, &["RightEdgeStrokeType"], Kind::StrokeType),
-    (0xB64B, &["RightEdgeStrokeColor"], Kind::Swatch),
-    (0xB6A9, &["RightEdgeStrokeTint"], Kind::Number),
-    (0xB6FA, &["RightEdgeStrokePriority"], Kind::Integer),
-    (0xB648, &["BottomEdgeStrokeWeight"], Kind::Number),
-    (0xB650, &["BottomEdgeStrokeType"], Kind::StrokeType),
-    (0xB64C, &["BottomEdgeStrokeColor"], Kind::Swatch),
-    (0xB6AB, &["BottomEdgeStrokeTint"], Kind::Number),
-    (0xB6FC, &["BottomEdgeStrokePriority"], Kind::Integer),
+    (
+        0xB6DC,
+        &["DiagonalLineStrokeOverprint"],
+        Kind::Enum(&[(0, "false")]),
+    ),
 ];
+
+/// Cell edge attributes: the IDs for the left, right, top and bottom
+/// edge, the IDML attributes for the same edges, and the kind. See
+/// `docs/format/tables.md`.
+pub(super) const CELL_EDGE_ATTRS: &[([u32; 4], [&str; 4], Kind)] = &[
+    (
+        [0xB645, 0xB646, 0xB647, 0xB648],
+        [
+            "LeftEdgeStrokeWeight",
+            "RightEdgeStrokeWeight",
+            "TopEdgeStrokeWeight",
+            "BottomEdgeStrokeWeight",
+        ],
+        Kind::Number,
+    ),
+    (
+        [0xB64D, 0xB64E, 0xB64F, 0xB650],
+        [
+            "LeftEdgeStrokeType",
+            "RightEdgeStrokeType",
+            "TopEdgeStrokeType",
+            "BottomEdgeStrokeType",
+        ],
+        Kind::StrokeType,
+    ),
+    (
+        [0xB649, 0xB64B, 0xB64A, 0xB64C],
+        [
+            "LeftEdgeStrokeColor",
+            "RightEdgeStrokeColor",
+            "TopEdgeStrokeColor",
+            "BottomEdgeStrokeColor",
+        ],
+        Kind::Swatch,
+    ),
+    (
+        [0xB6A8, 0xB6A9, 0xB6AA, 0xB6AB],
+        [
+            "LeftEdgeStrokeTint",
+            "RightEdgeStrokeTint",
+            "TopEdgeStrokeTint",
+            "BottomEdgeStrokeTint",
+        ],
+        Kind::EdgeTint,
+    ),
+    (
+        CELL_EDGE_PRIORITY,
+        [
+            "LeftEdgeStrokePriority",
+            "RightEdgeStrokePriority",
+            "TopEdgeStrokePriority",
+            "BottomEdgeStrokePriority",
+        ],
+        Kind::Integer,
+    ),
+    (
+        [0x1040F, 0x10410, 0x10411, 0x10412],
+        [
+            "LeftEdgeStrokeGapTint",
+            "RightEdgeStrokeGapTint",
+            "TopEdgeStrokeGapTint",
+            "BottomEdgeStrokeGapTint",
+        ],
+        Kind::EdgeTint,
+    ),
+    (
+        [0x10420, 0x10421, 0x10422, 0x10423],
+        [
+            "LeftEdgeStrokeGapColor",
+            "RightEdgeStrokeGapColor",
+            "TopEdgeStrokeGapColor",
+            "BottomEdgeStrokeGapColor",
+        ],
+        Kind::Swatch,
+    ),
+    (
+        [0xB6BA, 0xB6BB, 0xB6BC, 0xB6BD],
+        [
+            "LeftEdgeStrokeOverprint",
+            "RightEdgeStrokeOverprint",
+            "TopEdgeStrokeOverprint",
+            "BottomEdgeStrokeOverprint",
+        ],
+        Kind::Enum(&[(0, "false")]),
+    ),
+    (
+        [0x10431, 0x10432, 0x10433, 0x10434],
+        [
+            "LeftEdgeStrokeGapOverprint",
+            "RightEdgeStrokeGapOverprint",
+            "TopEdgeStrokeGapOverprint",
+            "BottomEdgeStrokeGapOverprint",
+        ],
+        Kind::Enum(&[(0, "false")]),
+    ),
+];
+
+/// Edge stroke priority IDs (left, right, top, bottom).
+pub(super) const CELL_EDGE_PRIORITY: [u32; 4] = [0xB6F9, 0xB6FA, 0xB6FB, 0xB6FC];
+
+/// The edge of a cell style that each cell edge ID gives: cell left is
+/// style top, right is bottom, top is right, bottom is left (indices
+/// into the left, right, top, bottom order).
+pub(super) const CELL_STYLE_EDGE: [usize; 4] = [2, 3, 1, 0];
 
 /// Table and table style attributes: ID, IDML attribute, kind.
 /// See `docs/format/tables.md`.
@@ -778,8 +890,8 @@ impl Writer<'_> {
         self.attr_values(attrs, TABLE_ATTRS)
     }
 
-    /// IDML attributes of a cell attribute set. Some cell attributes are
-    /// written as two IDML attributes.
+    /// IDML attributes of a cell attribute set other than its edges.
+    /// Some cell attributes are written as two IDML attributes.
     pub(super) fn cell_attrs(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
         let mut out = Vec::new();
         for &(id, names, kind) in CELL_ATTRS {
@@ -787,7 +899,10 @@ impl Writer<'_> {
             match self.value_text(kind, v) {
                 Some(t) => {
                     for &name in names {
-                        out.push((name, t.clone()));
+                        // Text cell values exist from DOM 11 (tables.md).
+                        if self.doc.version.major >= 11 || !name.starts_with("Text") {
+                            out.push((name, t.clone()));
+                        }
                     }
                 }
                 None if kind.is_code() => attrs.unknown_code(id, v),
@@ -795,6 +910,102 @@ impl Writer<'_> {
             }
         }
         out
+    }
+
+    /// The edge attributes of a cell. An edge value is written when every
+    /// grid position along the edge has it, with the same value; the
+    /// priority comes from the cell's own set (tables.md, "Cell edges").
+    pub(super) fn cell_edge_attrs(&self, t: &Table, c: &Cell) -> Vec<(&'static str, String)> {
+        let edges = t.edge_formats(c);
+        let own = t.format(c);
+        let spans = [false, c.column_span > 1, false, c.row_span > 1];
+        let mut values: Vec<[Option<String>; 4]> = Vec::new();
+        for &(ids, _, kind) in CELL_EDGE_ATTRS {
+            let mut row: [Option<String>; 4] = Default::default();
+            for e in 0..4 {
+                let id = ids[e];
+                let value = if ids == CELL_EDGE_PRIORITY {
+                    let v = own.and_then(|f| f.attrs.get(id));
+                    if v.is_none()
+                        && spans[e]
+                        && edges[e]
+                            .iter()
+                            .any(|f| f.is_some_and(|f| f.attrs.get(id).is_some()))
+                    {
+                        row[e] = Some("1".into());
+                        continue;
+                    }
+                    v
+                } else {
+                    let mut vs = edges[e].iter().map(|f| f.and_then(|f| f.attrs.get(id)));
+                    let first = vs.next().flatten();
+                    first.filter(|&v| vs.all(|w| w == Some(v)))
+                };
+                let Some(v) = value else { continue };
+                match self.value_text(kind, v) {
+                    Some(text) => row[e] = Some(text),
+                    None if kind.is_code() => {
+                        if let Some(f) = own {
+                            f.attrs.unknown_code(id, v);
+                        }
+                    }
+                    None => {}
+                }
+            }
+            values.push(row);
+        }
+        Self::edge_values(&mut values);
+        Self::edge_list(values)
+    }
+
+    /// Edge values as IDML attributes, by edge (left, top, right, bottom).
+    /// `values` follows `CELL_EDGE_ATTRS`.
+    fn edge_list(mut values: Vec<[Option<String>; 4]>) -> Vec<(&'static str, String)> {
+        let mut out = Vec::new();
+        for e in [0, 2, 1, 3] {
+            for (row, &(_, names, _)) in values.iter_mut().zip(CELL_EDGE_ATTRS) {
+                if let Some(v) = row[e].take() {
+                    out.push((names[e], v));
+                }
+            }
+        }
+        out
+    }
+
+    /// Edge values of a cell written as IDML writes them: a weight is 0
+    /// when the edge's colour is the `None` swatch. `values` follows
+    /// `CELL_EDGE_ATTRS` (weights first, colours third).
+    fn edge_values(values: &mut [[Option<String>; 4]]) {
+        let (weights, rest) = values.split_at_mut(1);
+        for (weight, color) in weights[0].iter_mut().zip(&rest[1]) {
+            if color.as_deref() == Some("Swatch/None") && weight.is_some() {
+                *weight = Some("0".into());
+            }
+        }
+    }
+
+    /// The edge attributes of a cell style: the cell edge IDs, each
+    /// written for the rotated style edge (`CELL_STYLE_EDGE`).
+    pub(super) fn cell_style_edge_attrs(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
+        let mut values: Vec<[Option<String>; 4]> = Vec::new();
+        for &(ids, _, kind) in CELL_EDGE_ATTRS {
+            let mut row: [Option<String>; 4] = Default::default();
+            // Styles keep their stored tints and weights (tables.md).
+            let kind = match kind {
+                Kind::EdgeTint => Kind::Number,
+                k => k,
+            };
+            for e in 0..4 {
+                let Some(v) = attrs.get(ids[e]) else { continue };
+                match self.value_text(kind, v) {
+                    Some(text) => row[CELL_STYLE_EDGE[e]] = Some(text),
+                    None if kind.is_code() => attrs.unknown_code(ids[e], v),
+                    None => {}
+                }
+            }
+            values.push(row);
+        }
+        Self::edge_list(values)
     }
 
     /// The gradient attributes of a page item: its own, or, for a group,
@@ -884,6 +1095,86 @@ mod tests {
             (0x1BDE, Value::Enum(2)),
         ]));
         assert!(plain.is_empty());
+    }
+
+    #[test]
+    fn writes_cell_edges_along_the_edge() {
+        use crate::model::table::{Cell, CellFormat, CellKind, Row, Table};
+        let mut doc = Document::default();
+        doc.swatches.insert(9, "Swatch/None".into());
+        doc.swatches.insert(10, "Color/u10".into());
+        let w = Writer::for_test(&doc);
+        let format = |values: Vec<(u32, Value)>| {
+            let mut attrs = Attrs::default();
+            attrs.values = values;
+            CellFormat {
+                attrs,
+                style_priority: 0,
+                style: 0,
+            }
+        };
+        // A cell spanning two columns. Both positions have a top weight
+        // of 2 with the None colour and the same bottom colour; its own
+        // set has a left tint of -1 and a priority on the left only; the
+        // covered position has a right colour and priority.
+        let formats = vec![
+            format(vec![
+                (0xB647, Value::Double(2.0)),
+                (0xB64A, Value::Ref(9)),
+                (0xB6A8, Value::Double(-1.0)),
+                (0xB6F9, Value::Int(3)),
+                (0xB64C, Value::Ref(10)),
+            ]),
+            format(vec![
+                (0xB647, Value::Double(2.0)),
+                (0xB64A, Value::Ref(9)),
+                (0xB64B, Value::Ref(10)),
+                (0xB6FA, Value::Int(5)),
+                (0xB64C, Value::Ref(10)),
+            ]),
+        ];
+        let cell = Cell {
+            id: 1,
+            row: 0,
+            column: 0,
+            row_span: 1,
+            column_span: 2,
+            kind: CellKind::Text,
+            width: None,
+            runs: Vec::new(),
+            format: Some(0),
+        };
+        let t = Table {
+            uid: 1,
+            style: None,
+            attrs: Attrs::default(),
+            right_to_left: false,
+            header_rows: 0,
+            footer_rows: 0,
+            rows: vec![Row {
+                height: None,
+                min_height: None,
+                attrs: Attrs::default(),
+            }],
+            columns: vec![10.0, 10.0],
+            cells: vec![cell.clone()],
+            formats,
+            grid: vec![vec![Some(0), Some(1)]],
+        };
+        let mut got = w.cell_edge_attrs(&t, &cell);
+        got.sort();
+        let want: Vec<(&str, String)> = vec![
+            ("BottomEdgeStrokeColor", "Color/u10".into()),
+            ("LeftEdgeStrokeTint", "100".into()),
+            ("LeftEdgeStrokePriority", "3".into()),
+            ("RightEdgeStrokeColor", "Color/u10".into()),
+            ("RightEdgeStrokePriority", "1".into()),
+            ("TopEdgeStrokeColor", "Swatch/None".into()),
+            ("TopEdgeStrokeWeight", "0".into()),
+        ];
+        let mut want = want;
+        want.sort();
+        assert_eq!(got, want);
     }
 
     #[test]

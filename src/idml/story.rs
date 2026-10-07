@@ -429,6 +429,9 @@ impl Writer<'_> {
             for (name, v) in self.text_cell_values(|a| t.cell_value(c, a, &styles)) {
                 x.attr(name, v);
             }
+            for (name, v) in self.cell_edge_attrs(t, c) {
+                x.attr(name, v);
+            }
             if let Some(f) = t.format(c) {
                 for (name, v) in self.cell_attrs(&f.attrs) {
                     x.attr(name, v);

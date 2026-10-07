@@ -202,63 +202,129 @@ covers that position.
 ## Cell formatting
 
 A cell's formatting is the attribute set that covers its position. IDML
-writes these attributes on a `Cell` exactly when the set has them, so
-they are the cell's local values. The exception is the text insets and
-`ClipContentToTextCell`: from DOM 11 IDML writes them on every cell,
-with the value in effect (above); where the set has the value, it is
-that value.
+writes the attributes below on a `Cell` exactly when the set has them,
+so they are the cell's local values. The exceptions are the text insets
+and `ClipContentToTextCell`, written on every cell from DOM 11 with the
+value in effect (above), and the edges (below).
 
-Evidence: the same-version pairs have 1,125 IDML cells with an INDD
-cell, 952 of them in a set (5 files). For every attribute below, the INDD set has the
-attribute on exactly the cells whose IDML `Cell` has it (no cell has one
-without the other), and the values match on all of them. The 144 cells
-of pairs whose IDML is from an older version agree as well.
+Evidence: the INDD set has each attribute below on exactly the cells
+whose IDML `Cell` has it, and the values match on all of them. The
+counts of the insets, fills and 0xB6DE are from a first sample of 1,125
+IDML cells (952 in a set, 5 files); the others, and codes 0 and 3 of
+0xB677, are counted over the trustworthy pairs (11,844 cells in 53
+files), where every attribute of the table now matches on every cell.
 
-| ID | IDML | Encoding | Cells (files, distinct values) |
+| ID | IDML | Encoding | Cells (files) |
 |---|---|---|---|
-| 0xB62B | `LeftInset`, `TextLeftInset` | f64 | 601 (5, 5) |
-| 0xB62C | `TopInset`, `TextTopInset` | f64 | 523 (5, 3) |
-| 0xB62D | `RightInset`, `TextRightInset` | f64 | 631 (5, 3) |
-| 0xB62E | `BottomInset`, `TextBottomInset` | f64 | 523 (5, 3) |
-| 0xB63D | `FillColor` | swatch UID | 176 (4, 8) |
-| 0xB63E | `FillTint` | f64 | 142 (2, 4) |
-| 0xB677 | `VerticalJustification` | 1 `CenterAlign`, 2 `BottomAlign` | 457 (3) |
+| 0xB62B | `LeftInset`, `TextLeftInset` | f64 | 601 (5) |
+| 0xB62C | `TopInset`, `TextTopInset` | f64 | 523 (5) |
+| 0xB62D | `RightInset`, `TextRightInset` | f64 | 631 (5) |
+| 0xB62E | `BottomInset`, `TextBottomInset` | f64 | 523 (5) |
+| 0x10470, 0x10471, 0x10472, 0x10473 | `GraphicLeftInset`, `GraphicTopInset`, `GraphicRightInset`, `GraphicBottomInset` | f64 | 96 (2), all 1; order below |
+| 0xB63D | `FillColor` | swatch UID | 176 (4) |
+| 0xB63E | `FillTint` | f64 | 142 (2) |
+| 0xB639 | `OverprintFill` | u16, 0 = false | 153 (1); 6 cell styles |
+| 0xB677 | `VerticalJustification` | 0 `TopAlign`, 1 `CenterAlign`, 2 `BottomAlign`, 3 `JustifyAlign` | 5,361 (21); 383 cells with 0 (1 file); 3 in 1 cell style |
+| 0xB676 | `FirstBaselineOffset` | 0 `LeadingOffset`, 1 `AscentOffset` | 4,445 (3); 2 cell styles |
+| 0xB6E1 | `WritingDirection` | 1 = true | 4,445 (3) |
+| 0xB675 | `RotationAngle` | f64 | 1 (270) |
 | 0xB6DE | `ClipContentToCell` | 0 = false | 664 (5, one value) |
-| 0xB645, 0xB646, 0xB647, 0xB648 | `Left`, `Right`, `Top`, `BottomEdgeStrokeWeight` | f64 | 426, 358, 412, 443 (2) |
-| 0xB649, 0xB64A, 0xB64B, 0xB64C | `Left`, `Top`, `Right`, `BottomEdgeStrokeColor` | swatch UID | 449, 449, 410, 449 (2) |
-| 0xB64D, 0xB64E, 0xB64F, 0xB650 | `Left`, `Right`, `Top`, `BottomEdgeStrokeType` | stroke style code (below) | 426, 358, 412, 443 (2) |
-| 0xB6A8, 0xB6A9, 0xB6AA, 0xB6AB | `Left`, `Right`, `Top`, `BottomEdgeStrokeTint` | f64 | 429, 364, 443, 443 (2) |
-| 0xB6F9, 0xB6FA, 0xB6FB, 0xB6FC | `Left`, `Right`, `Top`, `BottomEdgeStrokePriority` | u32 | 593, 583, 593, 593 (3, 11–16 values) |
+| 0xB6DC | `DiagonalLineStrokeOverprint` | u16, 0 = false | 16 (1) |
 
-Note the colours: their order is left, top, right, bottom, while the
-other edge attributes are left, right, top, bottom. Each assignment was
-checked against the alternatives; any swap gives mismatches (for
-example 0xB648 as the top weight differs on 10 cells and is present on
-31 cells without a top weight). The top and bottom stroke types have one
-value (`Solid`), but they are told apart by which cells have them.
+`TextLeftInset` and the other three exist from DOM 11. Before, IDML
+writes only `LeftInset` and the others: the 453 cells of DOM 8 and 10
+have no `TextTopInset` (28 of them, in one DOM 8.1 pair, have
+`TopInset`), and 5 named cell styles of DOM 8 and 10 with `TopInset`
+have no `TextTopInset`, while all 25 of DOM 11 to 21 with `TopInset`
+have both.
 
-**Edge stroke type.** Eight bytes: a stroke style code and 0. Code
-0x5A29 is `StrokeStyle/$ID/Solid` (1,570 cell edges), the same code as
-for page items (`attributes.md`); 0x1040C is `n`, no stroke type (69
-cell edges).
-The converter uses the page item stroke style codes for cells too.
-
-**Right edge priority.** 10 cells have a right edge priority in IDML
-but not in their set. The converter writes priorities only from the
-set.
+0xB6E1 and 0xB676 always occur together on cells, both with value 1.
+Cell styles can have 0xB6E1 too, but the IDML schema has no
+`WritingDirection` on `CellStyle`, so it is not written there.
+0xB676 is the baseline offset because cell styles have it alone (2
+styles). The graphic insets are all equal on cells; in cell styles
+{0x10470, 0x10472} are left and right and {0x10471, 0x10473} top and
+bottom (values 3 and 0); the order inside each pair follows the text
+insets.
 
 **Applied cell style.** The set's two u32 after the attributes are the
 applied cell style priority and the cell style. All 952 cells in a set
-match `AppliedCellStylePriority`, and all match `AppliedCellStyle` (a
-cell style UID; 0 for 70 cells whose IDML style is `[None]`). The 173
-cells of the pairs in records without sets all have
+of the first sample match `AppliedCellStylePriority`, and all match
+`AppliedCellStyle` (a cell style UID; 0 for 70 cells whose IDML style is
+`[None]`). The 173 cells of the pairs in records without sets all have
 `AppliedCellStyle="CellStyle/$ID/[None]"` and priority 0, and the
 converter writes those values for them.
 
-**Not converted.** The gap colour, gap tint and overprint of the edges
-(0x10420–0x10423, 0x1040F–0x10412, 0xB6BA–0xB6BD) have one value in
-every cell and the same set of cells for three edges, so the edges
-cannot be told apart.
+## Cell edges
+
+| Attribute | Left | Right | Top | Bottom | Encoding |
+|---|---|---|---|---|---|
+| `…EdgeStrokeWeight` | 0xB645 | 0xB646 | 0xB647 | 0xB648 | f64 |
+| `…EdgeStrokeColor` | 0xB649 | 0xB64B | 0xB64A | 0xB64C | swatch UID |
+| `…EdgeStrokeType` | 0xB64D | 0xB64E | 0xB64F | 0xB650 | stroke style code |
+| `…EdgeStrokeTint` | 0xB6A8 | 0xB6A9 | 0xB6AA | 0xB6AB | f64 |
+| `…EdgeStrokePriority` | 0xB6F9 | 0xB6FA | 0xB6FB | 0xB6FC | u32 |
+| `…EdgeStrokeGapTint` | 0x1040F | 0x10410 | 0x10411 | 0x10412 | f64 |
+| `…EdgeStrokeGapColor` | 0x10420 | 0x10421 | 0x10422 | 0x10423 | swatch UID |
+| `…EdgeStrokeOverprint` | 0xB6BA | 0xB6BB | 0xB6BC | 0xB6BD | u16, 0 = false |
+| `…EdgeStrokeGapOverprint` | 0x10431 | 0x10432 | 0x10433 | 0x10434 | u16, 0 = false |
+
+Note the colours: their order is left, top, right, bottom, while the
+other edge attributes are left, right, top, bottom. Each assignment is
+the only one with no presence mismatch once the rule below is applied
+(for example 0xB648 as the top weight differs on 10 cells and is present
+on 31 cells without a top weight; 0x10410 as the left gap tint would be
+present on 58 cells without one). Evidence for the last four groups
+(trustworthy cells with the attribute): gap tint 7,767 / 7,713 / 8,190 /
+8,150 (9 files), gap colour 7,698 / 7,646 / 7,922 / 7,880 (9 files),
+overprint 7,540 / 7,514 / 7,962 / 7,947 (9 files), gap overprint 174 /
+79 / 865 / 834 (2 files).
+
+**Which set holds an edge.** An edge is held by the grid positions along
+it: the left edge by the positions of the cell's first column in all its
+rows, the right edge by its last column, the top edge by its first row,
+the bottom edge by its last row. IDML writes an edge attribute when
+every position along the edge has it with the same value, and writes that
+value. For a 1 × 1 cell this is its own set. Evidence: 47,376 edge
+values per attribute kind (46,844 one-position edges, 532 longer edges):
+presence and value match for weight, colour, type, tint, gap tint, gap
+colour, overprint and gap overprint, with one exception (a bottom weight
+of a 5-column cell in a row whose records are short; IDML writes 0 for
+values 3, 1, 3, 0, 1). Taking the cell's own set for all edges misses
+144 right colours, 45 bottom colours and their weights, types and tints
+in 6 files.
+
+**Priority** is not taken along the edge. It is the value in the cell's
+own set for all four edges. If the own set has no right (bottom)
+priority, the cell spans more than one column (row), and a position
+along the right (bottom) edge has one, IDML writes `1`. Evidence: 11,578
+one-position cells (all four edges), 266 merged cells; the `1` case is
+157 right and 45 bottom edges, with no counter-example; 4 + 12 merged
+cells whose edge positions have no priority have none in IDML.
+
+**Values.**
+
+- Tint and gap tint −1 are written as `100` (2,712 stroke tints in 4
+  files, 1,200 gap tints in 1 file); other values as they are.
+  `FillTint` −1 stays `-1`.
+- Weight: when the edge's colour, as written, is the `None` swatch, IDML
+  writes weight `0` whatever is stored (428 edges in 2 files with stored
+  weights 0.35 to 3; every other edge with a `None` colour stores 0).
+- Neither rule holds for cell styles: one style stores tint −1 on all
+  four edges and IDML writes `-1`; two styles store weight 1 with the
+  `None` colour and IDML writes `1`.
+- Colour or gap colour UID 0 is not a swatch and is not written (209
+  edges in 1 file have it, none in IDML).
+- Why −1 becomes 100 and why a `None` colour zeroes the weight is not
+  known; both are seen without exception.
+
+**Stroke type.** Eight bytes: a stroke style code and 0. Code 0x5A29 is
+`StrokeStyle/$ID/Solid`, the same code as for page items
+(`attributes.md`); 0x1040C is `n`, no stroke type. Code 0x5A3F is
+`StrokeStyle/$ID/Japanese Dots` (13,409 edges in cell sets and cell
+styles, 3 files) and 0xB007 `ThickThick` (one table border, all four
+sides). These two are used for cells and tables only: page item stroke
+types are not checked against them.
 
 ## Cell and table styles
 
@@ -277,10 +343,22 @@ match an IDML style by name. Their based-on style matches IDML
 (`[None]`, `[No table style]`) is written as a string, any other as an
 object reference (one table style).
 
-Cell styles use the cell attribute IDs above. All 7 named cell styles
-of the pairs match their IDML on every attribute the converter writes.
+Cell styles use the cell attribute IDs above, except the edges.
 Attribute 0x10463 is the paragraph style UID (`AppliedParagraphStyle`,
 4 of 4 styles that have it).
+
+**Edge IDs in cell styles are rotated.** A cell edge ID gives a
+different edge in a cell style: cell left is style top, cell right is
+style bottom, cell top is style right, cell bottom is style left.
+Evidence: 8 named styles in 3 trustworthy files whose edges differ (a
+header row style with top and bottom 0.25 Black and left and right 0
+None; a body style with right and bottom 1 and no left; others). Weights
+show the rotation for all four edges, colours and tints for top and
+bottom. The other IDs follow the same rotation by analogy: every sample
+has equal left and right colours and tints, equal stroke types on all
+four edges, and equal gap tints, gap colours and overprints (3 styles).
+Text insets are not rotated (a style with left and right 10, top and
+bottom 5 has 0xB62B = 10, 0xB62C = 5).
 
 ## Table attributes
 

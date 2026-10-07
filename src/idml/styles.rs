@@ -113,7 +113,11 @@ impl Writer<'_> {
             .attr("Self", self.table_style_ref(tag, s))
             .attr("Name", self.table_style_name(s));
         let attrs = if tag == "CellStyle" {
-            self.cell_attrs(&s.attrs)
+            let mut a = self.cell_attrs(&s.attrs);
+            // The IDML schema has no `WritingDirection` on cell styles.
+            a.retain(|(n, _)| *n != "WritingDirection");
+            a.extend(self.cell_style_edge_attrs(&s.attrs));
+            a
         } else {
             self.table_attrs(&s.attrs)
         };

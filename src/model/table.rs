@@ -560,6 +560,29 @@ impl Table {
         cell.format.and_then(|i| self.formats.get(i))
     }
 
+    /// The attribute sets of the grid positions along each edge of a
+    /// cell, in the order left, right, top, bottom: the positions of its
+    /// first column, last column, first row and last row. `None` for a
+    /// position without a set.
+    pub fn edge_formats(&self, cell: &Cell) -> [Vec<Option<&CellFormat>>; 4] {
+        let at = |r: usize, c: usize| {
+            self.grid
+                .get(r)
+                .and_then(|row| row.get(c).copied().flatten())
+                .and_then(|i| self.formats.get(i))
+        };
+        let rows = cell.row..cell.row + cell.row_span;
+        let columns = cell.column..cell.column + cell.column_span;
+        let last_row = cell.row + cell.row_span - 1;
+        let last_column = cell.column + cell.column_span - 1;
+        [
+            rows.clone().map(|r| at(r, cell.column)).collect(),
+            rows.map(|r| at(r, last_column)).collect(),
+            columns.clone().map(|c| at(cell.row, c)).collect(),
+            columns.map(|c| at(last_row, c)).collect(),
+        ]
+    }
+
     /// The value in effect for the table: its own attributes, then its
     /// table style, the styles that is based on, and the root table
     /// style.
