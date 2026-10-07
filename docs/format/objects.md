@@ -421,12 +421,22 @@ anchor (x, y) only; types 0 and 1 = left direction, anchor, right
 direction. All 3,191 path chunks in the samples parse exactly, and the
 points of every page item path match the IDML `PathPointType` values.
 
-**IDML element type** is not stored. A frame is a `TextFrame` if a child of
-class 0x263 exists. Otherwise the converter uses the path: two points and
-open → `GraphicLine`; four corner points on two distinct x and y values →
-`Rectangle`; four smooth points → `Oval`; anything else → `Polygon`. In the
-samples this gives 123/123 lines, 671/671 rectangles, 10/10 ovals and
-396/402 polygons (6 polygons are ellipse-like).
+**IDML element type.** A frame is a `TextFrame` if a child of class
+0x263 exists. Otherwise chunk 0x6204 (u16, then u32) gives a shape code:
+1 `GraphicLine`, 2 or 3 `Rectangle`, 4 or 5 `Oval`, 0 and 6 to 8
+`Polygon`; code 9 means none. With code 9 or without the chunk the
+converter uses the path: two points and open → `GraphicLine`; four
+corner points on two distinct x and y values → `Rectangle`; four points
+with direction points, all of point type 0 → `Oval`; anything else →
+`Polygon`. Path points of type 1 have direction points too, and a closed
+four-point path with one or more of them is a `Polygon` in IDML (1,672
+shapes in the trustworthy pairs).
+
+Evidence over the 62,908 rectangles, ovals, polygons and lines of the
+trustworthy pairs: the code gives the IDML element for 22,579 of 22,587
+shapes that have one (7 polygons have code 2 or 3, 1 rectangle code 4);
+the path for 40,070 of 40,321 without one. Most of the others (215) are
+polygons whose four points of type 0 form an ellipse, as ovals do.
 
 **Text frames:** the frame's child of class 0x263 (multi-column frame) has
 a child of class 0x227 (frame column). Chunk 0x220 of the column holds the

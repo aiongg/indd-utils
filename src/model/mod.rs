@@ -141,6 +141,9 @@ pub mod chunk {
     pub const ITEM_NAME: u32 = 0x2C10;
     /// The same for a group.
     pub const GROUP_NAME: u32 = 0x418;
+    /// u16, then u32 shape code: 1 line, 2 or 3 rectangle, 4 or 5
+    /// oval, 0 or 6 to 8 polygon, 9 none.
+    pub const ITEM_SHAPE: u32 = 0x6204;
     /// u32 1 if the page item is locked.
     pub const ITEM_LOCKED: u32 = 0x2C2D;
     /// u16 0 if the page item is hidden.
@@ -233,6 +236,9 @@ pub struct PathPoint {
     pub anchor: Point,
     pub left: Point,
     pub right: Point,
+    /// The stored point type: 2 a corner without direction points, 0 or
+    /// 1 a point with them.
+    pub kind: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2116,6 +2122,7 @@ impl<'a> Reader<'a> {
                             anchor: a,
                             left: a,
                             right: a,
+                            kind,
                         }
                     }
                     0 | 1 => {
@@ -2126,6 +2133,7 @@ impl<'a> Reader<'a> {
                             anchor,
                             left,
                             right,
+                            kind,
                         }
                     }
                     other => {
@@ -2201,7 +2209,10 @@ impl<'a> Reader<'a> {
             }
             kind
         } else {
-            ItemKind::Shape(classify(&paths))
+            let code = self
+                .chunk(uid, chunk::ITEM_SHAPE)?
+                .and_then(|d| u32_at(&d, 2));
+            ItemKind::Shape(classify(&paths, code))
         };
         Ok(Some(PageItem {
             uid,
@@ -3094,7 +3105,17 @@ fn split_runs(
         .collect()
 }
 
-fn classify(paths: &[Path]) -> Shape {
+/// The IDML element of a frame or shape: by the shape code of chunk
+/// 0x6204 (`code`), and where it has none (9, or no chunk), by the path.
+/// See `docs/format/objects.md`, page items.
+fn classify(paths: &[Path], code: Option<u32>) -> Shape {
+    match code {
+        Some(1) => return Shape::GraphicLine,
+        Some(2 | 3) => return Shape::Rectangle,
+        Some(4 | 5) => return Shape::Oval,
+        Some(0 | 6..=8) => return Shape::Polygon,
+        _ => {}
+    }
     let [path] = paths else {
         return Shape::Polygon;
     };
@@ -3118,7 +3139,13 @@ fn classify(paths: &[Path]) -> Shape {
             return Shape::Rectangle;
         }
     }
-    if !path.open && path.points.len() == 4 && path.points.iter().all(|p| p.left != p.anchor) {
+    if !path.open
+        && path.points.len() == 4
+        && path
+            .points
+            .iter()
+            .all(|p| p.left != p.anchor && p.kind == 0)
+    {
         return Shape::Oval;
     }
     Shape::Polygon
@@ -3222,6 +3249,7 @@ mod tests {
             anchor: (x, y),
             left: (x, y),
             right: (x, y),
+            kind: 2,
         };
         let rect = Path {
             points: vec![
@@ -3232,11 +3260,33 @@ mod tests {
             ],
             open: false,
         };
-        assert_eq!(classify(&[rect]), Shape::Rectangle);
+        assert_eq!(
+            classify(std::slice::from_ref(&rect), None),
+            Shape::Rectangle
+        );
+        // The stored shape code decides where there is one.
+        assert_eq!(classify(&[rect], Some(7)), Shape::Polygon);
         let line = Path {
             points: vec![corner(0., 0.), corner(3., 1.)],
             open: true,
         };
-        assert_eq!(classify(&[line]), Shape::GraphicLine);
+        assert_eq!(classify(&[line], Some(9)), Shape::GraphicLine);
+        let smooth = |x, y, kind| PathPoint {
+            anchor: (x, y),
+            left: (x - 1., y),
+            right: (x + 1., y),
+            kind,
+        };
+        let round = |kind| Path {
+            points: vec![
+                smooth(0., 1., kind),
+                smooth(1., 0., kind),
+                smooth(2., 1., kind),
+                smooth(1., 2., kind),
+            ],
+            open: false,
+        };
+        assert_eq!(classify(&[round(0)], None), Shape::Oval);
+        assert_eq!(classify(&[round(1)], None), Shape::Polygon);
     }
 }
