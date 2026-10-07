@@ -153,8 +153,6 @@ pub(super) fn page_names(doc: &Document) -> Vec<String> {
     out
 }
 
-/// The number shown on each document page, from the sections. Pages
-/// not covered by a section are numbered by their position.
 /// The section and page number of each document page.
 pub(super) fn page_sections(doc: &Document) -> Vec<(Section, u32)> {
     let numbers = page_numbers(doc);
@@ -167,6 +165,8 @@ pub(super) fn page_sections(doc: &Document) -> Vec<(Section, u32)> {
     out
 }
 
+/// The number shown on each document page, from the sections. Pages
+/// not covered by a section are numbered by their position.
 pub(super) fn page_numbers(doc: &Document) -> Vec<u32> {
     let count = document_pages(doc).len();
     let mut out: Vec<u32> = (1..=count as u32).collect();

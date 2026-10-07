@@ -210,7 +210,6 @@ pub(super) fn style_name(s: &Style) -> String {
     }
 }
 
-/// Escape a style name for use in a `Self` reference (`:` separates groups).
 /// A text variable name as IDML writes it: control characters (U+001B in
 /// the built-in cross-reference variables) become `<?AID 00xx?>`.
 pub(super) fn variable_name(name: &str) -> String {
@@ -225,6 +224,8 @@ pub(super) fn variable_name(name: &str) -> String {
     out
 }
 
+/// Escape a name for use in a `Self` reference (`:` separates style
+/// groups there).
 pub(super) fn self_name(name: &str) -> String {
     name.replace('%', "%25").replace(':', "%3a")
 }

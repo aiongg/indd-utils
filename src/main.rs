@@ -1,3 +1,7 @@
+//! The `indd` command: converts INDD files to IDML and prints what is
+//! inside an INDD file (header, objects, chunks, XMP, audit). Run it
+//! without arguments for the list of subcommands.
+
 use std::io::Write;
 use std::process::ExitCode;
 

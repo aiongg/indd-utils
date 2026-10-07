@@ -104,9 +104,9 @@ impl Writer<'_> {
     }
 }
 
-/// Write `doc` as an IDML package. `name` is the document name (file name).
-/// Write `doc` as an IDML package. Returns warnings about values left out
-/// because the IDML schema does not allow them.
+/// Write `doc` as an IDML package. `name` is the document name (file
+/// name). Returns warnings about values left out because the IDML schema
+/// does not allow them.
 pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::Result<Vec<String>> {
     let w = Writer {
         doc,

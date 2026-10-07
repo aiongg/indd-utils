@@ -1,7 +1,9 @@
 # Attribute lists
 
 Formatting is stored as attribute lists (on page items: chunk 0x6E03).
-Implemented in `src/model/attrs.rs`.
+Decoded in `src/model/attrs.rs`. The IDML name and value kind of each ID
+are in the tables of `src/idml/attrs.rs`; `src/idml/kind.rs` converts
+each kind.
 
 ## Layout
 
@@ -56,9 +58,10 @@ Transparency attributes (IDs 0x108xx and 0x1EBxx) are described in
 
 Object styles (class 0x1B901) hold a full page item attribute list in
 chunk 0x1B92B, with the same record layout as chunk 0x6E03 but a u16
-count. The converter does not read object style attributes yet, but they
-add evidence: the corpus pairs have 576 object styles whose name matches
-an IDML `ObjectStyle`.
+count. The converter reads them (`object style` lists in `indd audit`)
+and writes them with the page item table. They also add evidence: the
+corpus pairs have 576 object styles whose name matches an IDML
+`ObjectStyle`.
 
 **Stroke type (0x6E6E).** The record has three values: a reference (type
 0x117), a code (type 0x6E64, 4 bytes) and the usual 6-byte value. The
@@ -113,10 +116,15 @@ appears in:
   count and records. These are the run's local overrides.
 
 Value types are specific to each attribute (for example 0x1B05 for swatch
-references, 0x1B28 for point size), so the converter decodes text values
-by length: 8 bytes f64, 4 bytes u32, 2 bytes u16, other lengths raw.
-String values (`FontStyle`) are a flag byte followed by an in-object
-string.
+references, 0x1B28 for point size), so the converter decodes a text value
+by the layout of its attribute. The attributes whose value is not a
+single number have their layout listed in `text_layout`
+(`src/model/attrs.rs`): string values (`FontStyle`) are a flag byte
+followed by an in-object string; tab lists, nested styles, bullet
+characters, points, ruby text and cell edge stroke types are described
+below. Other values are numbers, decoded by length: 8 bytes f64, 4 bytes
+u32, 2 bytes u16. A value that does not fit its attribute's layout is
+kept undecoded and not written.
 
 ### Mapping and evidence
 
@@ -413,8 +421,8 @@ vertically and its print PDF:
 - In the PDF, each such text appears in small type in a narrow column
   right beside the run's characters and centred on them, as ruby is set
   beside vertical text.
-- Values of 8 bytes cannot be told from a number by their length, so the
-  converter rebuilds the bytes before reading the text.
+- The converter decodes the value of 0x422E by this layout, whatever its
+  length.
 
 The converter writes `RubyString` and writes `RubyFlag` with the stored
 number (1 in every such run; the schema type is an integer). The other
