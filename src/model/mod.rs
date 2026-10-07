@@ -2,6 +2,7 @@
 //! `docs/format/objects.md` for the class and chunk layouts used here.
 
 pub mod attrs;
+pub mod cjk;
 pub mod color;
 pub mod font;
 pub mod hyperlink;
@@ -12,6 +13,7 @@ pub mod xref;
 use std::collections::{BTreeMap, HashMap};
 
 pub use attrs::{Attrs, Value};
+pub use cjk::{CjkTable, CompositeFont, CompositeFontEntry};
 pub use color::{Color, Gradient, Tint};
 pub use font::{Font, FontFamily};
 pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
@@ -458,6 +460,9 @@ pub struct Document {
     /// Problems that did not stop the conversion (content left out).
     pub warnings: Vec<String>,
     pub preferences: Option<DocumentPreferences>,
+    pub composite_fonts: Vec<CompositeFont>,
+    /// Kinsoku and mojikumi tables, in UID order.
+    pub cjk_tables: Vec<CjkTable>,
 }
 
 /// Document setup, from chunk 0x533 of the preferences object.
@@ -655,6 +660,9 @@ impl<'a> Reader<'a> {
         let mut destinations = Vec::new();
         let mut bookmarks = BTreeMap::new();
         let mut cross_reference_formats = BTreeMap::new();
+        let mut composite_fonts = Vec::new();
+        let mut composite_entries = HashMap::new();
+        let mut cjk_tables = Vec::new();
         for &(uid, cls) in self.db.classes() {
             if self.db.object(uid)?.is_none() {
                 continue;
@@ -838,6 +846,21 @@ impl<'a> Reader<'a> {
                         bookmarks.insert(uid, b);
                     }
                 }
+                cjk::class::COMPOSITE_FONT => {
+                    if let Some((name, entries)) = CompositeFont::read(&*self.object(uid)?)? {
+                        composite_fonts.push((uid, name, entries));
+                    }
+                }
+                cjk::class::COMPOSITE_FONT_ENTRY => {
+                    if let Some(e) = CompositeFontEntry::read(uid, &*self.object(uid)?)? {
+                        composite_entries.insert(uid, e);
+                    }
+                }
+                c if c == cjk::class::MOJIKUMI || cjk::class::KINSOKU.contains(&c) => {
+                    if let Some(t) = CjkTable::read(uid, c, &*self.object(uid)?)? {
+                        cjk_tables.push(t);
+                    }
+                }
                 class::LANGUAGE => {
                     if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
                         && d.len() > 1
@@ -900,6 +923,18 @@ impl<'a> Reader<'a> {
             cross_reference_formats,
             warnings: self.warnings.borrow().clone(),
             preferences: self.document_preferences()?,
+            composite_fonts: composite_fonts
+                .into_iter()
+                .map(|(uid, name, entries)| CompositeFont {
+                    uid,
+                    name,
+                    entries: entries
+                        .iter()
+                        .filter_map(|e| composite_entries.get(e).cloned())
+                        .collect(),
+                })
+                .collect(),
+            cjk_tables,
         })
     }
 

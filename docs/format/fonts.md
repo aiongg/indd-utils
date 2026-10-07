@@ -92,7 +92,44 @@ u32 count *n*, then *n* entries: u8 1 if the string is a built-in key
 - `NumDesignAxes`, `DesignAxesName` and `DesignAxesValues` (131 fonts of
   variable font families) are not in the records above, and were not
   found elsewhere.
-- `CompositeFont` elements are not written.
+
+## Composite fonts
+
+Every INDD file has one object of class 0xCB02, and every IDML one
+`CompositeFont`, `[No composite font]` (240 of 240 IDML files). Its
+entries are objects of class 0xCB03; IDML writes them as
+`CompositeFontEntry` with `Self="u<UID>"`, six per file. Implemented in
+`src/model/cjk.rs`.
+
+**Composite font (chunk 0xCB02).** A flag byte (1 = built-in key, `$ID/`)
+and the name, fields not identified, then a u16 count and the UIDs of
+the entries, which end the chunk. The list is the IDML entry order in
+76 of 78 pairs; the other two are pairs whose IDML was exported from
+another save (their entry UIDs have no INDD object). No sample has
+another composite font, so the converter writes only this one.
+
+**Entry (chunk 0xCB03).**
+
+| Field | IDML | Evidence |
+|---|---|---|
+| Flag byte, string | `Name` | 456 of 456 |
+| u32 font family UID | `AppliedFont` (Properties): the family's name | 454 of 456; the other 2 are in the pair whose IDML names the family `Minion Pro (OTF)` (above) |
+| Flag byte, string | `FontStyle` | 456 of 456 (`$ID/R`, `$ID/Regular`, `$ID/Roman`) |
+| Four f64 | `RelativeSize`, `HorizontalScale`, `VerticalScale` 100, `BaselineShift` 0 | (100, 0, 100, 100) in all 1,500 entries of the 250 distinct little-endian files |
+| u16 1, u16 count *n*, *n* ranges | `CustomCharacters` | 380 of 380 |
+| Four u16 | `ScaleOption`: all 1 `true`, all 0 `false` | 456 of 456 |
+
+Each range is three code points (first, last, first again), each one
+UTF-16 unit or a surrogate pair. `CustomCharacters` is every character
+from first to last of each range, in order. IDML never writes
+`CustomCharacters` for the `$ID/Kanji` entry (240 of 240 files), whose
+ranges cover most of Unicode; the converter leaves it out for that entry.
+The four numbers have one value in every sample, so only the 0 is told
+apart (`BaselineShift`); the converter writes the four attributes only
+when the numbers are (100, 0, 100, 100). Which of the four u16 is
+`ScaleOption` is not known; the converter writes it only when all four
+agree. `Locked="true"` is in every IDML entry and is written from that
+observation (`idml-values.md`).
 
 `PlatformName` is `$ID/` in all 4,464 IDML fonts; the converter writes
 that value (`idml-values.md`).

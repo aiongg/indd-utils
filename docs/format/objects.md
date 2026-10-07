@@ -723,6 +723,34 @@ lines with several different leadings. Of the values in the IDML schema
 also has code 3, with no evidence; the converter leaves out codes other
 than 0, 1 and 2.
 
+## Kinsoku and mojikumi tables
+
+Kinsoku tables are objects of classes 0x4209 (hard), 0x420A (soft),
+0x42B4 (Korean), 0x42B5 (Simplified Chinese), 0x42B6 (Traditional
+Chinese) and 0x4204 (custom); mojikumi tables are class 0x4206. IDML
+writes one `KinsokuTable` or `MojikumiTable` per object in
+`designmap.xml`, kinsoku tables first, each in UID order. Chunk 0x100B is
+a flag byte (1 = built-in key, `$ID/`) and the name; `Self` is
+`KinsokuTable/<Name>` or `MojikumiTable/<Name>`. Implemented in
+`src/model/cjk.rs`.
+
+Evidence: 8 pairs have such objects, and their IDML lists exactly them,
+by name and in that order (6 with one table of each kind, 2 with 6
+kinsoku and 16 mojikumi tables). The other 70 pairs have neither objects
+nor elements.
+
+**Custom kinsoku table (chunk 0x4214).** Five u16 counts, then that many
+UTF-16 units for each of five lists: `CantBeginLineChars`,
+`CantEndLineChars`, a list not identified, `HangingPunctuationChars` and
+`CantBeSeparatedChars`. The evidence is one table in two copies of one
+document: the four non-empty lists have different lengths (66, 22, 4
+and 3), and each matches the IDML attribute of that length. The layout
+parses in all 85 objects of class 0x4204 in the 250 distinct
+little-endian files, and the third count is 0 in all of them.
+
+Built-in tables have only `Self` and `Name` in IDML. Mojikumi chunk
+0x421E (a u16 from 1 to 16) is not used.
+
 ## Colours (0x1F05)
 
 | Chunk | Contents |

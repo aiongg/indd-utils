@@ -877,6 +877,26 @@ impl Writer<'_> {
         }
         x.empty("idPkg:Graphic", &[("src", "Resources/Graphic.xml".into())]);
         x.empty("idPkg:Fonts", &[("src", "Resources/Fonts.xml".into())]);
+        // Kinsoku tables, then mojikumi tables, as the schema orders them.
+        for mojikumi in [false, true] {
+            for t in doc.cjk_tables.iter().filter(|t| t.mojikumi == mojikumi) {
+                let tag = if mojikumi {
+                    "MojikumiTable"
+                } else {
+                    "KinsokuTable"
+                };
+                x.start(tag)
+                    .attr("Self", format!("{tag}/{}", self_name(&t.name)))
+                    .attr("Name", &t.name);
+                if let Some([begin, end, _, hanging, together]) = &t.chars {
+                    x.attr("CantBeginLineChars", begin)
+                        .attr("CantEndLineChars", end)
+                        .attr("HangingPunctuationChars", hanging)
+                        .attr("CantBeSeparatedChars", together);
+                }
+                x.end();
+            }
+        }
         x.empty("idPkg:Styles", &[("src", "Resources/Styles.xml".into())]);
         // Present, with these values, in every corpus IDML; the root
         // paragraph style refers to it. See docs/format/idml-values.md.
@@ -1715,6 +1735,53 @@ impl Writer<'_> {
                 // IDML from InDesign 7 has no TypekitID.
                 if self.doc.version.major >= 12 {
                     x.attr("TypekitID", &font.typekit_id);
+                }
+                x.end();
+            }
+            x.end();
+        }
+        // Only the built-in composite font occurs in the corpus.
+        for cf in self
+            .doc
+            .composite_fonts
+            .iter()
+            .filter(|c| c.name == "$ID/[No composite font]")
+        {
+            x.start("CompositeFont")
+                .attr("Self", format!("CompositeFont/{}", self_name(&cf.name)))
+                .attr("Name", &cf.name);
+            for e in &cf.entries {
+                // The four numbers are the same in every sample.
+                let usual = e.numbers == [100.0, 0.0, 100.0, 100.0];
+                x.start("CompositeFontEntry")
+                    .attr("Self", uref(Some(e.uid)))
+                    .attr("Name", &e.name)
+                    .attr("FontStyle", &e.font_style);
+                if usual {
+                    x.attr("RelativeSize", "100")
+                        .attr("HorizontalScale", "100")
+                        .attr("VerticalScale", "100");
+                }
+                // IDML gives no characters for the Kanji entry.
+                if e.name != "$ID/Kanji" {
+                    x.attr("CustomCharacters", e.characters());
+                }
+                // In every CompositeFontEntry of the corpus IDML files.
+                x.attr("Locked", "true");
+                match e.scale {
+                    [1, 1, 1, 1] => {
+                        x.attr("ScaleOption", "true");
+                    }
+                    [0, 0, 0, 0] => {
+                        x.attr("ScaleOption", "false");
+                    }
+                    _ => {}
+                }
+                if usual {
+                    x.attr("BaselineShift", "0");
+                }
+                if let Some(f) = self.doc.fonts.get(&e.font_family) {
+                    Self::properties(&mut x, &[("AppliedFont", "string", f.name.clone().into())]);
                 }
                 x.end();
             }

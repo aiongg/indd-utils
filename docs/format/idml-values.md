@@ -163,6 +163,12 @@ column, inset, footnote and column rule values of
 many of these from the INDD. Values that only the 2 files with DOM 20
 have (18) are left out as for the preferences.
 
+## Composite font entries
+
+`Locked="true"` is in all 1,440 `CompositeFontEntry` elements of the
+240 corpus IDML files. No INDD field for it is identified; the converter
+writes it on every entry (`fonts.md`).
+
 ## Column direction of pages
 
 All 832 `MarginPreference` elements in the 240 corpus IDML files have
