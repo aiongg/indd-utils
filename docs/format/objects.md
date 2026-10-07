@@ -834,3 +834,22 @@ swatches, in order; the other two are in the pairs whose IDML was
 exported from another save. The converter writes 907 of the 942 IDML
 swatches, all with the IDML reference. A swatch without a reference is
 left out, and the indices of the others are kept.
+
+## Bullet characters
+
+The preferences object (class 0x2202) lists the bullet characters
+offered for lists in chunk 0x1A488: u16 1, u32 count, then for each
+bullet u32 character type (0 `UnicodeOnly`, 1 `UnicodeWithFont`, 2
+`GlyphWithFont`, as in `attributes.md`), u32 character value, u32 font
+family UID (0 = none), a flag byte (1 = built-in key, `$ID/`) and the
+font style as an in-object string, and a byte that is 0 in every sample.
+IDML writes one `ABullet` per entry in `designmap.xml`, with
+`Self="dABullet<index>"`, `CharacterType`, `CharacterValue` and the
+`BulletsFont` (the family name, `$ID/` for none) and `BulletsFontStyle`
+properties.
+
+Evidence: all 78 pairs have the chunk; the count equals the number of
+IDML `ABullet` elements in 78 of 78 and the records end the chunk. All
+396 bullets match on type, value and font style, and 395 on the font;
+the other is in the pair whose IDML names the family `Minion Pro (OTF)`
+(`fonts.md`).

@@ -106,6 +106,8 @@ pub mod chunk {
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;
+    /// Bullet characters, in the preferences object.
+    pub const BULLETS: u32 = 0x1A488;
     pub const FRAME_COLUMNS: u32 = 0x2D1;
     pub const FRAME_JUSTIFICATION: u32 = 0x2CE;
     pub const GRAPHIC_BOUNDS: u32 = 0x1633;
@@ -467,6 +469,8 @@ pub struct Document {
     pub inks: Vec<Ink>,
     /// Colour groups in document order, the root group first.
     pub color_groups: Vec<ColorGroup>,
+    /// The bullet characters offered for lists (preferences chunk 0x1A488).
+    pub bullets: Vec<Bullet>,
 }
 
 /// Document setup, from chunk 0x533 of the preferences object.
@@ -533,6 +537,19 @@ pub struct Section {
 pub mod numbering {
     pub const ARABIC: u32 = 0x4C15;
     pub const LOWER_ROMAN: u32 = 0x4C17;
+}
+
+/// A bullet character of the document's list (IDML `ABullet`): u32
+/// character type, u32 character value, u32 font family (0 = none), the
+/// font style as a flag byte and string, then a byte (0 in every sample).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bullet {
+    /// 0 `UnicodeOnly`, 1 `UnicodeWithFont`, 2 `GlyphWithFont`.
+    pub kind: u32,
+    pub value: u32,
+    pub font: u32,
+    /// The IDML font style, with `$ID/` for a built-in name.
+    pub font_style: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -957,7 +974,49 @@ impl<'a> Reader<'a> {
                 .into_iter()
                 .filter_map(|u| color_groups.remove(&u))
                 .collect(),
+            bullets: self.bullets()?,
         })
+    }
+
+    /// The bullet characters in the preferences object (chunk 0x1A488):
+    /// u16 1, u32 count, then the bullets.
+    fn bullets(&self) -> Result<Vec<Bullet>, Error> {
+        let Some(&(uid, _)) = self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::PREFERENCES)
+        else {
+            return Ok(Vec::new());
+        };
+        let Some(d) = self.chunk(uid, chunk::BULLETS)? else {
+            return Ok(Vec::new());
+        };
+        let mut c = Cursor::new(&d);
+        if c.u16()? != 1 {
+            return Ok(Vec::new());
+        }
+        let n = c.u32()?;
+        let mut out = Vec::new();
+        for _ in 0..n {
+            let kind = c.u32()?;
+            let value = c.u32()?;
+            let font = c.u32()?;
+            let builtin = c.u8()? == 1;
+            let style = c.string()?;
+            c.u8()?;
+            out.push(Bullet {
+                kind,
+                value,
+                font,
+                font_style: if builtin {
+                    format!("$ID/{style}")
+                } else {
+                    style
+                },
+            });
+        }
+        Ok(out)
     }
 
     /// The colour groups listed in the preferences object (chunk 0x1F61).

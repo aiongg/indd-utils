@@ -980,6 +980,31 @@ impl Writer<'_> {
         }
         self.hyperlinks(&mut x);
         self.color_groups(&mut x);
+        for (i, b) in doc.bullets.iter().enumerate() {
+            const KINDS: [&str; 3] = ["UnicodeOnly", "UnicodeWithFont", "GlyphWithFont"];
+            let Some(kind) = KINDS.get(b.kind as usize) else {
+                continue;
+            };
+            let font = match b.font {
+                0 => "$ID/".to_string(),
+                f => match doc.fonts.get(&f) {
+                    Some(f) => f.name.clone(),
+                    None => continue,
+                },
+            };
+            x.start("ABullet")
+                .attr("Self", format!("dABullet{i}"))
+                .attr("CharacterType", *kind)
+                .attr("CharacterValue", b.value.to_string());
+            Self::properties(
+                &mut x,
+                &[
+                    ("BulletsFont", "string", font.into()),
+                    ("BulletsFontStyle", "string", b.font_style.clone().into()),
+                ],
+            );
+            x.end();
+        }
         x.end();
         x.finish()
     }
