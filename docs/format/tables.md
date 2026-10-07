@@ -47,9 +47,20 @@ the table out.
 rows (columns), u16, u16 attribute count, text attribute records (see
 `attributes.md`), 8 bytes.
 
-Row attribute 0xB69F is `AutoGrow`: 0 in all 32 rows of the pairs that
-have it, and those rows have `AutoGrow="false"`; the 182 rows without it
-have no `AutoGrow` in IDML. The converter writes `false` for 0 only.
+**Row attributes.** IDML writes on a `Row` exactly the attributes its
+row group has (presence matches for all three IDs below in the pairs):
+
+| ID | IDML | Encoding | Evidence |
+|---|---|---|---|
+| 0xB69F | `AutoGrow` | 0 `false`, 1 `true` | 1,065 rows with 1, 63 with 0 |
+| 0x10407 | `StartRow` | 0 `Anywhere`, 2 `NextColumn` | 10 rows (3 files) |
+| 0xB6A1 | `KeepWithNextRow` | 0 `false` | 8 rows |
+
+**Table direction.** Chunk 0x50F65 of the table object is a u16: 0 for
+`TableDirection="LeftToRightDirection"`, 1 for `RightToLeftDirection`.
+All 396 tables of the pairs (all versions) have it; 395 have 0 and are
+left to right in IDML, the one table with 1 (DOM 21.5) is right to left.
+IDML writes `TableDirection` on every table of every version.
 
 ## Cells
 

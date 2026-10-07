@@ -343,6 +343,14 @@ impl Writer<'_> {
         if let Some(st) = t.style.and_then(|u| self.doc.table_styles.get(&u)) {
             x.attr("AppliedTableStyle", self.table_style_ref("TableStyle", st));
         }
+        x.attr(
+            "TableDirection",
+            if t.right_to_left {
+                "RightToLeftDirection"
+            } else {
+                "LeftToRightDirection"
+            },
+        );
         for (name, v) in self.table_attrs(&t.attrs) {
             x.attr(name, v);
         }
@@ -356,8 +364,8 @@ impl Writer<'_> {
             if let Some(h) = r.min_height {
                 x.attr("MinimumHeight", num(h));
             }
-            if r.auto_grow == Some(0) {
-                x.attr("AutoGrow", "false");
+            for (name, v) in self.attr_values(&r.attrs, ROW_ATTRS) {
+                x.attr(name, v);
             }
             x.end();
         }

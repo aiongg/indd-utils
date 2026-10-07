@@ -623,6 +623,18 @@ pub(super) const TABLE_ATTRS: &[(u32, &str, Kind)] = &[
     (0x10454, "RightColumnRegionCellStyle", Kind::CellStyle),
 ];
 
+/// Row group attributes: ID, IDML attribute, kind.
+/// See `docs/format/tables.md`.
+pub(super) const ROW_ATTRS: &[(u32, &str, Kind)] = &[
+    (0xB69F, "AutoGrow", Kind::Bool),
+    (
+        0x10407,
+        "StartRow",
+        Kind::Enum(&[(0, "Anywhere"), (2, "NextColumn")]),
+    ),
+    (0xB6A1, "KeepWithNextRow", Kind::Enum(&[(0, "false")])),
+];
+
 /// Paragraph style of a cell style.
 pub(super) const CELL_STYLE_PARAGRAPH_STYLE: u32 = 0x10463;
 

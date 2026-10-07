@@ -33,6 +33,8 @@ pub mod chunk {
     pub const CELL_STYLE_ROOT_CHILDREN: u32 = 0x2024E;
     /// Children of the root table style group: u32, u32, UID list.
     pub const TABLE_STYLE_ROOT_CHILDREN: u32 = 0x104E5;
+    /// u16 table direction: 0 left to right, 1 right to left.
+    pub const TABLE_DIRECTION: u32 = 0x50F65;
 }
 
 /// Attribute IDs in table data.
@@ -40,8 +42,6 @@ pub mod attr {
     pub const COLUMN_WIDTH: u32 = 0xB60D;
     pub const ROW_HEIGHT: u32 = 0xB60C;
     pub const ROW_MIN_HEIGHT: u32 = 0xB66E;
-    /// 0 = `AutoGrow="false"`.
-    pub const ROW_AUTO_GROW: u32 = 0xB69F;
     /// A grid position that starts a cell; its value holds cell geometry.
     pub const CELL: u32 = 0xB666;
     /// A grid position covered by a merged cell.
@@ -52,8 +52,8 @@ pub mod attr {
 pub struct Row {
     pub height: Option<f64>,
     pub min_height: Option<f64>,
-    /// Stored auto-grow value (0 in every sample, `AutoGrow="false"`).
-    pub auto_grow: Option<u32>,
+    /// The row group's attributes (`AutoGrow`, `StartRow`, ...).
+    pub attrs: Attrs,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +98,8 @@ pub struct Table {
     pub style: Option<u32>,
     /// Local table attributes.
     pub attrs: Attrs,
+    /// Right to left (chunk 0x50F65 is 1).
+    pub right_to_left: bool,
     pub header_rows: u32,
     pub footer_rows: u32,
     pub rows: Vec<Row>,
@@ -233,7 +235,7 @@ impl Reader<'_> {
             let row = Row {
                 height: f64_attr(&a, attr::ROW_HEIGHT),
                 min_height: f64_attr(&a, attr::ROW_MIN_HEIGHT),
-                auto_grow: a.get(attr::ROW_AUTO_GROW).and_then(Value::as_u32),
+                attrs: a,
             };
             let count = count.min(nrows - rows.len());
             rows.extend(std::iter::repeat_n(row, count));
@@ -243,7 +245,7 @@ impl Reader<'_> {
             Row {
                 height: None,
                 min_height: None,
-                auto_grow: None,
+                attrs: Attrs::default(),
             },
         );
 
@@ -253,10 +255,15 @@ impl Reader<'_> {
             None => None,
         };
         let attrs = self.counted_attrs(uid, chunk::TABLE_ATTRS)?;
+        let right_to_left = match self.chunk(uid, chunk::TABLE_DIRECTION)? {
+            Some(d) => self.cursor(&d).u16()? == 1,
+            None => false,
+        };
         Ok(Table {
             uid,
             style,
             attrs,
+            right_to_left,
             header_rows,
             footer_rows,
             rows,
@@ -620,7 +627,7 @@ mod tests {
         let row = |h| Row {
             height: Some(h),
             min_height: None,
-            auto_grow: None,
+            attrs: Attrs::default(),
         };
         let cells = cells_from_grid(&grid, &[row(20.0), row(20.0)], &[10.0; 4]);
         let spans: Vec<_> = cells
