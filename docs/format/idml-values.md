@@ -398,6 +398,24 @@ the converter writes that value on every `MarginPreference`
 `PlatformName` is `$ID/` in all 4,464 `Font` elements of the corpus IDML
 files (`fonts.md`). The converter writes that value on every font.
 
+## Number format
+
+IDML writes a number as the shortest decimal that reads back as the same
+64-bit value, in plain notation (no exponent). When that decimal needs 17
+significant digits, there can be two 17-digit candidates equally close to
+the value; IDML then takes the one with the even last digit. For example
+the value 150.235992431640625 is written `150.23599243164062`, not
+`…063`. This is the 17-digit decimal nearest to the exact value, with
+ties to even.
+
+Evidence: all 20,524 `GraphicBounds` values of images, PDF, EPS, SVG and
+WMF graphics and imported pages in the trustworthy pairs follow this
+rule (compared with the text Python's `repr` gives for the same value).
+The INDD values (chunk 0x1633) match 1,001 of 1,001 PDF and 338 of 338
+EPS graphics with this format; Rust's shortest form differs in the last
+digit for 208 of these values. The converter writes every number this
+way.
+
 ## Preferences
 
 `Resources/Preferences.xml` of every corpus IDML has the same 41

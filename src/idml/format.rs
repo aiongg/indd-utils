@@ -136,15 +136,58 @@ pub(super) fn ui_color_property(tag: &str, rgb: [f64; 3]) -> Option<Node> {
     })
 }
 
-/// Format a number the way IDML does: shortest round-trip form. IDML
-/// keeps negative zero (`1 -0 -0 1 0 0`).
-/// A number as IDML text. IDML has no text for NaN or infinity; they are
+/// A number as IDML text: the shortest decimal that reads back as the same
+/// value, in plain notation. When that needs 17 significant digits, IDML
+/// takes the 17-digit decimal nearest to the value, with ties to the even
+/// digit (`150.23599243164062`, where Rust's shortest form has `…063`);
+/// see `docs/format/idml-values.md`, number format. IDML keeps negative
+/// zero (`1 -0 -0 1 0 0`). IDML has no text for NaN or infinity; they are
 /// written as 0, which keeps the package valid.
 pub fn num(v: f64) -> String {
-    if v.is_finite() {
-        format!("{v}")
+    if !v.is_finite() {
+        return "0".to_string();
+    }
+    let short = format!("{v}");
+    if significant_digits(&short) < 17 {
+        return short;
+    }
+    // `{:.16e}` rounds the exact value to 17 digits, ties to even.
+    let sci = format!("{v:.16e}");
+    let Some((mantissa, exp)) = sci.split_once('e') else {
+        return short;
+    };
+    let Ok(exp) = exp.parse::<i32>() else {
+        return short;
+    };
+    let (sign, mantissa) = match mantissa.strip_prefix('-') {
+        Some(m) => ("-", m),
+        None => ("", mantissa),
+    };
+    let digits: String = mantissa.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits = digits.trim_end_matches('0');
+    // The decimal point goes after `exp + 1` digits.
+    let point = exp + 1;
+    let text = if point <= 0 {
+        format!("0.{}{digits}", "0".repeat(point.unsigned_abs() as usize))
+    } else if point as usize >= digits.len() {
+        format!("{digits}{}", "0".repeat(point as usize - digits.len()))
     } else {
-        "0".to_string()
+        let (int, frac) = digits.split_at(point as usize);
+        format!("{int}.{frac}")
+    };
+    format!("{sign}{text}")
+}
+
+/// The number of significant digits of a number in plain notation.
+fn significant_digits(text: &str) -> usize {
+    let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits = digits.trim_start_matches('0');
+    // Trailing zeros of an integer are not significant either; `{}` writes
+    // no trailing zeros after a decimal point.
+    if text.contains('.') {
+        digits.len()
+    } else {
+        digits.trim_end_matches('0').len()
     }
 }
 
@@ -292,6 +335,22 @@ mod tests {
         assert_eq!(num(-0.0), "-0");
         assert_eq!(num(1.0), "1");
         assert_eq!(num(-89.99999999999999), "-89.99999999999999");
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)]
+    fn rounds_17_digit_ties_to_even() {
+        assert_eq!(num(150.235992431640625), "150.23599243164062");
+        assert_eq!(num(22.3404083251953125), "22.340408325195312");
+        assert_eq!(num(19.6667022705078125), "19.666702270507812");
+        assert_eq!(num(-150.235992431640625), "-150.23599243164062");
+        // Values with 16 digits or fewer keep their shortest form.
+        assert_eq!(num(0.2779084995276255), "0.2779084995276255");
+        assert_eq!(num(1e20), "100000000000000000000");
+        assert_eq!(num(0.1 + 0.2), "0.30000000000000004");
+        for v in [1.0 / 3.0, 2.0 / 3.0, 1e-7 / 3.0, 123456.789e3 / 7.0] {
+            assert_eq!(num(v).parse::<f64>().unwrap(), v);
+        }
     }
 
     #[test]
