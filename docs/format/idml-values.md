@@ -118,6 +118,17 @@ alignment is off in every corpus story, so the field that turns it on is
 not known and a document that uses it is converted without it.
 `AppliedTOCStyle` is left out: it names a TOC style in 4 stories.
 
+## Graphic settings without an INDD field
+
+All 496 `Image` elements in the 240 corpus IDML files (119 files) have
+`ClippingPathSettings` with `InvertPath="false"`,
+`IncludeInsideEdges="false"`, `RestrictToFrame="false"` and
+`AppliedPathName="$ID/"`, and `ImageIOPreference` with
+`AllowAutoEmbedding="true"` and `AlphaChannelName="$ID/"`. The 386 PDF
+and 49 EPS graphics with `ClippingPathSettings` have the same four
+values. The converter writes them (`objects.md`, clipping path
+settings).
+
 ## Column direction of pages
 
 All 832 `MarginPreference` elements in the 240 corpus IDML files have

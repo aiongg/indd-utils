@@ -117,6 +117,10 @@ pub mod chunk {
     pub const SWATCH_NAME: u32 = 0x1F30;
     pub const TEXT_WRAP: u32 = 0x3703;
     pub const CONTOUR_OPTION: u32 = 0x373D;
+    pub const CLIPPING_PATH: u32 = 0x2C1A;
+    pub const PHOTOSHOP_CLIPPING: u32 = 0x8C39;
+    /// Frame fitting attributes of an object style (u16 count, records).
+    pub const OBJECT_STYLE_FITTING: u32 = 0x1B956;
     pub const GUIDE: u32 = 0x3308;
 }
 
@@ -314,6 +318,24 @@ pub struct Graphic {
     pub text_wrap: Option<TextWrap>,
     /// Contour type code of the text wrap (chunk 0x373D): 5 = SameAsClipping.
     pub contour_type: Option<u32>,
+    /// Clipping path settings (chunk 0x2C1A), if stored.
+    pub clipping: Option<ClippingPath>,
+    /// Chunk 0x8C39, u16 at 0: apply the Photoshop clipping path (1 true).
+    pub photoshop_clipping: Option<u16>,
+}
+
+/// Clipping path settings of a graphic (chunk 0x2C1A, 37 bytes): u32 type
+/// at 0, f64 tolerance at 4, f64 inset at 12, u8 threshold at 20, i16
+/// index at 23, u8 at 25 (2 = use the high-resolution image). See
+/// `docs/format/objects.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClippingPath {
+    pub kind: u32,
+    pub tolerance: f64,
+    pub inset: f64,
+    pub threshold: u8,
+    pub index: i16,
+    pub high_resolution: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -501,6 +523,8 @@ pub struct ObjectStyle {
     pub name: String,
     pub builtin: bool,
     pub based_on: Option<u32>,
+    /// Frame fitting attributes (chunk 0x1B956), same IDs as on page items.
+    pub fitting: Attrs,
 }
 
 /// Reads typed objects from a database, caching them.
@@ -669,6 +693,10 @@ impl<'a> Reader<'a> {
                                 name,
                                 builtin,
                                 based_on: uid_or_none(based_on),
+                                fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
+                                    Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
+                                    None => Attrs::default(),
+                                },
                             },
                         );
                     }
@@ -1282,6 +1310,24 @@ impl<'a> Reader<'a> {
             text_wrap: self.text_wrap(uid)?,
             contour_type: match self.chunk(uid, chunk::CONTOUR_OPTION)? {
                 Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                _ => None,
+            },
+            clipping: match self.chunk(uid, chunk::CLIPPING_PATH)? {
+                Some(d) if d.len() >= 26 => {
+                    let f = |o: usize| Cursor::new(&d[o..]).f64();
+                    Some(ClippingPath {
+                        kind: Cursor::new(&d).u32()?,
+                        tolerance: f(4)?,
+                        inset: f(12)?,
+                        threshold: d[20],
+                        index: i16::from_le_bytes([d[23], d[24]]),
+                        high_resolution: d[25],
+                    })
+                }
+                _ => None,
+            },
+            photoshop_clipping: match self.chunk(uid, chunk::PHOTOSHOP_CLIPPING)? {
+                Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
                 _ => None,
             },
         }))

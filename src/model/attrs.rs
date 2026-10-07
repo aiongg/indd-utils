@@ -82,6 +82,13 @@ impl Attrs {
         Attrs::records(&mut c, n, decode)
     }
 
+    /// A page item attribute list with a u16 count, as object styles hold.
+    pub fn parse_short(data: &[u8]) -> Result<Attrs, Error> {
+        let mut c = Cursor::new(data);
+        let n = c.u16()? as usize;
+        Attrs::records(&mut c, n, decode)
+    }
+
     /// A text attribute list: `count` records at the cursor. Text value
     /// types differ per attribute, so values are decoded by length.
     pub fn parse_text(c: &mut Cursor, count: usize) -> Result<Attrs, Error> {

@@ -325,6 +325,88 @@ shown, so the converter writes the side and inverse settings only when
 the u32 at 40 is 1. Modes other than 0, 1, 3 and 6 have no IDML
 evidence; the converter leaves out `TextWrapPreference` for them.
 
+## Frame fitting
+
+The frame fitting settings are attributes in the page item attribute list
+(chunk 0x6E03, `attributes.md`). Object styles hold all of them in chunk
+0x1B956 (a u16 count, then records of the same layout).
+
+| ID | IDML `FrameFittingOption` attribute | Encoding |
+|---|---|---|
+| 0x6E83 | `AutoFit` | u32, 0 in every sample (`false`) |
+| 0x6E7E | `LeftCrop` | f64 |
+| 0x6E7F | `TopCrop` | f64 |
+| 0x6E80 | `RightCrop` | f64 |
+| 0x6E81 | `BottomCrop` | f64 |
+| 0x6E7C | `FittingOnEmptyFrame` | u32: 0 `None`, 1 `ContentToFrame`, 2 `Proportionally`, 3 `FillProportionally` |
+| 0x6E7D | `FittingAlignment` | u32: 0 `TopLeftAnchor`, 4 `CenterAnchor` |
+
+Evidence, from the same-version pairs:
+
+- **Object styles.** All 337 object styles paired by name hold all seven
+  IDs in chunk 0x1B956, and all seven match the style's IDML
+  `FrameFittingOption` in 337 of 337 (`FittingAlignment` 4 in 313
+  styles, 0 in 24).
+- **Crops.** Each crop ID is told apart by non-zero values: wherever IDML
+  writes the attribute, the frame's own value, or its style's if the
+  frame has none, matches: left 429, top 397, right 433, bottom 451, no
+  mismatch. Non-zero values: left 235, top 204, right 239, bottom 258.
+- **Fitting on an empty frame.** 301 of 301; codes 0, 1, 2 and 3 occur
+  (1,154, 9, 77 and 16 values).
+- **Alignment.** 200 of 205. The other 5 are frames in one file with the
+  style `[None]`, no local value and a style value of 0, where IDML says
+  `CenterAnchor`; not explained. Code 0 is shown in 9 frames, code 4 in
+  object styles. Other codes are left out.
+- **AutoFit.** 0 and `false` wherever IDML writes it (200 of 200); other
+  values are left out.
+
+**Where IDML writes it.** Only on rectangles, ovals and polygons, never
+on text frames (1,154) or lines (136), even when their list has these
+attributes. Let D be the item's local attributes whose value differs
+from its object style's. IDML writes D if it is not empty; otherwise all
+seven of the style's values, unless the style is the root `[None]`, in
+which case it writes no element. This gives the IDML element exactly
+for 1,849 of 1,864 frames (2,582 of 2,599 with the pairs whose IDML is
+from an older version); in the other 15, IDML writes all seven values
+although D is not empty. The converter follows the rule, and writes the
+seven values of every object style.
+
+## Clipping path settings
+
+Images, PDF and EPS graphics may have chunk 0x2C1A (37 bytes):
+
+| Offset | Contents | IDML `ClippingPathSettings` |
+|---|---|---|
+| 0 | u32, 0 in every sample | `ClippingType="None"` |
+| 4 | f64 | `Tolerance` |
+| 12 | f64 | `InsetFrame` |
+| 20 | u8 | `Threshold` |
+| 23 | i16 | `Index` |
+| 25 | u8: 2 true, 0 false | `UseHighResolutionImage` |
+
+Evidence: 75 of 235 images in the same-version pairs have the chunk, and
+all 75 match on these fields (tolerance 2 or 0, threshold 25 or 0). The
+byte at 25 changes together with the threshold and tolerance in the same
+5 images, so it is identified only as the field that is left. PDF (153
+of 206) and EPS (6 of 18) graphics have the chunk with the same values as
+images that use the defaults. Graphics without the chunk (160 images, 53
+PDF, 12 EPS) have `UseHighResolutionImage="true"`, `Threshold="25"`,
+`Tolerance="2"`, `InsetFrame="0"` and `Index="-1"` in IDML, and the
+converter writes those values for them. The converter leaves out the
+element for a type other than 0.
+
+`InvertPath="false"`, `IncludeInsideEdges="false"`,
+`RestrictToFrame="false"` and `AppliedPathName="$ID/"` have no
+identified field. All 496 images, 386 PDF and 49 EPS graphics with the
+element in the corpus IDML files have these values, and the converter
+writes them (`idml-values.md`).
+
+**ImageIOPreference.** Chunk 0x8C39 of an image, u16 at 0:
+`ApplyPhotoshopClippingPath` (1 true, 0 false); 235 of 235 images (293
+of 293 with the older-version pairs, 11 of them false).
+`AllowAutoEmbedding="true"` and `AlphaChannelName="$ID/"` are in all 496
+images of the corpus IDML files and are written from that observation.
+
 ## Placed graphics
 
 Images (0x1702), PDF (0x2501), EPS (0x6601) and SVG (0x6639) are children

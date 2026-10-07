@@ -26,6 +26,48 @@ enum AttrKind {
 }
 
 /// Codes of built-in stroke styles. See `docs/format/attributes.md`.
+/// Frame fitting attributes of page items and object styles, in the
+/// order IDML writes them (`docs/format/objects.md`).
+const FITTING_ATTRS: [(u32, &str); 7] = [
+    (0x6E83, "AutoFit"),
+    (0x6E7E, "LeftCrop"),
+    (0x6E7F, "TopCrop"),
+    (0x6E80, "RightCrop"),
+    (0x6E81, "BottomCrop"),
+    (0x6E7C, "FittingOnEmptyFrame"),
+    (0x6E7D, "FittingAlignment"),
+];
+
+/// The IDML value of frame fitting attribute `id`; `None` for codes
+/// without evidence.
+fn fitting_value(id: u32, v: &Value) -> Option<String> {
+    match id {
+        0x6E83 => (v.as_u32()? == 0).then(|| "false".to_string()),
+        0x6E7C => match v.as_u32()? {
+            0 => Some("None".into()),
+            1 => Some("ContentToFrame".into()),
+            2 => Some("Proportionally".into()),
+            3 => Some("FillProportionally".into()),
+            _ => None,
+        },
+        0x6E7D => match v.as_u32()? {
+            0 => Some("TopLeftAnchor".into()),
+            4 => Some("CenterAnchor".into()),
+            _ => None,
+        },
+        _ => v.as_f64().map(num),
+    }
+}
+
+/// Frame fitting attributes of `attrs` with IDs in `ids`, in IDML order.
+fn fitting_attrs(attrs: &Attrs, ids: &[u32]) -> Vec<(&'static str, String)> {
+    FITTING_ATTRS
+        .iter()
+        .filter(|(id, _)| ids.contains(id))
+        .filter_map(|&(id, name)| Some((name, fitting_value(id, attrs.get(id)?)?)))
+        .collect()
+}
+
 const STROKE_TYPES: &[(u32, &str)] = &[
     (0x5A29, "Solid"),
     (0x5A38, "Canned Dashed 3x2"),
@@ -1822,12 +1864,26 @@ impl Writer<'_> {
             x.start("ObjectStyle")
                 .attr("Self", format!("ObjectStyle/{}", self_name(&name)))
                 .attr("Name", &name);
+            let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
+            let fitting = fitting_attrs(&os.fitting, &all);
             if os.builtin && os.name == "[None]" && os.based_on.is_none() {
-                let (attrs, props, children) = self.root_values("ObjectStyle", &[], &[]);
+                let (attrs, props, mut children) = self.root_values("ObjectStyle", &[], &[]);
                 for (k, v) in &attrs {
                     x.attr(k, v);
                 }
                 Self::properties_with(&mut x, &[], &props);
+                // Values read from the INDD take precedence.
+                if let Some(c) = children.iter_mut().find(|c| c.tag == "FrameFittingOption") {
+                    let rest: Vec<_> = std::mem::take(&mut c.attrs)
+                        .into_iter()
+                        .filter(|(k, _)| !fitting.iter().any(|(f, _)| f == k))
+                        .collect();
+                    c.attrs = fitting
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.clone()))
+                        .chain(rest)
+                        .collect();
+                }
                 for c in &children {
                     c.write(&mut x);
                 }
@@ -1848,6 +1904,10 @@ impl Writer<'_> {
                     )
                 };
                 Self::properties(&mut x, &[prop]);
+            }
+            if !(os.builtin && os.name == "[None]" && os.based_on.is_none()) && !fitting.is_empty()
+            {
+                x.empty("FrameFittingOption", &fitting);
             }
             x.end();
         }
@@ -2031,6 +2091,65 @@ impl Writer<'_> {
         x.end();
     }
 
+    /// `ClippingPathSettings` of an image, PDF or EPS graphic, and
+    /// `ImageIOPreference` of an image. Values without an INDD field are
+    /// those every exported IDML has, and a graphic without chunk 0x2C1A
+    /// has the values every such graphic has in IDML. See
+    /// `docs/format/objects.md`.
+    fn clipping(x: &mut Xml, g: &Graphic) {
+        let (high_resolution, threshold, tolerance, inset, index) = match &g.clipping {
+            Some(c) if c.kind == 0 => (
+                match c.high_resolution {
+                    2 => Some("true"),
+                    0 => Some("false"),
+                    _ => None,
+                },
+                c.threshold.to_string(),
+                num(c.tolerance),
+                num(c.inset),
+                c.index.to_string(),
+            ),
+            Some(_) => return,
+            None => (
+                Some("true"),
+                "25".into(),
+                "2".into(),
+                "0".into(),
+                "-1".into(),
+            ),
+        };
+        x.start("ClippingPathSettings")
+            .attr("ClippingType", "None")
+            .attr("InvertPath", "false")
+            .attr("IncludeInsideEdges", "false")
+            .attr("RestrictToFrame", "false");
+        if let Some(h) = high_resolution {
+            x.attr("UseHighResolutionImage", h);
+        }
+        x.attr("Threshold", threshold)
+            .attr("Tolerance", tolerance)
+            .attr("InsetFrame", inset)
+            .attr("AppliedPathName", "$ID/")
+            .attr("Index", index);
+        x.end();
+        if g.kind != GraphicKind::Image {
+            return;
+        }
+        x.start("ImageIOPreference");
+        match g.photoshop_clipping {
+            Some(1) => {
+                x.attr("ApplyPhotoshopClippingPath", "true");
+            }
+            Some(0) => {
+                x.attr("ApplyPhotoshopClippingPath", "false");
+            }
+            _ => {}
+        }
+        x.attr("AllowAutoEmbedding", "true")
+            .attr("AlphaChannelName", "$ID/");
+        x.end();
+    }
+
     fn placed_graphic(x: &mut Xml, g: &Graphic) {
         let tag = match g.kind {
             GraphicKind::Image => "Image",
@@ -2058,6 +2177,9 @@ impl Writer<'_> {
             ],
         );
         x.end();
+        if g.kind != GraphicKind::Svg {
+            Self::clipping(x, g);
+        }
         Self::text_wrap_preference(x, g.text_wrap.as_ref(), g.contour_type);
         if let Some(link) = &g.link {
             x.empty(
@@ -2131,6 +2253,12 @@ impl Writer<'_> {
         {
             Self::text_frame_preference(x, p);
         }
+        if matches!(
+            item.kind,
+            ItemKind::Shape(Shape::Rectangle | Shape::Oval | Shape::Polygon)
+        ) {
+            self.frame_fitting(x, item);
+        }
         Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
         transparency::write(x, &item.attrs, &uref(Some(item.uid)), &self.doc.swatches);
         for child in &item.children {
@@ -2140,6 +2268,39 @@ impl Writer<'_> {
             Self::placed_graphic(x, g);
         }
         x.end();
+    }
+
+    /// `FrameFittingOption` of a rectangle, oval or polygon. IDML writes
+    /// the local values that differ from the object style's; with none,
+    /// all of the style's values unless the style is the root `[None]`.
+    /// See `docs/format/objects.md`.
+    fn frame_fitting(&self, x: &mut Xml, item: &PageItem) {
+        let style = item
+            .object_style
+            .and_then(|u| self.doc.object_styles.get(&u));
+        let differ: Vec<u32> = FITTING_ATTRS
+            .iter()
+            .map(|(id, _)| *id)
+            .filter(|&id| {
+                item.attrs
+                    .get(id)
+                    .is_some_and(|v| style.and_then(|s| s.fitting.get(id)) != Some(v))
+            })
+            .collect();
+        let attrs = if !differ.is_empty() {
+            fitting_attrs(&item.attrs, &differ)
+        } else {
+            match style {
+                Some(s) if !(s.builtin && s.name == "[None]" && s.based_on.is_none()) => {
+                    let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
+                    fitting_attrs(&s.fitting, &all)
+                }
+                _ => Vec::new(),
+            }
+        };
+        if !attrs.is_empty() {
+            x.empty("FrameFittingOption", &attrs);
+        }
     }
 
     /// A ruler guide. `origin` is the top-left corner of the spread's
