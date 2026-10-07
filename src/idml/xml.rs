@@ -1,4 +1,11 @@
 //! A small XML writer that indents with tabs, like InDesign's IDML export.
+//!
+//! The attributes of an open start tag are kept until the tag is closed,
+//! so an element can never get an attribute twice: [`Xml::attr`] sets a
+//! value (replacing an earlier one in place), and [`Xml::attrs_missing`]
+//! adds observed values only for attributes the element does not have.
+//! Values set with `attr` therefore take precedence over observed values
+//! whatever the order of the calls.
 
 use std::fmt::Write;
 
@@ -9,8 +16,9 @@ pub struct Xml {
     open: bool,
     /// The current element has text content, so its end tag is not indented.
     inline: bool,
-    /// Names of the attributes written in the open start tag.
-    written: Vec<String>,
+    /// Attributes of the open start tag, in order, with their escaped
+    /// values.
+    attrs: Vec<(String, String)>,
 }
 
 /// Whether XML 1.0 allows `c` (control characters aside): not U+FFFE or
@@ -50,12 +58,20 @@ impl Xml {
             stack: Vec::new(),
             open: false,
             inline: false,
-            written: Vec::new(),
+            attrs: Vec::new(),
+        }
+    }
+
+    /// Write the attributes of the open start tag.
+    fn flush_attrs(&mut self) {
+        for (k, v) in self.attrs.drain(..) {
+            let _ = write!(self.out, " {k}=\"{v}\"");
         }
     }
 
     fn close_start(&mut self) {
         if self.open {
+            self.flush_attrs();
             self.out.push('>');
             self.open = false;
         }
@@ -88,23 +104,29 @@ impl Xml {
         self.stack.push(name.to_string());
         self.open = true;
         self.inline = false;
-        self.written.clear();
+        self.attrs.clear();
         self
     }
 
+    /// Set attribute `name` of the open start tag. An attribute the tag
+    /// already has keeps its position and gets this value.
     pub fn attr(&mut self, name: &str, value: impl AsRef<str>) -> &mut Self {
         debug_assert!(self.open, "attribute outside a start tag");
-        let _ = write!(self.out, " {name}=\"{}\"", escape_attr(value.as_ref()));
-        self.written.push(name.to_string());
+        let value = escape_attr(value.as_ref());
+        match self.attrs.iter_mut().find(|(k, _)| k == name) {
+            Some(a) => a.1 = value,
+            None => self.attrs.push((name.to_string(), value)),
+        }
         self
     }
 
     /// Whether the open start tag has attribute `name`.
     pub fn has_attr(&self, name: &str) -> bool {
-        self.open && self.written.iter().any(|w| w == name)
+        self.open && self.attrs.iter().any(|(k, _)| k == name)
     }
 
-    /// Write the attributes the open start tag does not have yet.
+    /// Add the attributes the open start tag does not have (observed
+    /// values). A later [`Xml::attr`] with the same name replaces them.
     pub fn attrs_missing<'a>(
         &mut self,
         attrs: impl IntoIterator<Item = &'a (String, String)>,
@@ -159,6 +181,7 @@ impl Xml {
     pub fn end(&mut self) -> &mut Self {
         let name = self.stack.pop().expect("end without start");
         if self.open {
+            self.flush_attrs();
             self.out.push_str(" />");
             self.open = false;
         } else {
@@ -214,6 +237,20 @@ mod tests {
         ];
         x.attrs_missing(&more).end();
         assert!(x.finish().ends_with("<a k=\"1\" m=\"3\" />"));
+    }
+
+    #[test]
+    fn attributes_set_after_observed_values_replace_them() {
+        let mut x = Xml::new();
+        let observed = [
+            ("k".to_string(), "observed".to_string()),
+            ("m".to_string(), "3".to_string()),
+        ];
+        x.start("a")
+            .attrs_missing(&observed)
+            .attr("k", "read")
+            .end();
+        assert!(x.finish().ends_with("<a k=\"read\" m=\"3\" />"));
     }
 
     #[test]
