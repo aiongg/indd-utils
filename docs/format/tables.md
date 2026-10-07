@@ -34,6 +34,12 @@ IDML names a table `<scope>i<table UID hex>`, where the scope is the story
 | 0xB616 | Row groups; 0xB60C = `SingleRowHeight`, 0xB66E = `MinimumHeight` (24/24) |
 | 0xB6FB | u32 count, then (UID, class) pairs of the table's parts |
 
+The row count equals the number of grid rows in the cell data (below),
+and the column count is at most the number of positions in its widest
+grid row, in all 5,565 tables read from the corpus files (copies of a
+file counted again). The converter treats larger counts as damage and leaves
+the table out.
+
 **Row and column groups:** u32 group count; per group: u32 number of
 rows (columns), u16, u16 attribute count, text attribute records (see
 `attributes.md`), 8 bytes.

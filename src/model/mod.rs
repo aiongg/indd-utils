@@ -916,7 +916,13 @@ pub struct Reader<'a> {
     xml_nodes: std::cell::RefCell<BTreeMap<xml::Key, xml::Node>>,
     /// Text orientation of each text frame read so far, by story.
     frame_orientations: std::cell::RefCell<BTreeMap<u32, Vec<Option<Orientation>>>>,
+    /// The groups whose page items are being read, outermost first.
+    item_path: std::cell::RefCell<Vec<u32>>,
 }
+
+/// Groups nested deeper than this are left out, with a warning, so that a
+/// damaged file cannot exhaust the stack.
+const MAX_ITEM_DEPTH: usize = 100;
 
 fn uid_or_none(v: u32) -> Option<u32> {
     (v != 0).then_some(v)
@@ -930,6 +936,7 @@ impl<'a> Reader<'a> {
             warnings: Default::default(),
             xml_nodes: Default::default(),
             frame_orientations: Default::default(),
+            item_path: Default::default(),
         }
     }
 
@@ -1394,6 +1401,7 @@ impl<'a> Reader<'a> {
                 )),
             }
         }
+        prune_style_groups(&mut style_groups, |m| self.warn(m));
         let preferences = self.document_preferences()?;
         let prefs = self.prefs(version.major)?;
         Ok(Document {
@@ -2219,11 +2227,41 @@ impl<'a> Reader<'a> {
         Ok(paths)
     }
 
+    /// A page item and the items it contains. An item that contains
+    /// itself, or one nested more than [`MAX_ITEM_DEPTH`] deep, is left
+    /// out with a warning.
     fn page_item(&self, uid: u32, layer: Option<u32>) -> Result<Option<PageItem>, Error> {
         let cls = self.class(uid);
         if cls != Some(class::SPLINE_ITEM) && cls != Some(class::GROUP) {
             return Ok(None);
         }
+        {
+            let path = self.item_path.borrow();
+            if path.contains(&uid) {
+                drop(path);
+                self.warn(format!("item {uid} contains itself; left out"));
+                return Ok(None);
+            }
+            if path.len() >= MAX_ITEM_DEPTH {
+                drop(path);
+                self.warn(format!(
+                    "item {uid} is nested more than {MAX_ITEM_DEPTH} deep; left out"
+                ));
+                return Ok(None);
+            }
+        }
+        self.item_path.borrow_mut().push(uid);
+        let item = self.page_item_contents(uid, cls, layer);
+        self.item_path.borrow_mut().pop();
+        item
+    }
+
+    fn page_item_contents(
+        &self,
+        uid: u32,
+        cls: Option<u32>,
+        layer: Option<u32>,
+    ) -> Result<Option<PageItem>, Error> {
         // Groups without chunk 0x151 have their transform in chunk 0x40D.
         let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
             Some(d) => Matrix::read(&mut Cursor::new(&d))?,
@@ -3346,8 +3384,130 @@ fn classify(paths: &[Path], code: Option<u32>) -> Shape {
     Shape::Polygon
 }
 
+/// Style groups nested deeper than this are left out, with a warning.
+const MAX_GROUP_DEPTH: usize = 100;
+
+/// Make the style groups a tree under their root groups, so that walking
+/// them ends: a group listed a second time (in a cycle, or under a second
+/// parent) or nested deeper than [`MAX_GROUP_DEPTH`] is removed from the
+/// children of the group that lists it, with a warning.
+fn prune_style_groups(groups: &mut BTreeMap<u32, StyleGroup>, warn: impl Fn(String)) {
+    let roots: Vec<u32> = groups
+        .iter()
+        .filter(|(_, g)| g.root.is_some())
+        .map(|(&uid, _)| uid)
+        .collect();
+    let mut seen: std::collections::HashSet<u32> = roots.iter().copied().collect();
+    let mut stack: Vec<(u32, usize)> = roots.iter().map(|&r| (r, 0)).collect();
+    while let Some((uid, depth)) = stack.pop() {
+        let Some(g) = groups.get_mut(&uid) else {
+            continue;
+        };
+        let children = std::mem::take(&mut g.children);
+        let mut kept = Vec::with_capacity(children.len());
+        for c in children {
+            if groups.contains_key(&c) {
+                if !seen.insert(c) {
+                    warn(format!(
+                        "style group {c} is listed twice; left out of group {uid}"
+                    ));
+                    continue;
+                }
+                if depth + 1 > MAX_GROUP_DEPTH {
+                    warn(format!(
+                        "style group {c} is nested more than {MAX_GROUP_DEPTH} deep; left out"
+                    ));
+                    continue;
+                }
+                stack.push((c, depth + 1));
+            }
+            kept.push(c);
+        }
+        if let Some(g) = groups.get_mut(&uid) {
+            g.children = kept;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::database::synthetic;
+
+    /// Chunk data of a child list: 8 bytes, then a u32 list.
+    fn child_list(uids: &[u32]) -> Vec<u8> {
+        let mut d = vec![0; 8];
+        d.extend_from_slice(&(uids.len() as u32).to_le_bytes());
+        for u in uids {
+            d.extend_from_slice(&u.to_le_bytes());
+        }
+        d
+    }
+
+    fn group(uid: u32, children: &[u32]) -> (u32, u32, Vec<u8>) {
+        let chunks = synthetic::chunks(&[(chunk::ITEM_HIERARCHY, child_list(children))]);
+        (uid, class::GROUP, chunks)
+    }
+
+    #[test]
+    fn groups_that_contain_themselves_are_left_out() {
+        // Group 10 contains itself and group 11; group 11 contains 10.
+        let objects = [group(10, &[10, 11]), group(11, &[10])];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        let item = reader.page_item(10, None).unwrap().unwrap();
+        assert_eq!(item.children.len(), 1);
+        assert_eq!(item.children[0].uid, 11);
+        assert!(item.children[0].children.is_empty());
+        assert_eq!(reader.warnings.borrow().len(), 2);
+    }
+
+    #[test]
+    fn deeply_nested_groups_are_left_out() {
+        let n = 3 * MAX_ITEM_DEPTH as u32;
+        let objects: Vec<_> = (1..=n)
+            .map(|u| group(u, &[u + 1][..(u < n) as usize]))
+            .collect();
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        let mut item = reader.page_item(1, None).unwrap().unwrap();
+        let mut depth = 1;
+        while let Some(child) = item.children.pop() {
+            item = child;
+            depth += 1;
+        }
+        assert_eq!(depth, MAX_ITEM_DEPTH);
+        assert_eq!(reader.warnings.borrow().len(), 1);
+    }
+
+    #[test]
+    fn style_group_cycles_are_cut() {
+        let g = |uid, root, children: &[u32]| {
+            (
+                uid,
+                StyleGroup {
+                    uid,
+                    name: String::new(),
+                    root,
+                    children: children.to_vec(),
+                },
+            )
+        };
+        // Root 1 holds groups 2 and 3 and style 50; 2 holds 3 and 1; 3 holds 2.
+        let mut groups = BTreeMap::from([
+            g(1, Some(root_kind::PARAGRAPH), &[2, 3, 50]),
+            g(2, None, &[3, 1]),
+            g(3, None, &[2]),
+        ]);
+        let warnings = std::cell::RefCell::new(Vec::new());
+        prune_style_groups(&mut groups, |m| warnings.borrow_mut().push(m));
+        assert_eq!(groups[&1].children, [2, 3, 50]);
+        assert!(groups[&2].children.is_empty());
+        assert!(groups[&3].children.is_empty());
+        assert_eq!(warnings.borrow().len(), 3);
+    }
+
     use super::*;
 
     #[test]

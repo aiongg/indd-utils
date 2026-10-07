@@ -194,24 +194,44 @@ impl Reader<'_> {
         let header_rows = c.u32()?;
         let footer_rows = c.u32()?;
 
+        let column_groups = match self.chunk(uid, chunk::TABLE_COLUMNS)? {
+            Some(d) => groups(&d)?,
+            None => Vec::new(),
+        };
+        let row_groups = match self.chunk(uid, chunk::TABLE_ROWS)? {
+            Some(d) => groups(&d)?,
+            None => Vec::new(),
+        };
+        // The cell data has a row of grid positions for every table row,
+        // and a column count no larger than its widest row (every corpus
+        // table). Larger counts are damage; checking them before
+        // allocating keeps a damaged count from sizing the vectors below.
+        let grid = self.cell_grid(uid)?;
+        let widest = grid.iter().map(Vec::len).max().unwrap_or(0);
+        if nrows > grid.len() || ncols > widest {
+            return Err(Error::Corrupt(format!(
+                "table {uid} has {nrows} rows and {ncols} columns, but its cells \
+                 fill {} rows and {widest} columns",
+                grid.len()
+            )));
+        }
+
         let mut columns = Vec::with_capacity(ncols);
-        if let Some(d) = self.chunk(uid, chunk::TABLE_COLUMNS)? {
-            for (count, a) in groups(&d)? {
-                let w = f64_attr(&a, attr::COLUMN_WIDTH).unwrap_or(0.0);
-                columns.extend(std::iter::repeat_n(w, count));
-            }
+        for (count, a) in column_groups {
+            let w = f64_attr(&a, attr::COLUMN_WIDTH).unwrap_or(0.0);
+            let count = count.min(ncols - columns.len());
+            columns.extend(std::iter::repeat_n(w, count));
         }
         columns.resize(ncols, columns.last().copied().unwrap_or(0.0));
         let mut rows = Vec::with_capacity(nrows);
-        if let Some(d) = self.chunk(uid, chunk::TABLE_ROWS)? {
-            for (count, a) in groups(&d)? {
-                let row = Row {
-                    height: f64_attr(&a, attr::ROW_HEIGHT),
-                    min_height: f64_attr(&a, attr::ROW_MIN_HEIGHT),
-                    auto_grow: a.get(attr::ROW_AUTO_GROW).and_then(Value::as_u32),
-                };
-                rows.extend(std::iter::repeat_n(row, count));
-            }
+        for (count, a) in row_groups {
+            let row = Row {
+                height: f64_attr(&a, attr::ROW_HEIGHT),
+                min_height: f64_attr(&a, attr::ROW_MIN_HEIGHT),
+                auto_grow: a.get(attr::ROW_AUTO_GROW).and_then(Value::as_u32),
+            };
+            let count = count.min(nrows - rows.len());
+            rows.extend(std::iter::repeat_n(row, count));
         }
         rows.resize(
             nrows,
@@ -222,7 +242,6 @@ impl Reader<'_> {
             },
         );
 
-        let grid = self.cell_grid(uid)?;
         let cells = cells_from_grid(&grid, &rows, &columns);
         let style = match self.chunk(uid, chunk::TABLE_STYLE)? {
             Some(d) => super::uid_or_none(Cursor::new(&d).u32()?),
@@ -291,7 +310,10 @@ impl Reader<'_> {
                         style_priority,
                         style,
                     };
-                    formats.extend(std::iter::repeat_n(f, columns));
+                    // A row of this group has at most one position per
+                    // four bytes, so later formats would never be used.
+                    let room = (size / 4).saturating_sub(formats.len());
+                    formats.extend(std::iter::repeat_n(f, columns.min(room)));
                 }
                 let nr = g.u32()?;
                 let mut ids = Vec::new();
@@ -398,4 +420,34 @@ fn cells_from_grid(grid: &[Vec<Position>], rows: &[Row], columns: &[f64]) -> Vec
         }
     }
     cells
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::synthetic;
+
+    #[test]
+    fn counts_larger_than_the_cell_data_are_an_error() {
+        let mut size = Vec::new();
+        for v in [0x7FFF_FFFFu32, 0x7FFF_FFFF, 0, 0] {
+            size.extend_from_slice(&v.to_le_bytes());
+        }
+        let chunks = synthetic::chunks(&[
+            (chunk::TABLE_SIZE, size),
+            (chunk::TABLE_PARTS, 0u32.to_le_bytes().to_vec()),
+            (chunk::TABLE_ROWS, {
+                // One group of 2^31 rows with no attributes.
+                let mut d = 1u32.to_le_bytes().to_vec();
+                d.extend_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
+                d.extend_from_slice(&[0; 12]);
+                d
+            }),
+        ]);
+        let objects = [(5, class::TABLE, chunks)];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        assert!(reader.table(5).is_err());
+    }
 }

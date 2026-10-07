@@ -938,8 +938,14 @@ const MIMETYPE: &str = "application/vnd.adobe.indesign-idml-package";
 
 /// Format a number the way IDML does: shortest round-trip form. IDML
 /// keeps negative zero (`1 -0 -0 1 0 0`).
+/// A number as IDML text. IDML has no text for NaN or infinity; they are
+/// written as 0, which keeps the package valid.
 pub fn num(v: f64) -> String {
-    format!("{v}")
+    if v.is_finite() {
+        format!("{v}")
+    } else {
+        "0".to_string()
+    }
 }
 
 /// Round away binary noise from scaled values (0.8 * 100 = 80.00000000000001).
@@ -4585,7 +4591,7 @@ impl Writer<'_> {
             .attr("FooterRowCount", t.footer_rows.to_string())
             .attr(
                 "BodyRowCount",
-                rows.saturating_sub(t.header_rows + t.footer_rows)
+                rows.saturating_sub(t.header_rows.saturating_add(t.footer_rows))
                     .to_string(),
             )
             .attr("ColumnCount", t.columns.len().to_string());
@@ -4765,6 +4771,14 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numbers_without_text_are_written_as_zero() {
+        assert_eq!(num(1.5), "1.5");
+        assert_eq!(num(f64::NAN), "0");
+        assert_eq!(num(f64::INFINITY), "0");
+        assert_eq!(num(f64::NEG_INFINITY), "0");
+    }
 
     #[test]
     fn writes_xml_elements_at_their_markers() {

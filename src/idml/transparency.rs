@@ -233,6 +233,10 @@ fn stops(data: &[u8]) -> Option<Vec<Stop>> {
         return None;
     }
     let f = |i: usize| f64_from(data[4 + i * 8..12 + i * 8].try_into().unwrap());
+    // Two stops at the same location leave the midpoint undefined.
+    if (1..n).any(|i| f(3 * i) == f(3 * (i - 1))) {
+        return None;
+    }
     Some(
         (0..n)
             .map(|i| {
@@ -383,5 +387,14 @@ mod tests {
         assert_eq!(s[1].location, 85.0);
         assert!((s[1].midpoint.unwrap() - 50.0).abs() < 1e-9);
         assert_eq!(stops(&0u32.to_le_bytes()), None);
+    }
+
+    #[test]
+    fn stops_at_one_location_are_not_read() {
+        let mut d = 2u32.to_le_bytes().to_vec();
+        for v in [0.5, 0.5, 100.0, 0.5, 1.0, 0.0f64] {
+            d.extend_from_slice(&v.to_le_bytes());
+        }
+        assert_eq!(stops(&d), None);
     }
 }
