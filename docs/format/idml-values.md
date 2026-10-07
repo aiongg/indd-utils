@@ -237,6 +237,34 @@ Every spread has one `FlattenerPreference`, so the converter writes the
 element on every spread. The other attributes of these elements come
 from the INDD (`objects.md`).
 
+### Document settings in designmap.xml
+
+These elements are children of `Document` without `Self`. The tool keeps
+an element when every IDML from some version on has it, with the values
+all of them have; the converter writes it in the order of the IDML files.
+
+| Element | From DOM | Values kept | Left out (vary) |
+|---|---|---|---|
+| `ConditionalTextPreference` | 7 | both | |
+| `EndnoteOption` | 13 | 9 | `EndnoteTitle`, `EndnoteSeparatorText`, the marker and text styles, `EndnoteMarkerPositioning` |
+| `TextFrameFootnoteOptionsObject` | 12 | all 4 | |
+| `LinkedStoryOption` | 8 | all 4 | |
+| `LinkedPageItemOption` | 8 | all 7 | |
+| `WatermarkPreference` | 7 | 11 | the font family, style and colour |
+| `TaggedPDFPreference` | 8 | `StructureOrder` | |
+| `AdjustLayoutPreference` | 14 | 4 | `EnableAdjustLayout`, `EnableAutoAdjustMargins`, `AllowFontSizeAndLeadingAdjustment` |
+| `HTMLFXLExportPreference` | 11 | both | |
+| `PublishExportPreference` | 11 | 11 | `ImageExportResolution`, `PublishPdf` |
+
+### Language quotes
+
+The quotes of a language are not in its INDD object (`objects.md`,
+languages). For each language name the tool keeps `SingleQuotes` and
+`DoubleQuotes` when every IDML `Language` element with that name has the
+same value, in at least 3 files (a `Keyed` block of the values file):
+63 languages. Romanian and Japanese have two variants each and are left
+out.
+
 ### Trap presets
 
 All 683 IDML files list the same two `TrapPreset` elements at the end of

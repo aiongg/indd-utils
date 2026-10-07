@@ -76,6 +76,9 @@ pub mod chunk {
     pub const DOC_ACTIVE_LAYER: u32 = 0x313;
     pub const DOC_STORIES: u32 = 0x222;
     pub const DOC_SECTIONS: u32 = 0x4C01;
+    /// Document users: u32 count, then per user a flag byte, the name
+    /// and u32 colour.
+    pub const DOC_USERS: u32 = 0xA443;
     pub const SPREAD_CHILDREN: u32 = 0x503;
     pub const SPREAD_TRANSFORM: u32 = 0x56E;
     pub const SPREAD_BINDING: u32 = 0x1B8;
@@ -608,6 +611,8 @@ pub struct Document {
     pub version: Version,
     pub layers: Vec<Layer>,
     pub active_layer: Option<u32>,
+    /// Document users (chunk 0xA443): flag byte and name.
+    pub users: Vec<(u8, String)>,
     pub spreads: Vec<Spread>,
     pub master_spreads: Vec<Spread>,
     pub stories: Vec<Story>,
@@ -620,6 +625,8 @@ pub struct Document {
     pub swatches: BTreeMap<u32, String>,
     /// Font families by UID.
     pub fonts: BTreeMap<u32, FontFamily>,
+    /// The language objects (class 0x2D07) in UID order.
+    pub language_list: Vec<Language>,
     /// Language name (IDML `AppliedLanguage` without `$ID/`) for each
     /// language UID.
     pub languages: BTreeMap<u32, String>,
@@ -729,6 +736,19 @@ pub mod numbering {
     pub const LOWER_ROMAN: u32 = 0x4C17;
     /// Chinese numerals, written digit by digit.
     pub const KANJI: u32 = 0x4C12;
+}
+
+/// A language object (class 0x2D07), chunk 0x2D0F. See
+/// `docs/format/objects.md`, languages.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Language {
+    pub uid: u32,
+    pub name: String,
+    pub primary: String,
+    pub sub: String,
+    pub id: u16,
+    /// The spelling and hyphenation vendors, each with its flag byte.
+    pub vendors: Option<[(u8, String); 2]>,
 }
 
 /// A bullet character of the document's list (IDML `ABullet`): u32
@@ -872,6 +892,7 @@ impl<'a> Reader<'a> {
         let mut swatches = BTreeMap::new();
         let mut fonts = BTreeMap::new();
         let mut languages = BTreeMap::new();
+        let mut language_list = Vec::new();
         let mut style_groups = BTreeMap::new();
         let mut object_styles = BTreeMap::new();
         let mut cell_styles = BTreeMap::new();
@@ -1182,7 +1203,35 @@ impl<'a> Reader<'a> {
                         {
                             let mut c = Cursor::new(&d);
                             c.flag()?;
-                            languages.insert(uid, c.string()?);
+                            let name = c.string()?;
+                            languages.insert(uid, name.clone());
+                            // Then the primary and secondary names, u16
+                            // ID, and two vendors (flag, u32, string).
+                            let rest = (|| -> Result<_, Error> {
+                                c.flag()?;
+                                let primary = c.string()?;
+                                c.flag()?;
+                                let sub = c.string()?;
+                                let id = c.u16()?;
+                                let mut vendor = || -> Result<(u8, String), Error> {
+                                    let flag = c.u8()?;
+                                    c.u32()?;
+                                    Ok((flag, c.string()?))
+                                };
+                                let spelling = vendor()?;
+                                let hyphenation = vendor()?;
+                                Ok((primary, sub, id, [spelling, hyphenation]))
+                            })();
+                            if let Ok((primary, sub, id, vendors)) = rest {
+                                language_list.push(Language {
+                                    uid,
+                                    name,
+                                    primary,
+                                    sub,
+                                    id,
+                                    vendors: Some(vendors),
+                                });
+                            }
                         }
                     }
                     _ => {}
@@ -1245,10 +1294,15 @@ impl<'a> Reader<'a> {
             swatches,
             fonts,
             languages,
+            language_list,
             style_groups,
             object_styles,
             cell_styles,
             table_styles,
+            users: self.users(doc).unwrap_or_else(|e| {
+                self.warn(format!("document users left out: {e}"));
+                Vec::new()
+            }),
             sections: self
                 .uid_list(doc, chunk::DOC_SECTIONS)?
                 .into_iter()
@@ -1801,6 +1855,26 @@ impl<'a> Reader<'a> {
             grid,
             settings,
         })
+    }
+
+    /// The document's users, from chunk 0xA443 of the document.
+    fn users(&self, doc: u32) -> Result<Vec<(u8, String)>, Error> {
+        let Some(d) = self.chunk(doc, chunk::DOC_USERS)? else {
+            return Ok(Vec::new());
+        };
+        let mut c = Cursor::new(&d);
+        let n = c.u32()?;
+        if n as usize > d.len() / 9 {
+            return Err(Error::Corrupt(format!("{n} document users")));
+        }
+        (0..n)
+            .map(|_| {
+                let flag = c.flag()?;
+                let name = c.string()?;
+                c.u32()?;
+                Ok((flag, name))
+            })
+            .collect()
     }
 
     /// The settings every page item has (`ItemProps`).

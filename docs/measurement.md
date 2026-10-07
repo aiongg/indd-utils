@@ -140,6 +140,7 @@ are left out of the counts (`EXCLUDED` in `compare.py`).
 |---|---|---|
 | `Font` | `Status` | It records whether the font is installed on the computer that exported the IDML. The same document gives a different value on another computer. |
 | `idPkg:Story`, `idPkg:Spread` and the other part references in `designmap.xml` | `src` | The file names of the parts inside the IDML package. The IDML writer chooses them; they are not document content. |
+| `DocumentUser` | `UserColor` | The colour of each user of the document as the exporting InDesign shows it. The INDD stores a colour for each user (`objects.md`, document users), but the IDML colour does not follow from it: users stored with the same colour get different IDML colours in different files. |
 
 A value enters this list only with a reason of this kind. Values that are
 hard to decode, or that the converter does not write yet, stay in the

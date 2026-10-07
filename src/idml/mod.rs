@@ -1155,6 +1155,7 @@ impl Writer<'_> {
         if let Some(l) = doc.active_layer {
             x.attr("ActiveLayer", uref(Some(l)));
         }
+        self.languages(&mut x);
         x.empty("idPkg:Graphic", &[("src", "Resources/Graphic.xml".into())]);
         x.empty("idPkg:Fonts", &[("src", "Resources/Fonts.xml".into())]);
         // Kinsoku tables, then mojikumi tables, as the schema orders them.
@@ -1189,10 +1190,32 @@ impl Writer<'_> {
                 ("ContinueNumbersAcrossDocuments", "false".into()),
             ],
         );
+        let major = doc.version.major;
+        // Elements every IDML of the version has, with the values they
+        // all have (idml-values.md), in the order of the IDML files.
+        let singleton = |x: &mut Xml, tag: &str| {
+            if let Some(n) = values::present(&format!("Document/{tag}"), major) {
+                n.write(x);
+            }
+        };
+        singleton(&mut x, "ConditionalTextPreference");
         x.empty(
             "idPkg:Preferences",
             &[("src", "Resources/Preferences.xml".into())],
         );
+        for tag in [
+            "EndnoteOption",
+            "TextFrameFootnoteOptionsObject",
+            "LinkedStoryOption",
+            "LinkedPageItemOption",
+            "WatermarkPreference",
+            "TaggedPDFPreference",
+            "AdjustLayoutPreference",
+            "HTMLFXLExportPreference",
+            "PublishExportPreference",
+        ] {
+            singleton(&mut x, tag);
+        }
         self.text_variables(&mut x);
         x.empty("idPkg:Tags", &[("src", "XML/Tags.xml".into())]);
         for l in doc.layers.iter().filter(|l| !l.internal) {
@@ -1263,6 +1286,23 @@ impl Writer<'_> {
             }
             x.end();
         }
+        // Document users. A user with flag 2 is the placeholder for an
+        // unknown user, which IDML names `$ID/Unknown User Name`; the
+        // colours are left out (docs/format/objects.md, document users).
+        for (i, (flag, name)) in doc.users.iter().enumerate() {
+            let name = if *flag == 2 {
+                "$ID/Unknown User Name"
+            } else {
+                name.as_str()
+            };
+            x.empty(
+                "DocumentUser",
+                &[
+                    ("Self", format!("dDocumentUser{i:x}")),
+                    ("UserName", name.into()),
+                ],
+            );
+        }
         self.cross_reference_formats(&mut x);
         x.empty(
             "idPkg:BackingStory",
@@ -1303,6 +1343,47 @@ impl Writer<'_> {
         }
         x.end();
         x.finish()
+    }
+
+    /// The document's languages, in UID order. See
+    /// `docs/format/objects.md`, languages.
+    fn languages(&self, x: &mut Xml) {
+        let mut list: Vec<_> = self.doc.language_list.iter().collect();
+        list.sort_by_key(|l| l.uid);
+        for l in list {
+            // The language without one is `Neutral` in the INDD.
+            let neutral = l.name == "Neutral";
+            let name = |s: &str| {
+                if neutral {
+                    "$ID/[No Language]".to_string()
+                } else {
+                    format!("$ID/{s}")
+                }
+            };
+            let full = name(&l.name);
+            x.start("Language")
+                .attr("Self", format!("Language/{}", self_name(&full)))
+                .attr("Name", &full);
+            if let Some(q) = values::keyed("Language", &full) {
+                for k in ["SingleQuotes", "DoubleQuotes"] {
+                    if let Some(v) = q.attr(k) {
+                        x.attr(k, v);
+                    }
+                }
+            }
+            x.attr("PrimaryLanguageName", name(&l.primary))
+                .attr("SublanguageName", name(&l.sub))
+                .attr("Id", l.id.to_string());
+            if let Some([(sf, spelling), (hf, hyphenation)]) = &l.vendors {
+                if *hf == 1 {
+                    x.attr("HyphenationVendor", hyphenation);
+                }
+                if *sf == 1 {
+                    x.attr("SpellingVendor", spelling);
+                }
+            }
+            x.end();
+        }
     }
 
     /// Colour groups and their swatches. See `docs/format/objects.md`.

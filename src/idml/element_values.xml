@@ -33,6 +33,12 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<MasterSpread OverriddenPageItemProps="" ItemTransform="1 0 0 1 0 0" />
 		<Page AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName" GridStartingPoint="TopOutside" />
 		<Layer ShowGuides="true" Expendable="true" />
+		<Document>
+			<ConditionalTextPreference Present="true" ShowConditionIndicators="ShowIndicators" ActiveConditionSet="n" />
+			<LinkedStoryOption UpdateWhileSaving="false" WarnOnUpdateOfEditedStory="true" RemoveForcedLineBreaks="false" />
+			<WatermarkPreference Present="true" WatermarkVisibility="false" WatermarkDoPrint="false" WatermarkDrawInBack="true" WatermarkText="" WatermarkFontPointSize="48" WatermarkOpacity="50" WatermarkRotation="0" WatermarkHorizontalPosition="WatermarkHCenter" WatermarkHorizontalOffset="0" WatermarkVerticalPosition="WatermarkVCenter" WatermarkVerticalOffset="0" />
+			<TaggedPDFPreference StructureOrder="UseXMLStructure" />
+		</Document>
 	</Values>
 	<Values MinimumVersion="8">
 		<Rectangle TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
@@ -79,6 +85,11 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			</ObjectExportOption>
 		</TextFrame>
 		<Page SnapshotBlendingMode="IgnoreLayoutSnapshots" OptionalPage="false" />
+		<Document>
+			<LinkedStoryOption Present="true" ApplyStyleMappings="false" />
+			<LinkedPageItemOption Present="true" UpdateLinkWhileSaving="false" WarnOnUpdateOfEditedPageItem="true" PreserveSizeAndShape="false" PreserveAppearance="false" PreserveInteractivity="false" PreserveFrameContent="false" PreserveOthers="false" />
+			<TaggedPDFPreference Present="true" />
+		</Document>
 	</Values>
 	<Values MinimumVersion="10">
 		<TextFrame>
@@ -99,6 +110,38 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Group>
 			<ObjectExportOption EpubType="$ID/" />
 		</Group>
+		<Document>
+			<HTMLFXLExportPreference EpubPageRange="" EpubPageRangeFormat="ExportAllPages" />
+		</Document>
+	</Values>
+	<Values MinimumVersion="11">
+		<Document>
+			<HTMLFXLExportPreference Present="true" />
+			<PublishExportPreference Present="true" PublishCover="FirstPage" CoverImageFile="" PublishPageRange="" PublishPageRangeFormat="ExportAllPages" ImageConversion="Automatic" PublishDescription="" PublishFileName="" PublishFormat="PublishByPages" CoverPage="$ID/" GIFOptionsPalette="AdaptivePalette" JPEGOptionsQuality="High" />
+		</Document>
+	</Values>
+	<Values MinimumVersion="12">
+		<Document>
+			<TextFrameFootnoteOptionsObject Present="true" EnableOverrides="false" SpanFootnotesAcross="false" MinimumSpacingOption="12" SpaceBetweenFootnotes="6" />
+		</Document>
+	</Values>
+	<Values MinimumVersion="13">
+		<Document>
+			<EndnoteOption Present="true" EndnoteTitleStyle="ParagraphStyle/$ID/NormalParagraphStyle" StartEndnoteNumberAt="1" EndnotePrefix="" EndnoteSuffix="">
+				<Properties>
+					<EndnoteNumberingStyle type="enumeration">Arabic</EndnoteNumberingStyle>
+					<RestartEndnoteNumbering type="enumeration">Continuous</RestartEndnoteNumbering>
+					<ScopeValue type="enumeration">EndnoteDocumentScope</ScopeValue>
+					<FrameCreateOption type="enumeration">NewPage</FrameCreateOption>
+					<ShowEndnotePrefixSuffix type="enumeration">NoPrefixSuffix</ShowEndnotePrefixSuffix>
+				</Properties>
+			</EndnoteOption>
+		</Document>
+	</Values>
+	<Values MinimumVersion="14">
+		<Document>
+			<AdjustLayoutPreference Present="true" AllowLockedObjectsToAdjust="true" ImposeFontSizeRestriction="false" MinimumFontSize="6" MaximumFontSize="324" />
+		</Document>
 	</Values>
 	<Values MinimumVersion="19">
 		<Spread SpreadHidden="false" />
@@ -127,4 +170,69 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<TrapPreset Self="TrapPreset/$ID/k[No Trap Preset]" Name="$ID/k[No Trap Preset]" DefaultTrapWidth="0.25" BlackWidth="0.5" TrapJoin="MiterEndJoin" TrapEnd="MiterTrapEnds" ObjectsToImages="true" ImagesToImages="true" InternalImages="false" OneBitImages="true" ImagePlacement="CenterEdges" StepThreshold="10" BlackColorThreshold="100" BlackDensity="1.6" SlidingTrapThreshold="70" ColorReduction="100" />
 		<TrapPreset Self="TrapPreset/$ID/kDefaultTrapStyleName" Name="$ID/kDefaultTrapStyleName" DefaultTrapWidth="0.25" BlackWidth="0.5" TrapJoin="MiterEndJoin" TrapEnd="MiterTrapEnds" ObjectsToImages="true" ImagesToImages="true" InternalImages="false" OneBitImages="true" ImagePlacement="CenterEdges" StepThreshold="10" BlackColorThreshold="100" BlackDensity="1.6" SlidingTrapThreshold="70" ColorReduction="100" />
 	</List>
+	<Keyed Tag="Language" Key="Name">
+		<Language Name="$ID/Arabic" SingleQuotes="‹›" DoubleQuotes="«»" />
+		<Language Name="$ID/Bulgarian" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/Catalan" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Chinese: Simplified" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/Croatian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Czech" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/Danish" SingleQuotes="’’" DoubleQuotes="””" />
+		<Language Name="$ID/Dutch" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/English: Canadian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/English: UK" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/English: USA" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/English: USA Legal" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/English: USA Medical" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Estonian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Finnish" SingleQuotes="’’" DoubleQuotes="””" />
+		<Language Name="$ID/French" SingleQuotes="‘’" DoubleQuotes="«»" />
+		<Language Name="$ID/French: Canadian" SingleQuotes="‘’" DoubleQuotes="«»" />
+		<Language Name="$ID/German: Austrian" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/German: Reformed" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/German: Swiss" SingleQuotes="‹›" DoubleQuotes="«»" />
+		<Language Name="$ID/German: Traditional" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/Greek" SingleQuotes="‘’" DoubleQuotes="«»" />
+		<Language Name="$ID/Hungarian" SingleQuotes="‚’" DoubleQuotes="„”" />
+		<Language Name="$ID/Italian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Korean" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/Latvian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Lithuanian" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/Norwegian: Bokmal" SingleQuotes="’’" DoubleQuotes="””" />
+		<Language Name="$ID/Norwegian: Nynorsk" SingleQuotes="’’" DoubleQuotes="””" />
+		<Language Name="$ID/Polish" SingleQuotes="‚’" DoubleQuotes="„”" />
+		<Language Name="$ID/Portuguese" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Portuguese: Brazilian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Portuguese: Orthographic Agreement" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Russian" SingleQuotes="‘’" DoubleQuotes="«»" />
+		<Language Name="$ID/Slovak" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/Slovenian" SingleQuotes="''" DoubleQuotes="»«" />
+		<Language Name="$ID/Spanish: Castilian" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Swedish" SingleQuotes="’’" DoubleQuotes="””" />
+		<Language Name="$ID/Thai" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/Turkish" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/Ukrainian" SingleQuotes="‘’" DoubleQuotes="«»" />
+		<Language Name="$ID/Vietnamese" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/[No Language]" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/bn_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/de_CH_2006" SingleQuotes="‹›" DoubleQuotes="«»" />
+		<Language Name="$ID/de_DE_2006" SingleQuotes="‚‘" DoubleQuotes="„“" />
+		<Language Name="$ID/gu_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/hi_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/id_ID" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/km_KH" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/kn_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/lo_LA" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/ml_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/mr_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/my_MM" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/ne_NE" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/nl_NL_2005" SingleQuotes="‘’" DoubleQuotes="“”" />
+		<Language Name="$ID/or_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/pa_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/si_LK" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/sr_RS-Cyr" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/ta_IN" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/te_IN" SingleQuotes="''" DoubleQuotes='""' />
+	</Keyed>
 </ElementValues>

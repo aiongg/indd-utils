@@ -320,6 +320,8 @@ EXCLUDED = [
     ("Font", "Status", "whether the font is installed on the exporting computer"),
     ("Document/{http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging}*", "src",
      "file names of the package parts, chosen by the IDML writer"),
+    ("DocumentUser", "P.UserColor",
+     "colour the exporting InDesign gives each user, not the colour in the INDD"),
 ]
 
 

@@ -242,6 +242,18 @@ pub fn element_attrs(path: &str, major: u32) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+/// The element on `path` every IDML of InDesign version `major` in the
+/// corpus has (`Present="true"` in `element_values.xml`), with its
+/// observed values; `None` if not every IDML has it.
+pub fn present(path: &str, major: u32) -> Option<Node> {
+    let mut n = element(path, major)?;
+    if n.attr("Present") != Some("true") {
+        return None;
+    }
+    n.attrs.retain(|(k, _)| k != "Present");
+    Some(n)
+}
+
 /// The list of `tag` elements every IDML of InDesign version `major` in
 /// the corpus has, in order (`List` blocks of `element_values.xml`);
 /// empty if there is none.
@@ -252,6 +264,21 @@ pub fn list(tag: &str, major: u32) -> Vec<Node> {
         .filter(|b| b.tag == "List" && b.attr("Tag") == Some(tag) && applies(b, major))
         .flat_map(|b| b.children.clone())
         .collect()
+}
+
+/// The observed values of a `tag` element whose key attribute (such as
+/// `Name`) has `value` (`Keyed` blocks of `element_values.xml`).
+pub fn keyed(tag: &str, value: &str) -> Option<Node> {
+    let block = element_values()
+        .children
+        .iter()
+        .find(|b| b.tag == "Keyed" && b.attr("Tag") == Some(tag))?;
+    let key = block.attr("Key")?;
+    block
+        .children
+        .iter()
+        .find(|n| n.attr(key) == Some(value))
+        .cloned()
 }
 
 fn unescape(s: &str) -> String {
@@ -390,6 +417,11 @@ mod tests {
         // Export options differ between versions.
         assert!(new.attr("EpubType").is_some());
         assert_eq!(list("TrapPreset", 21).len(), 2);
+        let en = keyed("Language", "$ID/English: USA").unwrap();
+        assert_eq!(en.attr("DoubleQuotes"), Some("\u{201C}\u{201D}"));
+        let w = present("Document/WatermarkPreference", 21).unwrap();
+        assert!(w.attr("Present").is_none());
+        assert!(present("Document/EndnoteOption", 12).is_none());
         assert!(
             element("Polygon/ObjectExportOption", 8)
                 .unwrap()

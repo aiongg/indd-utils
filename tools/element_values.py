@@ -22,7 +22,8 @@ has one (`Document/WatermarkPreference`); for them the presence of the
 element is kept the same way, and the converter writes the element.
 LISTS are elements with `Self` whose whole list (every element, with all
 attributes and children, in order) is the same in every file of a range;
-the converter writes the list.
+the converter writes the list. KEYED values depend only on another
+attribute of the element, such as the quotes of a language on its name.
 
 EXPLAINED lists values that are the same in nearly every element; the
 others are values the converter reads from the INDD (the reason says
@@ -62,11 +63,22 @@ ELEMENTS = [
     "Oval/ObjectExportOption", "Polygon/ObjectExportOption",
     "GraphicLine/ObjectExportOption", "Group/ObjectExportOption",
     "Spread", "MasterSpread", "Page", "Spread/FlattenerPreference", "Layer",
+    "Document/ConditionalTextPreference", "Document/EndnoteOption",
+    "Document/TextFrameFootnoteOptionsObject", "Document/LinkedStoryOption",
+    "Document/LinkedPageItemOption", "Document/WatermarkPreference",
+    "Document/TaggedPDFPreference", "Document/AdjustLayoutPreference",
+    "Document/HTMLFXLExportPreference", "Document/PublishExportPreference",
 ]
 # Of those, the elements every IDML has one of (from some version on).
 SINGLETONS = {p for p in ELEMENTS if p.startswith("Document/")}
 # Elements with Self written as a whole list.
 LISTS = ["TrapPreset"]
+# Values that depend only on another attribute of the element: tag ->
+# (key attribute, attributes). For each key value, an attribute is kept
+# when every such element in every IDML has the same value, in at least
+# MIN_KEYED_FILES files.
+KEYED = {"Language": ("Name", ["SingleQuotes", "DoubleQuotes"])}
+MIN_KEYED_FILES = 3
 # Values that are nearly constant; the exceptions are read from the INDD.
 # (path, key) -> reason, as recorded in docs/format/idml-values.md.
 EXPLAINED = {}
@@ -134,6 +146,8 @@ def scan(arg):
         for el in root.iter():
             if el.tag in LISTS:
                 lists[el.tag].append(prop_text(el))
+            if el.tag in KEYED:
+                lists["keyed:" + el.tag].append(dict(el.attrib))
             if el.get("Self") is None:
                 continue
             if el.tag in wanted:
@@ -267,7 +281,30 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 """
 
 
-def write(kept, presence, lists, order):
+def analyse_keyed(scans):
+    """{tag: [(key value, [(attr, value)], files)]} for KEYED."""
+    out = {}
+    for tag, (key, attrs) in KEYED.items():
+        seen = defaultdict(lambda: defaultdict(set))  # key value -> attr -> values
+        files = defaultdict(set)
+        for _dom, idml, _found, ls in scans:
+            for a in ls.get("keyed:" + tag, []):
+                k = a.get(key)
+                files[k].add(idml)
+                for name in attrs:
+                    seen[k][name].add(a.get(name))
+        rows = []
+        for k in sorted(seen, key=lambda v: (v is None, v)):
+            if k is None or len(files[k]) < MIN_KEYED_FILES:
+                continue
+            kept = [(n, next(iter(v))) for n, v in seen[k].items() if len(v) == 1 and None not in v]
+            if kept:
+                rows.append((k, kept, len(files[k])))
+        out[tag] = rows
+    return out
+
+
+def write(kept, presence, lists, order, keyed):
     blocks = defaultdict(lambda: defaultdict(list))  # (first,last) -> path -> [(key,v)]
     for path, items in kept.items():
         for key, first, last, v, _n in items:
@@ -315,6 +352,13 @@ def write(kept, presence, lists, order):
             s += f'\t<List Tag="{tag}"{gate}>\n'
             s += "".join(f"\t\t{e}\n" for e in lst)
             s += "\t</List>\n"
+    for tag, rows in keyed.items():
+        key = KEYED[tag][0]
+        s += f'\t<Keyed Tag="{tag}" Key="{key}">\n'
+        for k, attrs, _n in rows:
+            a = "".join(f" {n}={quoteattr(v)}" for n, v in [(key, k)] + attrs)
+            s += f"\t\t<{tag}{a} />\n"
+        s += "\t</Keyed>\n"
     OUT.write_text(s + "</ElementValues>\n")
 
 
@@ -360,8 +404,12 @@ def main():
     for tag, rs in lists.items():
         print(f"list {tag}: " + ", ".join(
             f"{len(v)} elements, {f}{'+' if l is None else f'-{l}'} ({n} files)" for f, l, v, n in rs))
+    keyed = analyse_keyed(scans)
+    for tag, rows in keyed.items():
+        n_attrs = Counter(n for _, attrs, _ in rows for n, _ in attrs)
+        print(f"keyed {tag} by {KEYED[tag][0]}: {len(rows)} values, kept {dict(n_attrs)}")
     if "--write" in sys.argv:
-        write(kept, presence, lists, order)
+        write(kept, presence, lists, order, keyed)
         print(f"wrote {OUT.relative_to(ROOT)}")
 
 

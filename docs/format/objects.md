@@ -64,6 +64,22 @@ are in `big-endian.md`.
 | 0x313 | u32: active layer (IDML `ActiveLayer`) |
 | 0x222 | Two UID lists: the stories, then the XML backing story; IDML `StoryList` is both (`xml.md`) |
 | 0x4C01 | UID list: sections |
+| 0xA443 | Document users: u32 count, then per user a flag byte, the name as an in-object string, u32 colour |
+
+**Document users.** IDML lists one `DocumentUser` per user in chunk
+0xA443, `Self` being `dDocumentUser` and the index in hexadecimal (491 of
+495 trustworthy pairs have as many users as the chunk; the other 4 are
+DOM 7 and 16 files with one user more in the IDML). A user with flag 0
+has its stored name as `UserName` (1,724 of 1,724). Flag 2 marks the
+placeholder for an unknown user, stored with a name such as
+`Unknown User Name` or the same words in the language of the computer
+that saved it; IDML writes `$ID/Unknown User Name` for 495 of the 586
+such users, and the stored name for the other 91. The schema requires
+`UserName`, so the converter writes `$ID/Unknown User Name` for every
+flag 2 user. The colour UID names an interface colour, but the IDML
+`UserColor` does not follow from it (users stored with 0.6, 0.4, 0 are
+`BrickRed` in 4 files and `Gold` in 1), so it is left out of the
+conversion and of the measurement (`measurement.md`).
 
 ## Spreads (0x501) and master spreads (0x1401)
 
@@ -198,6 +214,31 @@ layers (127 locked, 55 hidden, 59 not printable, 4 with locked guides,
 true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
+
+## Languages (0x2D07)
+
+Chunk 0x2D0F: a flag byte and the name (`English: USA`), a flag byte and
+the primary name (`English`), a flag byte and the secondary name (`USA`,
+often empty), u16 `Id`, then two vendors, each a flag byte, a u32 and a
+string: first the spelling vendor, then the hyphenation vendor
+(`Hunspell`, `Proximity`, `Duden`, `WinSoft`); last the locale
+(`en_US`).
+
+IDML lists the language objects in UID order as `Language` elements at
+the start of `designmap.xml`: `Name`, `PrimaryLanguageName` and
+`SublanguageName` are `$ID/` and the stored names, except that the
+language named `Neutral` is `$ID/[No Language]` in all three. Evidence
+over the trustworthy pairs: in 488 of 495 the IDML list equals the INDD
+objects in that order; in the other 7 the INDD has 4 to 61 language
+objects and the IDML lists only some of them (1 or 2), for no reason
+found. For the 1,249 IDML languages the names and `Id` are equal in
+1,249. `HyphenationVendor` is the second vendor and `SpellingVendor` the
+first when their flag is 1 (1,146 and 1,166 of 1,249); otherwise the
+stored string is empty or names a vendor the IDML does not show, and
+IDML gives `$ID/`, `$ID/InDihyph` or a vendor such as `Hunspell` that
+depends on the computer that exported it, so the converter leaves the
+attribute out. The quotes (`SingleQuotes`, `DoubleQuotes`) are not in the
+chunk; they are written from observation (`idml-values.md`).
 
 ## Interface colours (0x1F11)
 
