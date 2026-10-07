@@ -580,8 +580,11 @@ impl Writer<'_> {
                 );
             }
         }
-        let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
-        node.set(&["FrameFittingOption"], fitting_attrs(&os.fitting, &all));
+        let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();
+        node.set(
+            &["FrameFittingOption"],
+            fitting_attrs(self, &os.fitting, &all),
+        );
         if let Some(d) = &os.anchor {
             node.set(&["AnchoredObjectSetting"], anchored_settings(d));
         }

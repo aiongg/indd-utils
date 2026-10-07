@@ -1,0 +1,278 @@
+//! Value kinds: how a decoded attribute value becomes IDML text. The
+//! attribute tables of text, page item, frame fitting, cell, table and
+//! transparency attributes (`attrs.rs`, `transparency.rs`) all name one
+//! of these kinds, and [`Writer::value`] converts every kind.
+//!
+//! Evidence for each table entry: `docs/format/attributes.md`,
+//! `tables.md` and `transparency.md`.
+
+use super::*;
+use crate::model::Value;
+
+/// How an attribute value is written in IDML.
+#[derive(Clone, Copy)]
+pub(super) enum Kind {
+    /// A number: an f64, an integer, an enumeration value or a 4-byte
+    /// value.
+    Number,
+    /// A number the IDML schema limits to this range (inclusive); values
+    /// outside it have no IDML value.
+    Range(f64, f64),
+    /// Stored as a fraction, written as a percentage.
+    Percent,
+    /// Multiplied by the factor when written.
+    Scale(f64),
+    /// Manual kerning in ems, written in thousandths of an em; 1e8 (the
+    /// root style's value) is left out.
+    Kerning,
+    /// An integer, written as such.
+    Integer,
+    /// A number, left out when 0.
+    NonZero,
+    /// The given value is written as the enumeration value, others as
+    /// numbers of the given IDML type.
+    NumberOr(f64, &'static str, &'static str),
+    /// A leading: negative for `Auto`.
+    Leading,
+    /// True when the value equals the given code.
+    Equals(u32),
+    /// 0 false, 1 true; other codes are not known.
+    Bool,
+    /// An enumeration value by code.
+    Enum(&'static [(u32, &'static str)]),
+    /// A built-in style named by its code (reference 0), written as
+    /// `<prefix><name>`.
+    Builtin(&'static str, &'static [(u32, &'static str)]),
+    /// A stroke style code in the first of two words; the second is 0.
+    StrokeType,
+    /// Two f64.
+    Point,
+    /// A swatch UID.
+    Swatch,
+    /// A swatch, or 0 for "Text Color".
+    SwatchOrText,
+    /// A font family.
+    Font,
+    /// A font family, or 0 for none (`$ID/`).
+    FontOrNone,
+    /// A string.
+    String,
+    /// A string, or the empty string for `Nothing`.
+    StringOrNothing,
+    /// Text; left out when empty.
+    Text,
+    /// A language object, written as `$ID/<name>`.
+    Language,
+    /// A character style reference.
+    CharacterStyle,
+    /// A cell style UID; 0 is written as `n`.
+    CellStyle,
+    /// A kinsoku or mojikumi set: 0 `Nothing`, a built-in table (written
+    /// as its enumeration value) or a custom kinsoku table (an object).
+    CjkSet,
+    /// A list of tab stops (`TabList`).
+    TabList,
+    /// A list of nested styles (`AllNestedStyles`).
+    NestedStyles,
+    /// A bullet character (`BulletChar`).
+    BulletChar,
+}
+
+impl Kind {
+    /// Whether a value without an IDML value is reported to `indd audit`
+    /// as an unknown code.
+    pub(super) fn is_code(self) -> bool {
+        matches!(
+            self,
+            Kind::Enum(_) | Kind::Builtin(..) | Kind::StrokeType | Kind::Bool
+        )
+    }
+}
+
+/// Built-in kinsoku and mojikumi tables observed in the corpus
+/// (`docs/format/attributes.md`): table name and IDML enumeration value.
+const BUILTIN_CJK_TABLES: [(&str, &str); 6] = [
+    ("$ID/kHardKinsokuName", "HardKinsoku"),
+    ("$ID/kSoftKinsokuName", "SoftKinsoku"),
+    ("$ID/kKoreanKinsokuName", "KoreanKinsoku"),
+    ("$ID/kSimpChineseKinsokuName", "SimplifiedChineseKinsoku"),
+    ("$ID/kMojikumiDefaultName1", "LineEndAllOneHalfEmEnum"),
+    ("$ID/kMojikumiDefaultName16", "SimpChineseDefault"),
+];
+
+fn text(ty: &'static str, s: String) -> (&'static str, PropValue) {
+    (ty, PropValue::Text(s))
+}
+
+impl Writer<'_> {
+    /// The IDML type and value of `v` written as `kind`; `None` if it has
+    /// no IDML value.
+    pub(super) fn value(&self, kind: Kind, v: &Value) -> Option<(&'static str, PropValue)> {
+        let swatch = |u: u32| self.doc.swatches.get(&u).cloned();
+        let number = || v.as_f64().or(v.as_u32().map(f64::from));
+        match kind {
+            Kind::Number => number().map(|f| text("unit", num(f))),
+            Kind::Range(lo, hi) => v
+                .as_f64()
+                .filter(|f| (lo..=hi).contains(f))
+                .map(|f| text("unit", num(f))),
+            Kind::Percent => v.as_f64().map(|f| text("unit", num(round(f * 100.0)))),
+            Kind::Scale(k) => v.as_f64().map(|f| text("unit", num(round(f * k)))),
+            Kind::Kerning => v
+                .as_f64()
+                .filter(|&f| f != KERNING_NONE)
+                .map(|f| text("unit", num(round(f * 1000.0)))),
+            Kind::Integer => v.as_u32().map(|u| text("long", u.to_string())),
+            Kind::NonZero => v
+                .as_u32()
+                .filter(|&u| u != 0)
+                .map(|u| text("long", u.to_string())),
+            Kind::NumberOr(code, name, ty) => v.as_f64().map(|f| {
+                if f == code {
+                    text("enumeration", name.to_string())
+                } else {
+                    text(ty, num(f))
+                }
+            }),
+            Kind::Leading => v.as_f64().map(|f| {
+                if f < 0.0 {
+                    text("enumeration", "Auto".into())
+                } else {
+                    text("unit", num(f))
+                }
+            }),
+            Kind::Equals(t) => v.as_u32().map(|u| text("boolean", (u == t).to_string())),
+            Kind::Bool => match v.as_u32()? {
+                0 => Some(text("boolean", "false".into())),
+                1 => Some(text("boolean", "true".into())),
+                _ => None,
+            },
+            Kind::Enum(map) => v
+                .as_u32()
+                .and_then(|u| map.iter().find(|(k, _)| *k == u))
+                .map(|(_, n)| text("enumeration", n.to_string())),
+            Kind::Builtin(prefix, map) => match v {
+                Value::RefOrCode(0, code) => map
+                    .iter()
+                    .find(|(k, _)| k == code)
+                    .map(|(_, n)| text("object", format!("{prefix}{n}"))),
+                _ => None,
+            },
+            Kind::StrokeType => match *v {
+                Value::Words(CELL_NO_STROKE_TYPE, 0) => Some(text("object", "n".into())),
+                Value::Words(code, 0) => STROKE_TYPES
+                    .iter()
+                    .find(|(k, _)| *k == code)
+                    .map(|(_, n)| text("object", format!("StrokeStyle/$ID/{n}"))),
+                _ => None,
+            },
+            Kind::Point => match *v {
+                Value::Point(x, y) => Some(text("unit", nums(&[x, y]))),
+                _ => None,
+            },
+            Kind::Swatch => v.as_u32().and_then(swatch).map(|s| text("object", s)),
+            Kind::SwatchOrText => match v.as_u32()? {
+                0 => Some(text("string", "Text Color".into())),
+                u => swatch(u).map(|s| text("object", s)),
+            },
+            Kind::Font => v
+                .as_u32()
+                .and_then(|u| self.doc.fonts.get(&u))
+                .map(|f| text("string", f.name.clone())),
+            Kind::FontOrNone => match v.as_u32()? {
+                0 => Some(text("string", "$ID/".into())),
+                u => self
+                    .doc
+                    .fonts
+                    .get(&u)
+                    .map(|f| text("string", f.name.clone())),
+            },
+            Kind::String => v.as_string().map(|s| text("string", s)),
+            Kind::StringOrNothing => v.as_string().map(|s| {
+                if s.is_empty() {
+                    text("enumeration", "Nothing".into())
+                } else {
+                    text("string", s)
+                }
+            }),
+            Kind::Text => match v {
+                Value::Text(t) if !t.is_empty() => Some(text("string", t.clone())),
+                _ => None,
+            },
+            Kind::Language => v
+                .as_u32()
+                .and_then(|u| self.doc.languages.get(&u))
+                .map(|l| text("string", format!("$ID/{l}"))),
+            Kind::CharacterStyle => v
+                .as_u32()
+                .map(|u| text("object", self.style_ref(Some(u).filter(|&u| u != 0), false))),
+            Kind::CellStyle => match v.as_u32()? {
+                0 => Some(text("object", "n".into())),
+                u => self
+                    .doc
+                    .cell_styles
+                    .get(&u)
+                    .map(|s| text("object", Self::table_style_ref("CellStyle", s))),
+            },
+            Kind::CjkSet => {
+                let u = v.as_u32()?;
+                if u == 0 {
+                    return Some(text("enumeration", "Nothing".into()));
+                }
+                let t = self.doc.cjk_tables.iter().find(|t| t.uid == u)?;
+                if let Some((_, e)) = BUILTIN_CJK_TABLES.iter().find(|(k, _)| *k == t.name) {
+                    return Some(text("enumeration", e.to_string()));
+                }
+                if t.name.starts_with("$ID/") || t.mojikumi {
+                    return None;
+                }
+                Some(text(
+                    "object",
+                    format!("KinsokuTable/{}", self_name(&t.name)),
+                ))
+            }
+            Kind::TabList => match v {
+                Value::TabList(stops) => tab_list(stops).map(|l| ("list", PropValue::List(l))),
+                _ => None,
+            },
+            Kind::NestedStyles => match v {
+                Value::StyleList {
+                    nested: Some(n), ..
+                } => Some(("list", PropValue::List(self.nested_styles(n)))),
+                _ => None,
+            },
+            Kind::BulletChar => match *v {
+                Value::BulletChar { kind, value } => bullet_char(kind, value).map(|a| ("", a)),
+                _ => None,
+            },
+        }
+    }
+
+    /// The IDML text of `v` written as `kind`, for a plain attribute.
+    pub(super) fn value_text(&self, kind: Kind, v: &Value) -> Option<String> {
+        match self.value(kind, v)?.1 {
+            PropValue::Text(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// The IDML values of the attributes of `attrs` listed in `table` (ID,
+    /// IDML name, kind), in table order. Values without an IDML value are
+    /// left out; unknown codes are reported to `indd audit`.
+    pub(super) fn attr_values(
+        &self,
+        attrs: &Attrs,
+        table: &[(u32, &'static str, Kind)],
+    ) -> Vec<(&'static str, String)> {
+        let mut out = Vec::new();
+        for &(id, name, kind) in table {
+            let Some(v) = attrs.get(id) else { continue };
+            match self.value_text(kind, v) {
+                Some(t) => out.push((name, t)),
+                None if kind.is_code() => attrs.unknown_code(id, v),
+                None => {}
+            }
+        }
+        out
+    }
+}

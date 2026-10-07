@@ -1,22 +1,9 @@
 //! Transparency settings of page items. See `docs/format/transparency.md`.
 
-use std::collections::BTreeMap;
-
-use super::num;
+use super::kind::Kind;
 use super::xml::Xml;
+use super::{Writer, num};
 use crate::model::{Attrs, Value};
-
-#[derive(Clone, Copy)]
-enum Kind {
-    Number,
-    /// A number the IDML schema limits to this range (inclusive).
-    Range(f64, f64),
-    Bool,
-    Point,
-    Enum(&'static [(u32, &'static str)]),
-    /// A swatch UID, written only when the effect is applied.
-    Swatch,
-}
 
 /// Blend mode codes seen in the corpus.
 const BLEND_MODES: &[(u32, &str)] = &[
@@ -248,48 +235,15 @@ fn stops(raw: &[[f64; 3]]) -> Option<Vec<Stop>> {
     )
 }
 
-/// A value as IDML text; `Err` with the value when it is outside the
-/// schema's range.
-fn value(v: &Value, kind: Kind, swatches: &BTreeMap<u32, String>) -> Option<Result<String, f64>> {
-    if let Kind::Range(lo, hi) = kind {
-        let f = v.as_f64()?;
-        return Some(if (lo..=hi).contains(&f) {
-            Ok(num(f))
-        } else {
-            Err(f)
-        });
-    }
-    Some(Ok(match kind {
-        Kind::Range(..) => unreachable!(),
-        Kind::Number => v.as_f64().map(num),
-        Kind::Bool => match v.as_u32()? {
-            0 => Some("false".into()),
-            1 => Some("true".into()),
-            _ => None,
-        },
-        Kind::Point => match v {
-            Value::Point(a, b) => Some(format!("{} {}", num(*a), num(*b))),
-            _ => None,
-        },
-        Kind::Enum(map) => {
-            let code = v.as_u32()?;
-            map.iter()
-                .find(|(k, _)| *k == code)
-                .map(|(_, n)| n.to_string())
-        }
-        Kind::Swatch => v.as_ref().and_then(|u| swatches.get(&u).cloned()),
-    }?))
-}
-
 /// Write the transparency settings found in a page item's attribute list.
 /// `item` is the item's `Self`, which names the opacity stops. Returns the
 /// values left out because they are outside the schema's range, as
 /// (effect, attribute, value).
 pub(super) fn write(
+    w: &Writer,
     x: &mut Xml,
     attrs: &Attrs,
     item: &str,
-    swatches: &BTreeMap<u32, String>,
 ) -> Vec<(&'static str, &'static str, f64)> {
     let mut left_out = Vec::new();
     let inner_shadow_applied = attrs.get(INNER_SHADOW_APPLIED).and_then(Value::as_u32) == Some(1);
@@ -305,10 +259,16 @@ pub(super) fn write(
                     continue;
                 }
                 let Some(v) = attrs.get(id) else { continue };
-                match value(v, kind, swatches) {
-                    Some(Ok(t)) => values.push((name, t)),
-                    Some(Err(f)) => left_out.push((effect, name, f)),
-                    None if matches!(kind, Kind::Enum(_) | Kind::Bool) => attrs.unknown_code(id, v),
+                if let Kind::Range(lo, hi) = kind
+                    && let Some(f) = v.as_f64()
+                    && !(lo..=hi).contains(&f)
+                {
+                    left_out.push((effect, name, f));
+                    continue;
+                }
+                match w.value_text(kind, v) {
+                    Some(t) => values.push((name, t)),
+                    None if kind.is_code() => attrs.unknown_code(id, v),
                     None => {}
                 }
             }

@@ -412,8 +412,8 @@ impl Writer<'_> {
             ours[i]
                 .attrs
                 .extend(values.into_iter().map(|(k, v)| (k.to_string(), v)));
-            let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
-            let fitting = fitting_attrs(a, &all);
+            let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();
+            let fitting = fitting_attrs(self, a, &all);
             if !fitting.is_empty() {
                 let i = ours_of(&mut ours, "FrameFittingOption");
                 ours[i]

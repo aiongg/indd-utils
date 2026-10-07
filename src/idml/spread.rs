@@ -458,9 +458,7 @@ impl Writer<'_> {
                 ],
             );
         }
-        for (effect, attr, v) in
-            transparency::write(x, &item.attrs, &uref(Some(item.uid)), &self.doc.swatches)
-        {
+        for (effect, attr, v) in transparency::write(self, x, &item.attrs, &uref(Some(item.uid))) {
             self.warnings.borrow_mut().push(format!(
                 "item {}: {effect} {attr} {v} is outside the IDML range; left out",
                 item.uid
@@ -485,7 +483,7 @@ impl Writer<'_> {
             .and_then(|u| self.doc.object_styles.get(&u));
         let differ: Vec<u32> = FITTING_ATTRS
             .iter()
-            .map(|(id, _)| *id)
+            .map(|(id, ..)| *id)
             .filter(|&id| {
                 item.attrs
                     .get(id)
@@ -493,12 +491,12 @@ impl Writer<'_> {
             })
             .collect();
         let attrs = if !differ.is_empty() {
-            fitting_attrs(&item.attrs, &differ)
+            fitting_attrs(self, &item.attrs, &differ)
         } else {
             match style {
                 Some(s) if !(s.builtin && s.name == "[None]" && s.based_on.is_none()) => {
-                    let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
-                    fitting_attrs(&s.fitting, &all)
+                    let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();
+                    fitting_attrs(self, &s.fitting, &all)
                 }
                 _ => Vec::new(),
             }

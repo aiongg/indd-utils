@@ -10,6 +10,7 @@
 mod attrs;
 mod designmap;
 mod format;
+mod kind;
 mod pages;
 mod resources;
 mod spread;
@@ -24,6 +25,7 @@ use attrs::*;
 pub use format::num;
 pub(crate) use format::round;
 use format::*;
+use kind::Kind;
 use pages::*;
 use styles::*;
 
