@@ -370,6 +370,7 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
         true,
     ),
     (0x4265, "GridAlignFirstLineOnly", TextKind::Bool(1), false),
+    (0x425E, "Tatechuyoko", TextKind::Bool(1), false),
     (0x422D, "RubyFlag", TextKind::NonZero, false),
     (0x422E, "RubyString", TextKind::Text, false),
     (

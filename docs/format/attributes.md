@@ -207,6 +207,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1DF21 | `SameParaStyleSpacing` (Properties) | f64; −1 = SetIgnore | 15/15 ranges, 100/100 styles |
 | 0x4265 | `GridAlignFirstLineOnly` | 1 = true | 81/81 styles |
 | 0x4266 | `GridAlignment` | 0 None, 1 AlignBaseline | 86/86 styles |
+| 0x425E | `Tatechuyoko` | 1 = true | root styles; 1 from a sample typeset vertically and its print PDF, see below |
 | 0x422D | `RubyFlag` | number; written when not 0 | a sample and its print PDF; see below |
 | 0x422E | `RubyString` | u32 length, text segments; written when not empty | a sample and its print PDF; see below |
 | 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
@@ -396,6 +397,20 @@ The converter writes `RubyString` and writes `RubyFlag` with the stored
 number (1 in every such run; the schema type is an integer). The other
 ruby settings (`RubyType`, `RubyAlignment`, `RubyPosition`, font and
 size) are not identified.
+
+**`Tatechuyoko` (0x425E).** Every public style that stores it has 0,
+and IDML writes `Tatechuyoko="false"` on all 240 root paragraph styles
+of the corpus IDML files; no public range has the attribute. The
+evidence for 1 is a sample typeset vertically and its print PDF:
+
+- Runs of a few Latin characters (letters or punctuation) set 0x425E
+  to 1. Elsewhere in the same vertical stories, Latin text
+  without it is drawn turned sideways: the PDF text matrix is a quarter
+  turn, and the letters follow each other down the column.
+- The glyphs of each run with 1 are drawn upright (identity text
+  matrix), side by side on one baseline, and the group is centred on the
+  column's centre line to 0.01 pt. That is horizontal-in-vertical
+  setting.
 
 **`KerningValue` (0x1B13).** Every root paragraph style stores 1e8, and
 IDML writes no `KerningValue` on root styles; the converter leaves 1e8
