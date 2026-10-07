@@ -127,7 +127,11 @@ pub fn object_style(major: u32) -> Node {
         tag: "ObjectStyle".to_string(),
         ..Node::default()
     };
-    let root = parse(OBJECT_STYLE_VALUES).expect("object_style_values.xml is well-formed");
+    // Parsed once: the converter asks for these values for every page item.
+    static PARSED: std::sync::OnceLock<Node> = std::sync::OnceLock::new();
+    let root = PARSED.get_or_init(|| {
+        parse(OBJECT_STYLE_VALUES).expect("object_style_values.xml is well-formed")
+    });
     for block in &root.children {
         let since = block
             .attr("MinimumVersion")

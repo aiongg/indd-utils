@@ -2602,13 +2602,31 @@ impl Writer<'_> {
         {
             Self::text_frame_preference(x, p);
         }
-        if matches!(
+        let frame = matches!(
             item.kind,
             ItemKind::Shape(Shape::Rectangle | Shape::Oval | Shape::Polygon)
-        ) {
+        );
+        if frame {
             self.frame_fitting(x, item);
         }
+        // Every page item of IDML from DOM 12 on has the same export
+        // options as the object styles (idml-values.md).
+        if self.doc.version.major >= 12
+            && let Some(n) =
+                values::object_style(self.doc.version.major).child("ObjectExportOption")
+        {
+            n.write(x);
+        }
         Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
+        if frame {
+            x.empty(
+                "InCopyExportOption",
+                &[
+                    ("IncludeGraphicProxies", "true".into()),
+                    ("IncludeAllResources", "false".into()),
+                ],
+            );
+        }
         transparency::write(x, &item.attrs, &uref(Some(item.uid)), &self.doc.swatches);
         for child in &item.children {
             self.page_item(x, child);

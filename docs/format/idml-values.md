@@ -176,6 +176,20 @@ All 973 `Ink` elements of the 240 corpus IDML files have
 No INDD field for them is identified; the converter writes them on every
 ink (`objects.md`).
 
+## Export options of page items
+
+All 6,151 `ObjectExportOption` elements of page items (text frames,
+rectangles, ovals, polygons, lines and groups) in the corpus IDML files
+with DOM 12 or later have the same values, which are also the values
+every object style other than `[None]` has (above). The converter writes
+that element on every page item of documents from InDesign 12 on. The 2
+elements in the DOM 7 file differ and that file has the element on few
+items, so nothing is written for older documents.
+
+All 3,412 `InCopyExportOption` elements of rectangles, ovals and polygons
+have `IncludeGraphicProxies="true"` and `IncludeAllResources="false"`,
+and the converter writes them on those items.
+
 ## Column direction of pages
 
 All 832 `MarginPreference` elements in the 240 corpus IDML files have
