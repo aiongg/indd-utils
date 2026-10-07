@@ -1914,6 +1914,9 @@ impl Writer<'_> {
         // Values every exported IDML has (docs/format/idml-values.md);
         // values read from the INDD take precedence.
         let mut nodes = values::preferences(self.doc.version.major);
+        // Observed values the INDD contradicts but the converter cannot
+        // replace: (element, attribute).
+        let mut drop: Vec<(&str, &str)> = Vec::new();
         let mut set = |tag: &str, ours: Vec<(&str, String)>| {
             let i = match nodes.iter().position(|n| n.tag == tag) {
                 Some(i) => i,
@@ -1947,6 +1950,13 @@ impl Writer<'_> {
             if let Some(i) = INTENT.get(p.intent as usize) {
                 ours.push(("Intent", i.to_string()));
             }
+            // Every sample's IDML has `LeftToRight`; a code the samples do
+            // not show leaves the attribute out.
+            match p.page_binding {
+                0 => ours.push(("PageBinding", "LeftToRight".into())),
+                1 => ours.push(("PageBinding", "RightToLeft".into())),
+                _ => drop.push(("DocumentPreference", "PageBinding")),
+            }
             set("DocumentPreference", ours);
         }
         // Guide locations are written measured from the spread (see
@@ -1955,6 +1965,11 @@ impl Writer<'_> {
             "ViewPreference",
             vec![("RulerOrigin", "SpreadOrigin".into())],
         );
+        for (tag, attr) in drop {
+            if let Some(n) = nodes.iter_mut().find(|n| n.tag == tag) {
+                n.attrs.retain(|(k, _)| k != attr);
+            }
+        }
         for n in &nodes {
             n.write(&mut x);
         }

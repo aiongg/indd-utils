@@ -540,6 +540,8 @@ pub struct DocumentPreferences {
     pub bleed: [f64; 4],
     /// 0 print, 1 web, 2 mobile.
     pub intent: u32,
+    /// Page binding (u16 at 64): 0 left to right, 1 right to left.
+    pub page_binding: u16,
 }
 
 /// Text frame settings, from the frame's multi-column frame object.
@@ -1215,12 +1217,19 @@ impl<'a> Reader<'a> {
         }
         let f = |o: usize| Cursor::new(&d[o..]).f64();
         let u = |o: usize| Cursor::new(&d[o..]).u32();
+        let binding = Cursor::new(&d[64..]).u16()?;
+        if binding > 1 {
+            self.warn(format!(
+                "document preferences: page binding code {binding} is not known; left out"
+            ));
+        }
         Ok(Some(DocumentPreferences {
             page_width: f(0)?,
             page_height: f(8)?,
             facing_pages: d[58] == 2,
             bleed: [f(70)?, f(78)?, f(86)?, f(94)?],
             intent: u(142)?,
+            page_binding: binding,
         }))
     }
 

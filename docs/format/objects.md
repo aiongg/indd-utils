@@ -756,6 +756,22 @@ bottom, inside, outside) is not verified. Files from InDesign 3.0 to 7.5
 have a shorter chunk with another layout; the converter leaves it out
 with a warning (`big-endian.md`).
 
+**Page binding (u16 at 64).** 0 is `PageBinding="LeftToRight"`, 1
+`RightToLeft`. Evidence:
+
+- The u16 is 0 in all 247 distinct little-endian public files that have
+  the 146-byte chunk. All 88 distinct corpus IDML files have
+  `PageBinding="LeftToRight"`, and in all 73 two-page spreads and master
+  spreads of those files the first page lies left of the second.
+- A sample typeset vertically, whose print PDF shows columns ordered
+  right to left, stores 1. In each of its two-page spreads and master
+  spreads the first page lies right of the second: the book is bound on
+  the right. The schema's other value, `Default`, has no sample.
+
+The converter writes `PageBinding` from this field and leaves it out,
+with a warning, for other codes. Pages are written in the order the
+spread lists them, for both bindings.
+
 ## Text frame preferences
 
 From the frame's multi-column frame object (class 0x263):

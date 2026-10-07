@@ -230,8 +230,8 @@ For example `TextDefault` keeps 264 of its 317 values,
   margins and grid settings, 53 values of `TextDefault` (among them the
   font and point size) and 12 of `TextPreference`.
 - The document setup the converter reads from the INDD (`objects.md`):
-  `PageHeight`, `PageWidth`, `FacingPages`, `Intent` and the four bleed
-  offsets of `DocumentPreference`. The converter writes its own values
+  `PageHeight`, `PageWidth`, `FacingPages`, `Intent`, `PageBinding` and
+  the four bleed offsets of `DocumentPreference`. The converter writes its own values
   for these and adds the observed values for the rest of the element.
   `ViewPreference` gets `RulerOrigin="SpreadOrigin"`, as before.
 - 3 values that name a style other than a root style, which the package
