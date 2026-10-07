@@ -177,6 +177,10 @@ enum TextKind {
     StringOrNothing,
     /// u32 bullet character type and u32 character value (`BulletChar`).
     BulletChar,
+    /// u32 length in characters, then text segments; left out when empty.
+    Text,
+    /// A number, left out when 0.
+    NonZero,
 }
 
 /// Text attributes: ID, IDML name, kind, written in `<Properties>`.
@@ -358,6 +362,8 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
         true,
     ),
     (0x4265, "GridAlignFirstLineOnly", TextKind::Bool(1), false),
+    (0x422D, "RubyFlag", TextKind::NonZero, false),
+    (0x422E, "RubyString", TextKind::Text, false),
     (
         0x4266,
         "GridAlignment",
@@ -1543,6 +1549,19 @@ impl Writer<'_> {
                 Some(u) => self.doc.fonts.get(&u).map(|f| ("string", f.name.clone())),
                 None => None,
             },
+            TextKind::NonZero => v
+                .as_u32()
+                .filter(|&u| u != 0)
+                .map(|u| ("long", u.to_string())),
+            TextKind::Text => {
+                let b = raw_bytes(v);
+                let mut c = Cursor::new(&b);
+                let n = c.u32().ok()? as usize;
+                c.segments(n)
+                    .ok()
+                    .filter(|t| !t.is_empty())
+                    .map(|t| ("string", t))
+            }
             TextKind::StringOrNothing => v.as_string().map(|s| {
                 if s.is_empty() {
                     ("enumeration", "Nothing".into())
@@ -3606,6 +3625,13 @@ mod tests {
     }
 
     #[test]
+    fn names_pages_in_kanji_digits() {
+        assert_eq!(kanji_digits(8), "八");
+        assert_eq!(kanji_digits(10), "一〇");
+        assert_eq!(kanji_digits(102), "一〇二");
+    }
+
+    #[test]
     fn formats_numbers_like_idml() {
         assert_eq!(num(205.2), "205.2");
         assert_eq!(num(-0.0), "-0");
@@ -3632,13 +3658,6 @@ mod tests {
             x.finish()
                 .ends_with("\n<Contents><![CDATA[ab]]><![CDATA[cd]]><![CDATA[e]]></Contents>")
         );
-    }
-
-    #[test]
-    fn names_pages_in_kanji_digits() {
-        assert_eq!(kanji_digits(8), "八");
-        assert_eq!(kanji_digits(10), "一〇");
-        assert_eq!(kanji_digits(102), "一〇二");
     }
 
     #[test]

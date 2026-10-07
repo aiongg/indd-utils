@@ -206,6 +206,8 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1DF21 | `SameParaStyleSpacing` (Properties) | f64; −1 = SetIgnore | 15/15 ranges, 100/100 styles |
 | 0x4265 | `GridAlignFirstLineOnly` | 1 = true | 81/81 styles |
 | 0x4266 | `GridAlignment` | 0 None, 1 AlignBaseline | 86/86 styles |
+| 0x422D | `RubyFlag` | number; written when not 0 | a sample and its print PDF; see below |
+| 0x422E | `RubyString` | u32 length, text segments; written when not empty | a sample and its print PDF; see below |
 | 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
 | 0x1A406 | `BulletChar` (Properties) | u32 type, u32 value; see below | 1/1 ranges, 84/84 styles |
 | 0x1A413 | `BulletsFont` (Properties) | font family UID, 0 = `$ID/` | 1/1 ranges, 84/84 styles |
@@ -373,6 +375,26 @@ there. The rest of the evidence is a sample and its print PDF:
 
 A layout of the converted sample with these two attributes reproduces
 noticeably more of the PDF's line breaks than one without them.
+
+**Ruby (0x422D, 0x422E).** IDML writes neither attribute on the root
+style, and no corpus story has them. In every pair the root style stores
+0 for 0x422D and a 4-byte 0 for 0x422E. The evidence is a sample typeset
+vertically and its print PDF:
+
+- Character runs of the sample set 0x422D to 1 together with 0x422E,
+  whose value is a u32 length in characters followed by text segments
+  (as story text, `objects.md`). The text is a short reading of the
+  run's characters.
+- In the PDF, each such text appears in small type in a narrow column
+  right beside the run's characters and centred on them, as ruby is set
+  beside vertical text.
+- Values of 8 bytes cannot be told from a number by their length, so the
+  converter rebuilds the bytes before reading the text.
+
+The converter writes `RubyString` and writes `RubyFlag` with the stored
+number (1 in every such run; the schema type is an integer). The other
+ruby settings (`RubyType`, `RubyAlignment`, `RubyPosition`, font and
+size) are not identified.
 
 **`StartParagraph` (0x1B37).** In every pair the root style has 0 and
 IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
