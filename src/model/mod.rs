@@ -96,6 +96,8 @@ pub mod chunk {
     pub const STYLE_ATTRS: u32 = 0x23F;
     pub const LANGUAGE_NAME: u32 = 0x2D0F;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
+    /// Anchored object settings, of an anchor or an object style.
+    pub const ANCHOR_SETTINGS: u32 = 0x2800;
     pub const MASTER_NAME: u32 = 0x1402;
     pub const STYLE_ROOT_CHILDREN: u32 = 0x28DC;
     pub const STYLE_GROUP_CHILDREN: u32 = 0x28D3;
@@ -274,6 +276,9 @@ pub struct PageItem {
     pub children: Vec<PageItem>,
     /// Text wrap (chunk 0x3703); `None` if the item has none.
     pub text_wrap: Option<TextWrap>,
+    /// Anchored object settings (chunk 0x2800 of the anchor), for an item
+    /// anchored in text.
+    pub anchor: Option<Vec<u8>>,
 }
 
 /// Text wrap settings of a page item or graphic (chunk 0x3703).
@@ -576,6 +581,8 @@ pub struct ObjectStyle {
     pub enabled: Option<Vec<u32>>,
     /// Paragraph style applied to text frames (chunk 0x1B946).
     pub paragraph_style: Option<u32>,
+    /// Anchored object settings (chunk 0x2800).
+    pub anchor: Option<Vec<u8>>,
 }
 
 /// Reads typed objects from a database, caching them.
@@ -778,6 +785,7 @@ impl<'a> Reader<'a> {
                                     Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
                                     _ => None,
                                 },
+                                anchor: self.chunk(uid, chunk::ANCHOR_SETTINGS)?,
                             },
                         );
                     }
@@ -1440,6 +1448,7 @@ impl<'a> Reader<'a> {
             object_style,
             children,
             text_wrap: self.text_wrap(uid)?,
+            anchor: None,
         }))
     }
 
@@ -1739,8 +1748,10 @@ impl<'a> Reader<'a> {
                     text_variables.insert(pos, v);
                 }
                 class::ANCHOR => {
+                    let settings = self.chunk(item, chunk::ANCHOR_SETTINGS)?;
                     for child in self.children(item, chunk::ANCHOR_CHILDREN)? {
-                        if let Some(pi) = self.page_item(child, None)? {
+                        if let Some(mut pi) = self.page_item(child, None)? {
+                            pi.anchor = settings.clone();
                             anchors.entry(pos).or_default().push(pi);
                         }
                     }

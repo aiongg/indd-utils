@@ -59,6 +59,28 @@ fn fitting_value(id: u32, v: &Value) -> Option<String> {
     }
 }
 
+/// Anchored object settings from chunk 0x2800 (of an anchor or an object
+/// style): f64 `AnchorYoffset` at 0, u16 `VerticalAlignment` at 52. See
+/// `docs/format/objects.md`.
+fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    if d.len() < 54 {
+        return out;
+    }
+    let y = f64::from_le_bytes(d[0..8].try_into().unwrap());
+    let align = match u16::from_le_bytes([d[52], d[53]]) {
+        0 => Some("TopAlign"),
+        1 => Some("CenterAlign"),
+        2 => Some("BottomAlign"),
+        _ => None,
+    };
+    if let Some(a) = align {
+        out.push(("VerticalAlignment", a.to_string()));
+    }
+    out.push(("AnchorYoffset", num(y)));
+    out
+}
+
 /// Frame fitting attributes of `attrs` with IDs in `ids`, in IDML order.
 fn fitting_attrs(attrs: &Attrs, ids: &[u32]) -> Vec<(&'static str, String)> {
     FITTING_ATTRS
@@ -2287,6 +2309,9 @@ impl Writer<'_> {
         }
         let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
         node.set(&["FrameFittingOption"], fitting_attrs(&os.fitting, &all));
+        if let Some(d) = &os.anchor {
+            node.set(&["AnchoredObjectSetting"], anchored_settings(d));
+        }
         node
     }
 
@@ -2641,6 +2666,19 @@ impl Writer<'_> {
                 values::object_style(self.doc.version.major).child("ObjectExportOption")
         {
             n.write(x);
+        }
+        if let Some(d) = &item.anchor {
+            let style = item
+                .object_style
+                .and_then(|u| self.doc.object_styles.get(&u))
+                .and_then(|s| s.anchor.as_deref());
+            let attrs: Vec<_> = anchored_settings(d)
+                .into_iter()
+                .filter(|a| style.is_none_or(|s| !anchored_settings(s).contains(a)))
+                .collect();
+            if !attrs.is_empty() {
+                x.empty("AnchoredObjectSetting", &attrs);
+            }
         }
         Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
         if frame {

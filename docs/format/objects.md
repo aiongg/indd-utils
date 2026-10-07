@@ -510,6 +510,28 @@ item. IDML writes the page item element in place of the U+FFFC.
 A text variable instance (class 0xCA64) is owned by a U+0018 at its
 position; see `text-variables.md`.
 
+**Anchored object settings (chunk 0x2800).** The anchor object (class
+0x262) and object styles have a 62-byte chunk 0x2800:
+
+| Offset | Contents | IDML `AnchoredObjectSetting` |
+|---|---|---|
+| 0 | f64 | `AnchorYoffset` |
+| 32 | f64, the negative of the value at 0 in every sample | |
+| 52 | u16: 0 `TopAlign`, 1 `CenterAlign`, 2 `BottomAlign` | `VerticalAlignment` |
+
+Evidence: 42 anchored items in the pairs (including those whose IDML is
+from an older version), compared with their IDML values or, where the
+item has none, its object style's. `AnchorYoffset`: 42 of 42, 11 of
+them non-zero in 2 files (−3.54 and −111.46). `VerticalAlignment`: 42 of
+42; 4 items in 2 files have 0 and `TopAlign`, the others 2 and
+`BottomAlign`. In the 337 object styles, 312 have 2 and `BottomAlign`,
+25 have 1 and `CenterAlign`, and all have 0 at offset 0 and
+`AnchorYoffset="0"`. IDML writes an item's `AnchoredObjectSetting` with
+the values that differ from its object style (14 of the 42 items); the
+converter does the same. The other fields of the chunk are not
+identified: `PinPosition` and `AnchorPoint` change together with three
+other u16 fields in the object styles.
+
 INDD stores a forced line break as U+000A; IDML writes it as U+2028. The
 last paragraph return of a story is not written to IDML.
 
@@ -621,9 +643,11 @@ or both absent in every style, so either ID gives the value: 0x1B933 and
 when the two IDs agree. Other `Enable…` attributes vary together with
 several IDs and are not written.
 
-**Not written.** `AnchoredObjectSetting` `PinPosition`, `AnchorPoint` and
-`VerticalAlignment` change together (312 against 25 styles) with four
-u16 fields of chunk 0x2800, so the fields cannot be told apart.
+**Anchored object settings** are in chunk 0x2800, as for anchors (see
+stories). **Not written:** `AnchoredObjectSetting` `PinPosition` and
+`AnchorPoint` change together (312 against 25 styles) with
+`VerticalAlignment` and three other u16 fields of chunk 0x2800, so they
+cannot be told apart.
 `EnableTransparency` of the effects categories varies and has no
 identified field.
 
