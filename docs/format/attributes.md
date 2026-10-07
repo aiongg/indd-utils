@@ -221,6 +221,26 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1A41F | `BulletsCharacterStyle` (Properties) | character style UID | 84/84 styles |
 | 0x1A420 | `NumberingCharacterStyle` (Properties) | character style UID | 79/79 styles |
 | 0x1A423 | `NumberingExpression` | flag + string | 79/79 styles |
+| 0x4221 | `Mojikumi` (Properties) | table UID; see below | 936/1,019 styles |
+| 0x4224 | `KinsokuSet` (Properties) | table UID; see below | 987/987 styles |
+| 0x42C0 | `TreatIdeographicSpaceAsSpace` | 1 = true | 1,082/1,083 styles |
+| 0x50F18 | `DiacriticPosition` | 4 OpentypePosition, 5 OpentypePositionFromBaseline | 1,007/1,010 styles |
+
+The counts of these four are paragraph and character styles of all 654
+pairs whose IDML style has the attribute and the same name (the root
+paragraph style of every pair among them); they also reproduce the
+`TextDefault` values of the preferences (`preferences.md`). The kinsoku
+and mojikumi value is a UID: 0 is `Nothing`; a built-in table
+(`kinsoku and mojikumi tables` in `objects.md`) is written as an
+enumeration: `kHardKinsokuName` `HardKinsoku` (51 styles),
+`kSoftKinsokuName` `SoftKinsoku` (11), `kKoreanKinsokuName`
+`KoreanKinsoku` (12), `kSimpChineseKinsokuName`
+`SimplifiedChineseKinsoku` (1), `kMojikumiDefaultName1`
+`LineEndAllOneHalfEmEnum` (55) and `kMojikumiDefaultName16`
+`SimpChineseDefault` (1); a custom kinsoku table (class 0x4204) as the
+object `KinsokuTable/<name>` (38). Other built-in tables are not written.
+81 styles name a custom mojikumi table of class 0x4203, which the
+converter does not write, so their `Mojikumi` is left out.
 
 Paragraph style counts include the 78 root styles `[No paragraph style]`
 of the compared pairs. For many attributes above the root holds the only

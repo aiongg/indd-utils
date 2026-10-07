@@ -349,6 +349,9 @@ enum TextKind {
     /// Manual kerning in ems, written in thousandths of an em; 1e8 (the
     /// root style's value) is left out.
     Kerning,
+    /// A kinsoku or mojikumi set: 0 `Nothing`, a built-in table (written
+    /// as its enumeration value) or a custom kinsoku table (an object).
+    CjkSet,
 }
 
 /// Value of the kerning attribute (0x1B13) in every root paragraph style;
@@ -471,6 +474,20 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
         false,
     ),
     (0x1B75, "AllNestedStyles", TextKind::NestedStyles, true),
+    (
+        0x42C0,
+        "TreatIdeographicSpaceAsSpace",
+        TextKind::Bool(1),
+        false,
+    ),
+    (
+        0x50F18,
+        "DiacriticPosition",
+        TextKind::Enum(&[(4, "OpentypePosition"), (5, "OpentypePositionFromBaseline")]),
+        false,
+    ),
+    (0x4221, "Mojikumi", TextKind::CjkSet, true),
+    (0x4224, "KinsokuSet", TextKind::CjkSet, true),
     (
         0x1B7E,
         "Justification",
@@ -2163,6 +2180,29 @@ impl Writer<'_> {
                 .filter(|&f| f != KERNING_NONE)
                 .map(|f| ("unit", num(round(f * 1000.0)))),
             TextKind::Bool(t) => v.as_u32().map(|u| ("boolean", (u == t).to_string())),
+            TextKind::CjkSet => {
+                let u = v.as_u32()?;
+                if u == 0 {
+                    return Some(("enumeration", "Nothing".into()));
+                }
+                let t = self.doc.cjk_tables.iter().find(|t| t.uid == u)?;
+                // Built-in tables observed in the corpus (attributes.md).
+                const BUILTIN: [(&str, &str); 6] = [
+                    ("$ID/kHardKinsokuName", "HardKinsoku"),
+                    ("$ID/kSoftKinsokuName", "SoftKinsoku"),
+                    ("$ID/kKoreanKinsokuName", "KoreanKinsoku"),
+                    ("$ID/kSimpChineseKinsokuName", "SimplifiedChineseKinsoku"),
+                    ("$ID/kMojikumiDefaultName1", "LineEndAllOneHalfEmEnum"),
+                    ("$ID/kMojikumiDefaultName16", "SimpChineseDefault"),
+                ];
+                if let Some((_, e)) = BUILTIN.iter().find(|(k, _)| *k == t.name) {
+                    return Some(("enumeration", e.to_string()));
+                }
+                if t.name.starts_with("$ID/") || t.mojikumi {
+                    return None;
+                }
+                Some(("object", format!("KinsokuTable/{}", self_name(&t.name))))
+            }
             TextKind::Enum(map) => v
                 .as_u32()
                 .and_then(|u| map.iter().find(|(k, _)| *k == u))
