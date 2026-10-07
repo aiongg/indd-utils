@@ -640,10 +640,7 @@ impl Writer<'_> {
         for _ in 0..32 {
             let Some(st) = cur else { break };
             if let Some(v) = st.attrs.get(id) {
-                return match v {
-                    Value::Other(_, b) => b.len() >= 4 && b[..4] != [0, 0, 0, 0],
-                    _ => false,
-                };
+                return matches!(v, Value::StyleList { count, .. } if *count != 0);
             }
             cur = st.based_on.and_then(|b| self.doc.styles.get(&b));
         }

@@ -7,6 +7,7 @@
 //! attributes) and `objects.md` (anchored object settings).
 
 use super::*;
+use crate::model::attrs::{Delimiter, NestedStyle, TabStop};
 
 #[derive(Clone, Copy)]
 pub(super) enum AttrKind {
@@ -614,111 +615,55 @@ pub(super) const CELL_STYLE_PARAGRAPH_STYLE: u32 = 0x10463;
 pub(super) const CELL_NO_STROKE_TYPE: u32 = 0x1040C;
 
 /// Report an attribute value that the converter has no IDML value for to
-/// `indd audit`: its code, or for a stroke type the code in its first four
-/// bytes.
+/// `indd audit`: its code (see [`Value::code`]).
 pub(super) fn unknown_code(attrs: &Attrs, id: u32, v: &Value) {
-    let code = v
-        .as_u32()
-        .or_else(|| match v {
-            Value::RefOrCode(_, code) => Some(*code),
-            _ => u32_at(&raw_bytes(v), 0),
-        })
-        .unwrap_or(u32::MAX);
-    crate::audit::unknown_code(attrs.1, id, code);
+    crate::audit::unknown_code(attrs.1, id, v.code().unwrap_or(u32::MAX));
 }
 
-/// The bytes of a value as stored: list values of two, four or eight bytes
-/// are decoded as numbers by the attribute reader.
-pub(super) fn raw_bytes(v: &Value) -> Vec<u8> {
-    match v {
-        Value::Double(f) => f64_bytes(*f).to_vec(),
-        Value::Int(i) => i32_bytes(*i).to_vec(),
-        Value::Enum(e) => u16_bytes(*e).to_vec(),
-        Value::Ref(r) => u32_bytes(*r).to_vec(),
-        Value::Point(a, b) => [f64_bytes(*a), f64_bytes(*b)].concat(),
-        Value::RefOrCode(r, _) => u32_bytes(*r).to_vec(),
-        Value::Other(_, b) => b.clone(),
-    }
-}
-
-/// Records of a `TabList`: u16 count, then per stop f64 position, u16
-/// alignment, u16 leader length and the leader in UTF-16 code units. See
-/// `docs/format/attributes.md`. `None` for an unknown alignment code.
-pub(super) fn tab_list(data: &[u8]) -> Option<Vec<Vec<Field>>> {
-    let mut c = Cursor::new(data);
-    let n = c.u16().ok()?;
-    let mut out = Vec::new();
-    for _ in 0..n {
-        let position = c.f64().ok()?;
-        let alignment = match c.u16().ok()? {
-            0 => "LeftAlign",
-            2 => "RightAlign",
-            _ => return None,
-        };
-        let len = c.u16().ok()? as usize;
-        let units = (0..len)
-            .map(|_| c.u16())
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
-        out.push(vec![
-            ("Alignment", "enumeration", alignment.to_string()),
-            ("AlignmentCharacter", "string", ".".to_string()),
-            ("Leader", "string", String::from_utf16_lossy(&units)),
-            ("Position", "unit", num(position)),
-        ]);
-    }
-    (c.remaining() == 0).then_some(out)
-}
-
-/// `BulletChar` attributes: u32 character type, u32 character value.
+/// Records of a `TabList`. `None` for an alignment code without evidence.
 /// See `docs/format/attributes.md`.
-pub(super) fn bullet_char(data: &[u8]) -> Option<PropValue> {
-    let mut c = Cursor::new(data);
-    let kind = match c.u32().ok()? {
+pub(super) fn tab_list(stops: &[TabStop]) -> Option<Vec<Vec<Field>>> {
+    stops
+        .iter()
+        .map(|t| {
+            let alignment = match t.alignment {
+                0 => "LeftAlign",
+                2 => "RightAlign",
+                _ => return None,
+            };
+            Some(vec![
+                ("Alignment", "enumeration", alignment.to_string()),
+                ("AlignmentCharacter", "string", ".".to_string()),
+                ("Leader", "string", t.leader.clone()),
+                ("Position", "unit", num(t.position)),
+            ])
+        })
+        .collect()
+}
+
+/// `BulletChar` attributes. See `docs/format/attributes.md`.
+pub(super) fn bullet_char(kind: u32, value: u32) -> Option<PropValue> {
+    let kind = match kind {
         0 => "UnicodeOnly",
         1 => "UnicodeWithFont",
         2 => "GlyphWithFont",
         _ => return None,
     };
-    let value = c.u32().ok()?;
-    (c.remaining() == 0).then(|| {
-        PropValue::Attributes(vec![
-            ("BulletCharacterType", kind.into()),
-            ("BulletCharacterValue", value.to_string()),
-        ])
-    })
+    Some(PropValue::Attributes(vec![
+        ("BulletCharacterType", kind.into()),
+        ("BulletCharacterValue", value.to_string()),
+    ]))
 }
 
-/// Delimiter field, repetition and inclusiveness of a nested style's
-/// delimiter code (`^c`, or `(d)` / `[d]` followed by an optional count).
-/// See `docs/format/attributes.md`.
-pub(super) fn nested_delimiter(code: &str) -> Option<(Field, u32, bool)> {
+/// The IDML field of a nested style delimiter.
+pub(super) fn delimiter_field(d: &Delimiter) -> Field {
     let enumeration = |v: &str| ("Delimiter", "enumeration", v.to_string());
-    if code == "^c" {
-        return Some((enumeration("Dropcap"), 1, true));
+    match d {
+        Delimiter::Dropcap => enumeration("Dropcap"),
+        Delimiter::AnyWord => enumeration("AnyWord"),
+        Delimiter::AnyCharacter => enumeration("AnyCharacter"),
+        Delimiter::Character(c) => ("Delimiter", "string", c.clone()),
     }
-    let (inclusive, close) = match code.chars().next()? {
-        '(' => (true, ')'),
-        '[' => (false, ']'),
-        _ => return None,
-    };
-    let end = code.rfind(close)?;
-    let inner = &code[1..end];
-    let count = &code[end + 1..];
-    let repetition = if count.is_empty() {
-        1
-    } else {
-        count.parse().ok()?
-    };
-    let delimiter = match inner {
-        "^w" => enumeration("AnyWord"),
-        "^?" => enumeration("AnyCharacter"),
-        _ if inner.chars().count() == 1 && inner != "^" => {
-            ("Delimiter", "string", inner.to_string())
-        }
-        _ => return None,
-    };
-    Some((delimiter, repetition, inclusive))
 }
 
 impl Writer<'_> {
@@ -729,11 +674,20 @@ impl Writer<'_> {
         for &(id, name, kind, in_props) in TEXT_ATTRS {
             let Some(v) = attrs.get(id) else { continue };
             let out: Option<(&'static str, PropValue)> = match kind {
-                TextKind::TabList => tab_list(&raw_bytes(v)).map(|l| ("list", PropValue::List(l))),
-                TextKind::NestedStyles => self
-                    .nested_styles(&raw_bytes(v))
-                    .map(|l| ("list", PropValue::List(l))),
-                TextKind::BulletChar => bullet_char(&raw_bytes(v)).map(|a| ("", a)),
+                TextKind::TabList => match v {
+                    Value::TabList(stops) => tab_list(stops).map(|l| ("list", PropValue::List(l))),
+                    _ => None,
+                },
+                TextKind::NestedStyles => match v {
+                    Value::StyleList {
+                        nested: Some(n), ..
+                    } => Some(("list", PropValue::List(self.nested_styles(n)))),
+                    _ => None,
+                },
+                TextKind::BulletChar => match *v {
+                    Value::BulletChar { kind, value } => bullet_char(kind, value).map(|a| ("", a)),
+                    _ => None,
+                },
                 _ => self.text_value(kind, v).map(|(t, s)| (t, s.into())),
             };
             if out.is_none() && matches!(kind, TextKind::Enum(_)) {
@@ -758,11 +712,8 @@ impl Writer<'_> {
                 .as_f64()
                 .or(v.as_u32().map(f64::from))
                 .map(|f| ("unit", num(f))),
-            TextKind::Point => match raw_bytes(v).as_slice() {
-                b if b.len() == 16 => {
-                    let f = |o: usize| f64_from(b[o..o + 8].try_into().unwrap());
-                    Some(("unit", nums(&[f(0), f(8)])))
-                }
+            TextKind::Point => match *v {
+                Value::Point(x, y) => Some(("unit", nums(&[x, y]))),
                 _ => None,
             },
             TextKind::Percent => v.as_f64().map(|f| ("unit", num(round(f * 100.0)))),
@@ -840,15 +791,10 @@ impl Writer<'_> {
                 .as_u32()
                 .filter(|&u| u != 0)
                 .map(|u| ("long", u.to_string())),
-            TextKind::Text => {
-                let b = raw_bytes(v);
-                let mut c = Cursor::new(&b);
-                let n = c.u32().ok()? as usize;
-                c.segments(n)
-                    .ok()
-                    .filter(|t| !t.is_empty())
-                    .map(|t| ("string", t))
-            }
+            TextKind::Text => match v {
+                Value::Text(t) if !t.is_empty() => Some(("string", t.clone())),
+                _ => None,
+            },
             TextKind::StringOrNothing => v.as_string().map(|s| {
                 if s.is_empty() {
                     ("enumeration", "Nothing".into())
@@ -861,31 +807,22 @@ impl Writer<'_> {
     }
 
     /// Records of an `AllNestedStyles` list. See `docs/format/attributes.md`.
-    pub(super) fn nested_styles(&self, data: &[u8]) -> Option<Vec<Vec<Field>>> {
-        let mut c = Cursor::new(data);
-        let n = c.u32().ok()?;
-        let mut out = Vec::new();
-        for _ in 0..n {
-            let style = c.u32().ok()?;
-            let len = c.u32().ok()? as usize;
-            let code = if len == 0 {
-                String::new()
-            } else {
-                c.segments(len).ok()?
-            };
-            let (delimiter, repetition, inclusive) = nested_delimiter(&code)?;
-            out.push(vec![
-                (
-                    "AppliedCharacterStyle",
-                    "object",
-                    self.style_ref(Some(style).filter(|&u| u != 0), false),
-                ),
-                delimiter,
-                ("Repetition", "long", repetition.to_string()),
-                ("Inclusive", "boolean", inclusive.to_string()),
-            ]);
-        }
-        (c.remaining() == 0).then_some(out)
+    pub(super) fn nested_styles(&self, styles: &[NestedStyle]) -> Vec<Vec<Field>> {
+        styles
+            .iter()
+            .map(|n| {
+                vec![
+                    (
+                        "AppliedCharacterStyle",
+                        "object",
+                        self.style_ref(Some(n.style).filter(|&u| u != 0), false),
+                    ),
+                    delimiter_field(&n.delimiter),
+                    ("Repetition", "long", n.repetition.to_string()),
+                    ("Inclusive", "boolean", n.inclusive.to_string()),
+                ]
+            })
+            .collect()
     }
 
     /// Write page item attributes from the item's attribute list.
@@ -985,18 +922,14 @@ impl Writer<'_> {
                     .as_u32()
                     .and_then(|u| map.iter().find(|(k, _)| *k == u))
                     .map(|(_, n)| n.to_string()),
-                CellKind::StrokeType => {
-                    let b = raw_bytes(v);
-                    let word = |i: usize| u32_at(&b, i);
-                    match (word(0), word(4)) {
-                        (Some(CELL_NO_STROKE_TYPE), Some(0)) => Some("n".to_string()),
-                        (Some(code), Some(0)) => STROKE_TYPES
-                            .iter()
-                            .find(|(k, _)| *k == code)
-                            .map(|(_, n)| format!("StrokeStyle/$ID/{n}")),
-                        _ => None,
-                    }
-                }
+                CellKind::StrokeType => match *v {
+                    Value::Words(CELL_NO_STROKE_TYPE, 0) => Some("n".to_string()),
+                    Value::Words(code, 0) => STROKE_TYPES
+                        .iter()
+                        .find(|(k, _)| *k == code)
+                        .map(|(_, n)| format!("StrokeStyle/$ID/{n}")),
+                    _ => None,
+                },
                 CellKind::CellStyle => v.as_u32().and_then(|u| self.cell_style_ref(u)),
             }
         }

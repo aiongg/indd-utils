@@ -40,9 +40,7 @@ use crate::model::{
 use values::Node;
 use xml::Xml;
 
-use crate::object::{
-    Cursor, f64_bytes, f64_from, i32_bytes, u16_bytes, u16_from, u32_at, u32_bytes,
-};
+use crate::object::{Cursor, f64_from, u16_from};
 
 const PACKAGING_NS: &str = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging";
 const MIMETYPE: &str = "application/vnd.adobe.indesign-idml-package";
@@ -424,51 +422,29 @@ mod tests {
     }
 
     #[test]
-    fn decodes_tab_stops() {
-        // Two stops: 12 pt left aligned, 237.5 pt right aligned with "." leader.
-        let mut b = 2u16.to_le_bytes().to_vec();
-        b.extend(12f64.to_le_bytes());
-        b.extend([0, 0, 0, 0]);
-        b.extend(237.5f64.to_le_bytes());
-        b.extend([2, 0, 1, 0, b'.', 0]);
-        let stops = tab_list(&b).unwrap();
-        assert_eq!(stops.len(), 2);
+    fn writes_tab_stops() {
+        let stop = |position, alignment, leader: &str| crate::model::attrs::TabStop {
+            position,
+            alignment,
+            leader: leader.into(),
+        };
+        let stops = tab_list(&[stop(12.0, 0, ""), stop(237.5, 2, ".")]).unwrap();
         assert_eq!(stops[0][0].2, "LeftAlign");
         assert_eq!(stops[0][3].2, "12");
         assert_eq!(stops[1][0].2, "RightAlign");
         assert_eq!(stops[1][2].2, ".");
         assert_eq!(stops[1][3].2, "237.5");
-        assert_eq!(tab_list(&[0, 0]).unwrap().len(), 0);
         // Unknown alignment code.
-        let mut b = 1u16.to_le_bytes().to_vec();
-        b.extend(12f64.to_le_bytes());
-        b.extend([1, 0, 0, 0]);
-        assert!(tab_list(&b).is_none());
+        assert!(tab_list(&[stop(12.0, 1, "")]).is_none());
     }
 
     #[test]
-    fn decodes_nested_style_delimiters() {
-        let d = |c| nested_delimiter(c).map(|(f, r, i)| (f.1, f.2, r, i));
-        assert_eq!(d("^c"), Some(("enumeration", "Dropcap".into(), 1, true)));
-        assert_eq!(d("[.]"), Some(("string", ".".into(), 1, false)));
-        assert_eq!(d("(:)"), Some(("string", ":".into(), 1, true)));
-        assert_eq!(d("(^w)5"), Some(("enumeration", "AnyWord".into(), 5, true)));
-        assert_eq!(
-            d("(^?)"),
-            Some(("enumeration", "AnyCharacter".into(), 1, true))
-        );
-        assert_eq!(d("(^x)"), None);
-        assert_eq!(d("^t"), None);
-    }
-
-    #[test]
-    fn decodes_bullet_char() {
-        let b = [0, 0, 0, 0, 0x22, 0x20, 0, 0];
-        let Some(PropValue::Attributes(a)) = bullet_char(&b) else {
-            panic!("not decoded");
+    fn writes_bullet_char() {
+        let Some(PropValue::Attributes(a)) = bullet_char(0, 0x2022) else {
+            panic!("not written");
         };
         assert_eq!(a[0].1, "UnicodeOnly");
         assert_eq!(a[1].1, "8226");
-        assert!(bullet_char(&[3, 0, 0, 0, 0x22, 0x20, 0, 0]).is_none());
+        assert!(bullet_char(3, 0x2022).is_none());
     }
 }

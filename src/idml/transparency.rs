@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 use super::num;
 use super::xml::Xml;
 use crate::model::{Attrs, Value};
-use crate::object::{f64_from, u32_at};
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -224,29 +223,23 @@ struct Stop {
     midpoint: Option<f64>,
 }
 
-/// Opacity stops: u32 count, then per stop f64 location (0–1), f64
-/// position of the midpoint to the next stop (0–1, absolute), f64 opacity
-/// in percent.
-fn stops(data: &[u8]) -> Option<Vec<Stop>> {
-    let n = u32_at(data, 0)? as usize;
-    if n == 0 || data.len() != 4 + n * 24 {
-        return None;
-    }
-    let f = |i: usize| f64_from(data[4 + i * 8..12 + i * 8].try_into().unwrap());
-    // Two stops at the same location leave the midpoint undefined.
-    if (1..n).any(|i| f(3 * i) == f(3 * (i - 1))) {
+/// Opacity stops as IDML writes them, from the stops of the attribute
+/// list (location, absolute midpoint position, opacity). `None` for no
+/// stops, or two stops at the same location (the midpoint is undefined).
+fn stops(raw: &[[f64; 3]]) -> Option<Vec<Stop>> {
+    if raw.is_empty() || (1..raw.len()).any(|i| raw[i][0] == raw[i - 1][0]) {
         return None;
     }
     Some(
-        (0..n)
-            .map(|i| {
-                let location = f(3 * i);
+        raw.iter()
+            .enumerate()
+            .map(|(i, &[location, _, opacity])| {
                 let midpoint = (i > 0).then(|| {
-                    let (prev, mid) = (f(3 * (i - 1)), f(3 * (i - 1) + 1));
+                    let [prev, mid, _] = raw[i - 1];
                     (mid - prev) / (location - prev) * 100.0
                 });
                 Stop {
-                    opacity: f(3 * i + 2),
+                    opacity,
                     location: super::round(location * 100.0),
                     midpoint,
                 }
@@ -326,7 +319,7 @@ pub(super) fn write(
                     .iter()
                     .find(|(_, s)| *s == setting)
                     .and_then(|(id, _)| match attrs.get(*id) {
-                        Some(Value::Other(_, data)) => stops(data),
+                        Some(Value::Stops(raw)) => stops(raw),
                         _ => None,
                     })
                     .unwrap_or_default()
@@ -371,14 +364,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decodes_opacity_stops() {
+    fn converts_opacity_stops() {
         // Two stops: location 0.15, midpoint at 0.5, opacity 100; location
         // 0.85, midpoint 1, opacity 0.
-        let mut d = 2u32.to_le_bytes().to_vec();
-        for v in [0.15, 0.5, 100.0, 0.85, 1.0, 0.0f64] {
-            d.extend_from_slice(&v.to_le_bytes());
-        }
-        let s = stops(&d).unwrap();
+        let s = stops(&[[0.15, 0.5, 100.0], [0.85, 1.0, 0.0]]).unwrap();
         assert_eq!(s.len(), 2);
         assert_eq!(
             (s[0].opacity, s[0].location, s[0].midpoint),
@@ -386,15 +375,11 @@ mod tests {
         );
         assert_eq!(s[1].location, 85.0);
         assert!((s[1].midpoint.unwrap() - 50.0).abs() < 1e-9);
-        assert_eq!(stops(&0u32.to_le_bytes()), None);
+        assert_eq!(stops(&[]), None);
     }
 
     #[test]
     fn stops_at_one_location_are_not_read() {
-        let mut d = 2u32.to_le_bytes().to_vec();
-        for v in [0.5, 0.5, 100.0, 0.5, 1.0, 0.0f64] {
-            d.extend_from_slice(&v.to_le_bytes());
-        }
-        assert_eq!(stops(&d), None);
+        assert_eq!(stops(&[[0.5, 0.5, 100.0], [0.5, 1.0, 0.0]]), None);
     }
 }
