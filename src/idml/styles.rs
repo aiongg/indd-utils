@@ -554,24 +554,11 @@ impl Writer<'_> {
             _ => {}
         }
         node.set(&["StoryPreference"], story);
-        let mode = match os.text_wrap.as_ref().map(|w| w.mode) {
-            None | Some(wrap_mode::NONE) => Some("None"),
-            Some(wrap_mode::JUMP_OBJECT) => Some("JumpObjectTextWrap"),
-            Some(wrap_mode::BOUNDING_BOX) => Some("BoundingBoxTextWrap"),
-            Some(wrap_mode::CONTOUR) => Some("Contour"),
-            Some(_) => None,
-        };
-        if let Some(mode) = mode {
+        if let Some(mode) = text_wrap_mode(os.text_wrap.as_ref()) {
             node.set(&["TextWrapPreference"], vec![("TextWrapMode", mode.into())]);
-            let [left, top, right, bottom] = os.text_wrap.as_ref().map_or([0.0; 4], |w| w.offsets);
             node.set(
                 &["TextWrapPreference", "Properties", "TextWrapOffset"],
-                vec![
-                    ("Top", num(top)),
-                    ("Left", num(left)),
-                    ("Bottom", num(bottom)),
-                    ("Right", num(right)),
-                ],
+                text_wrap_offsets(os.text_wrap.as_ref()),
             );
             if os.contour_type == Some(5) {
                 node.set(

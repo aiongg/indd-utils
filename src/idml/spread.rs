@@ -161,12 +161,8 @@ impl Writer<'_> {
         wrap: Option<&TextWrap>,
         contour_type: Option<u32>,
     ) {
-        let mode = match wrap.map(|w| w.mode) {
-            None | Some(wrap_mode::NONE) => "None",
-            Some(wrap_mode::JUMP_OBJECT) => "JumpObjectTextWrap",
-            Some(wrap_mode::BOUNDING_BOX) => "BoundingBoxTextWrap",
-            Some(wrap_mode::CONTOUR) => "Contour",
-            Some(_) => return,
+        let Some(mode) = text_wrap_mode(wrap) else {
+            return;
         };
         x.start("TextWrapPreference");
         if wrap.is_none_or(|w| w.flags == 1) {
@@ -175,16 +171,8 @@ impl Writer<'_> {
                 .attr("TextWrapSide", "BothSides");
         }
         x.attr("TextWrapMode", mode);
-        let [left, top, right, bottom] = wrap.map_or([0.0; 4], |w| w.offsets);
-        x.start("Properties").empty(
-            "TextWrapOffset",
-            &[
-                ("Top", num(top)),
-                ("Left", num(left)),
-                ("Bottom", num(bottom)),
-                ("Right", num(right)),
-            ],
-        );
+        x.start("Properties")
+            .empty("TextWrapOffset", &text_wrap_offsets(wrap));
         x.end();
         if contour_type == Some(5) {
             x.empty("ContourOption", &[("ContourType", "SameAsClipping".into())]);

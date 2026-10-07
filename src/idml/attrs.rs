@@ -90,6 +90,29 @@ pub(super) fn fitting_attrs(w: &Writer, attrs: &Attrs, ids: &[u32]) -> Vec<(&'st
         .collect()
 }
 
+/// IDML `TextWrapMode` of a text wrap; no wrap is `None`. `None` for a
+/// mode without evidence. See `docs/format/objects.md`, text wrap.
+pub(super) fn text_wrap_mode(wrap: Option<&TextWrap>) -> Option<&'static str> {
+    match wrap.map(|w| w.mode) {
+        None | Some(wrap_mode::NONE) => Some("None"),
+        Some(wrap_mode::JUMP_OBJECT) => Some("JumpObjectTextWrap"),
+        Some(wrap_mode::BOUNDING_BOX) => Some("BoundingBoxTextWrap"),
+        Some(wrap_mode::CONTOUR) => Some("Contour"),
+        Some(_) => None,
+    }
+}
+
+/// IDML `TextWrapOffset` attributes of a text wrap (0 without one).
+pub(super) fn text_wrap_offsets(wrap: Option<&TextWrap>) -> Vec<(&'static str, String)> {
+    let [left, top, right, bottom] = wrap.map_or([0.0; 4], |w| w.offsets);
+    vec![
+        ("Top", num(top)),
+        ("Left", num(left)),
+        ("Bottom", num(bottom)),
+        ("Right", num(right)),
+    ]
+}
+
 /// Codes of built-in stroke styles. See `docs/format/attributes.md`.
 pub(super) const STROKE_TYPES: &[(u32, &str)] = &[
     (0x5A29, "Solid"),
