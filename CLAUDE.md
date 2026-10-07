@@ -20,8 +20,10 @@ now). Licence: MIT OR Apache-2.0.
   files for this project.
 - No golden output files derived from third-party samples. Corpus tests
   compare against the sibling IDML at run time.
-- Do not name the third-party corpus sources in committed files. The
-  provenance record is `corpus/SOURCES.md` (local).
+- Openly licensed corpus sources may be listed in a committed fetch
+  manifest (pinned URL, hash, licence) so contributors can rebuild that
+  part of the corpus. Do not name any other source in committed files.
+  The full provenance record is `corpus/SOURCES.md` (local).
 
 ## Layout
 
