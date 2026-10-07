@@ -354,6 +354,99 @@ const ITEM_ATTRS: &[(u32, &str, AttrKind)] = &[
         AttrKind::Enum(&[(0, "CenterAlignment"), (1, "InsideAlignment")]),
     ),
 ];
+/// Kinds of cell attribute values.
+#[derive(Clone, Copy)]
+enum CellKind {
+    Number,
+    Integer,
+    Swatch,
+    Enum(&'static [(u32, &'static str)]),
+    /// A stroke style code in the first four of eight bytes; the other
+    /// four are 0.
+    StrokeType,
+    /// A cell style UID; 0 is written as `n`.
+    CellStyle,
+}
+
+/// Cell attributes of a cell attribute set: ID, IDML attributes, kind.
+/// See `docs/format/tables.md`.
+const CELL_ATTRS: &[(u32, &[&str], CellKind)] = &[
+    (0xB62C, &["TextTopInset", "TopInset"], CellKind::Number),
+    (0xB62B, &["TextLeftInset", "LeftInset"], CellKind::Number),
+    (
+        0xB62E,
+        &["TextBottomInset", "BottomInset"],
+        CellKind::Number,
+    ),
+    (0xB62D, &["TextRightInset", "RightInset"], CellKind::Number),
+    (0xB63D, &["FillColor"], CellKind::Swatch),
+    (0xB63E, &["FillTint"], CellKind::Number),
+    (
+        0xB677,
+        &["VerticalJustification"],
+        CellKind::Enum(&[(1, "CenterAlign"), (2, "BottomAlign")]),
+    ),
+    (
+        0xB6DE,
+        &["ClipContentToCell"],
+        CellKind::Enum(&[(0, "false")]),
+    ),
+    (0xB645, &["LeftEdgeStrokeWeight"], CellKind::Number),
+    (0xB64D, &["LeftEdgeStrokeType"], CellKind::StrokeType),
+    (0xB649, &["LeftEdgeStrokeColor"], CellKind::Swatch),
+    (0xB6A8, &["LeftEdgeStrokeTint"], CellKind::Number),
+    (0xB6F9, &["LeftEdgeStrokePriority"], CellKind::Integer),
+    (0xB647, &["TopEdgeStrokeWeight"], CellKind::Number),
+    (0xB64F, &["TopEdgeStrokeType"], CellKind::StrokeType),
+    (0xB64A, &["TopEdgeStrokeColor"], CellKind::Swatch),
+    (0xB6AA, &["TopEdgeStrokeTint"], CellKind::Number),
+    (0xB6FB, &["TopEdgeStrokePriority"], CellKind::Integer),
+    (0xB646, &["RightEdgeStrokeWeight"], CellKind::Number),
+    (0xB64E, &["RightEdgeStrokeType"], CellKind::StrokeType),
+    (0xB64B, &["RightEdgeStrokeColor"], CellKind::Swatch),
+    (0xB6A9, &["RightEdgeStrokeTint"], CellKind::Number),
+    (0xB6FA, &["RightEdgeStrokePriority"], CellKind::Integer),
+    (0xB648, &["BottomEdgeStrokeWeight"], CellKind::Number),
+    (0xB650, &["BottomEdgeStrokeType"], CellKind::StrokeType),
+    (0xB64C, &["BottomEdgeStrokeColor"], CellKind::Swatch),
+    (0xB6AB, &["BottomEdgeStrokeTint"], CellKind::Number),
+    (0xB6FC, &["BottomEdgeStrokePriority"], CellKind::Integer),
+];
+
+/// Table and table style attributes: ID, IDML attribute, kind.
+/// See `docs/format/tables.md`.
+const TABLE_ATTRS: &[(u32, &str, CellKind)] = &[
+    (0xB662, "SpaceBefore", CellKind::Number),
+    (0xB663, "SpaceAfter", CellKind::Number),
+    (0xB684, "StartRowStrokeColor", CellKind::Swatch),
+    (0xB690, "StartRowStrokeWeight", CellKind::Number),
+    (0xB688, "StartRowStrokeType", CellKind::StrokeType),
+    (
+        0xB683,
+        "ColumnFillsPriority",
+        CellKind::Enum(&[(0, "false")]),
+    ),
+    (0xB67B, "StartRowFillColor", CellKind::Swatch),
+    (0xB6B0, "StartRowFillTint", CellKind::Number),
+    (0xB67C, "EndRowFillColor", CellKind::Swatch),
+    (0xB6B1, "EndRowFillTint", CellKind::Number),
+    (
+        0x10457,
+        "HeaderRegionSameAsBodyRegion",
+        CellKind::Enum(&[(0, "false"), (1, "true")]),
+    ),
+    (0x10450, "HeaderRegionCellStyle", CellKind::CellStyle),
+    (0x10452, "BodyRegionCellStyle", CellKind::CellStyle),
+    (0x10453, "LeftColumnRegionCellStyle", CellKind::CellStyle),
+    (0x10454, "RightColumnRegionCellStyle", CellKind::CellStyle),
+];
+
+/// Paragraph style of a cell style.
+const CELL_STYLE_PARAGRAPH_STYLE: u32 = 0x10463;
+
+/// Stroke style code of a cell edge that has no stroke type (IDML `n`).
+const CELL_NO_STROKE_TYPE: u32 = 0x1040C;
+
 use values::Node;
 use xml::Xml;
 
@@ -1366,6 +1459,46 @@ impl Writer<'_> {
         (attrs, extra_props, children)
     }
 
+    /// A cell or table style other than the root style.
+    fn table_style_element(
+        &self,
+        x: &mut Xml,
+        tag: &str,
+        s: &crate::model::TableStyle,
+        styles: &BTreeMap<u32, crate::model::TableStyle>,
+    ) {
+        x.start(tag)
+            .attr("Self", Self::table_style_ref(tag, s))
+            .attr("Name", Self::table_style_name(s));
+        let attrs = if tag == "CellStyle" {
+            self.cell_attrs(&s.attrs)
+        } else {
+            self.table_attrs(&s.attrs)
+        };
+        for (k, v) in attrs {
+            x.attr(k, v);
+        }
+        if tag == "CellStyle"
+            && let Some(p) = s
+                .attrs
+                .get(CELL_STYLE_PARAGRAPH_STYLE)
+                .and_then(Value::as_u32)
+            && self.doc.styles.contains_key(&p)
+        {
+            x.attr("AppliedParagraphStyle", self.style_ref(Some(p), true));
+        }
+        if let Some(base) = s.based_on.and_then(|b| styles.get(&b)) {
+            // A root style is written as a string.
+            let prop = if base.builtin && base.based_on.is_none() {
+                ("BasedOn", "string", Self::table_style_name(base).into())
+            } else {
+                ("BasedOn", "object", Self::table_style_ref(tag, base).into())
+            };
+            Self::properties(x, &[prop]);
+        }
+        x.end();
+    }
+
     /// A root cell or table style, from observed values only.
     fn root_table_style(&self, x: &mut Xml, tag: &str, name: &str) {
         let (attrs, props, children) = self.root_values(tag, &[], &[]);
@@ -1407,6 +1540,96 @@ impl Writer<'_> {
             };
             if let Some(t) = text {
                 x.attr(name, t);
+            }
+        }
+    }
+
+    /// `CellStyle/...` or `TableStyle/...` reference of a style.
+    fn table_style_ref(tag: &str, s: &crate::model::TableStyle) -> String {
+        format!("{tag}/{}", self_name(&Self::table_style_name(s)))
+    }
+
+    fn table_style_name(s: &crate::model::TableStyle) -> String {
+        if s.builtin {
+            format!("$ID/{}", s.name)
+        } else {
+            s.name.clone()
+        }
+    }
+
+    /// The reference for an applied cell style UID; 0 is `[None]`.
+    fn cell_style_ref(&self, uid: u32) -> Option<String> {
+        if uid == 0 {
+            return Some("CellStyle/$ID/[None]".into());
+        }
+        self.doc
+            .cell_styles
+            .get(&uid)
+            .map(|s| Self::table_style_ref("CellStyle", s))
+    }
+
+    /// IDML attributes of a table or table style attribute list.
+    fn table_attrs(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
+        TABLE_ATTRS
+            .iter()
+            .filter_map(|&(id, name, kind)| {
+                let v = attrs.get(id)?;
+                let t = match kind {
+                    CellKind::CellStyle => match v.as_u32()? {
+                        0 => Some("n".to_string()),
+                        u => self
+                            .doc
+                            .cell_styles
+                            .get(&u)
+                            .map(|s| Self::table_style_ref("CellStyle", s)),
+                    },
+                    _ => self.table_value(v, kind),
+                }?;
+                Some((name, t))
+            })
+            .collect()
+    }
+
+    /// IDML attributes of a cell attribute set.
+    fn cell_attrs(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
+        let mut out = Vec::new();
+        for &(id, names, kind) in CELL_ATTRS {
+            let Some(v) = attrs.get(id) else { continue };
+            if let Some(t) = self.table_value(v, kind) {
+                for &name in names {
+                    out.push((name, t.clone()));
+                }
+            }
+        }
+        out
+    }
+
+    fn table_value(&self, v: &Value, kind: CellKind) -> Option<String> {
+        {
+            match kind {
+                CellKind::Number => v.as_f64().map(num),
+                CellKind::Integer => v.as_u32().map(|u| u.to_string()),
+                CellKind::Swatch => v.as_ref().and_then(|u| self.doc.swatches.get(&u).cloned()),
+                CellKind::Enum(map) => v
+                    .as_u32()
+                    .and_then(|u| map.iter().find(|(k, _)| *k == u))
+                    .map(|(_, n)| n.to_string()),
+                CellKind::StrokeType => {
+                    let b = raw_bytes(v);
+                    let word = |i: usize| {
+                        b.get(i..i + 4)
+                            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+                    };
+                    match (word(0), word(4)) {
+                        (Some(CELL_NO_STROKE_TYPE), Some(0)) => Some("n".to_string()),
+                        (Some(code), Some(0)) => STROKE_TYPES
+                            .iter()
+                            .find(|(k, _)| *k == code)
+                            .map(|(_, n)| format!("StrokeStyle/$ID/{n}")),
+                        _ => None,
+                    }
+                }
+                CellKind::CellStyle => v.as_u32().and_then(|u| self.cell_style_ref(u)),
             }
         }
     }
@@ -1533,9 +1756,28 @@ impl Writer<'_> {
                 "[No table style]",
             ),
         ] {
-            let id = root_of(kind).map_or(tag.to_string(), |g| uref(Some(g.uid)));
+            let root = root_of(kind);
+            let id = root.map_or(tag.to_string(), |g| uref(Some(g.uid)));
             x.start(tag).attr("Self", id);
             self.root_table_style(&mut x, style, name);
+            let styles = if style == "CellStyle" {
+                &doc.cell_styles
+            } else {
+                &doc.table_styles
+            };
+            // Styles listed in the root group first, then any others; the
+            // root style is written above.
+            let mut order: Vec<u32> = root.map_or(Vec::new(), |g| g.children.clone());
+            order.extend(styles.keys().copied());
+            let mut seen = std::collections::HashSet::new();
+            for uid in order {
+                let Some(s) = styles.get(&uid) else { continue };
+                let is_root = s.builtin && s.based_on.is_none() && s.name == name;
+                if is_root || !seen.insert(Self::table_style_ref(style, s)) {
+                    continue;
+                }
+                self.table_style_element(&mut x, style, s, styles);
+            }
             x.end();
         }
         let object_root = root_of(root_kind::OBJECT);
@@ -2134,6 +2376,12 @@ impl Writer<'_> {
                     .to_string(),
             )
             .attr("ColumnCount", t.columns.len().to_string());
+        if let Some(st) = t.style.and_then(|u| self.doc.table_styles.get(&u)) {
+            x.attr("AppliedTableStyle", Self::table_style_ref("TableStyle", st));
+        }
+        for (name, v) in self.table_attrs(&t.attrs) {
+            x.attr(name, v);
+        }
         for (i, r) in t.rows.iter().enumerate() {
             x.start("Row")
                 .attr("Self", format!("{id}Row{i}"))
@@ -2143,6 +2391,9 @@ impl Writer<'_> {
             }
             if let Some(h) = r.min_height {
                 x.attr("MinimumHeight", num(h));
+            }
+            if r.auto_grow == Some(0) {
+                x.attr("AutoGrow", "false");
             }
             x.end();
         }
@@ -2164,6 +2415,19 @@ impl Writer<'_> {
                 .attr("RowSpan", c.row_span.to_string())
                 .attr("ColumnSpan", c.column_span.to_string())
                 .attr("CellType", "TextTypeCell");
+            if let Some(f) = &c.format {
+                for (name, v) in self.cell_attrs(&f.attrs) {
+                    x.attr(name, v);
+                }
+                if let Some(r) = self.cell_style_ref(f.style) {
+                    x.attr("AppliedCellStyle", r)
+                        .attr("AppliedCellStylePriority", f.style_priority.to_string());
+                }
+            } else {
+                // A cell without an attribute set has no cell style.
+                x.attr("AppliedCellStyle", "CellStyle/$ID/[None]")
+                    .attr("AppliedCellStylePriority", "0");
+            }
             self.text_ranges(x, &c.runs, story, &cell_id);
             x.end();
         }

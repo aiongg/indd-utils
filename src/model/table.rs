@@ -5,6 +5,8 @@ use crate::Error;
 use crate::object::Cursor;
 
 pub mod class {
+    pub const CELL_STYLE: u32 = 0x2021A;
+    pub const TABLE_STYLE: u32 = 0xB63F;
     /// Owned by the U+0016 character where a table sits in its story.
     pub const TABLE_ANCHOR: u32 = 0xB651;
     pub const TABLE: u32 = 0xB608;
@@ -18,6 +20,18 @@ pub mod chunk {
     pub const TABLE_ROWS: u32 = 0xB616;
     pub const TABLE_COLUMNS: u32 = 0xB617;
     pub const TABLE_PARTS: u32 = 0xB6FB;
+    /// u32 applied table style, u32 (not identified).
+    pub const TABLE_STYLE: u32 = 0xB6FC;
+    /// Local table attributes: u16 count, attributes.
+    pub const TABLE_ATTRS: u32 = 0xB668;
+    /// Attributes of a cell style: u16 count, attributes.
+    pub const CELL_STYLE_ATTRS: u32 = 0x20253;
+    /// Attributes of a table style: u16 count, attributes.
+    pub const TABLE_STYLE_ATTRS: u32 = 0xB667;
+    /// Children of the root cell style group: u32, u32, UID list.
+    pub const CELL_STYLE_ROOT_CHILDREN: u32 = 0x2024E;
+    /// Children of the root table style group: u32, u32, UID list.
+    pub const TABLE_STYLE_ROOT_CHILDREN: u32 = 0x104E5;
 }
 
 /// Attribute IDs in table data.
@@ -25,6 +39,8 @@ pub mod attr {
     pub const COLUMN_WIDTH: u32 = 0xB60D;
     pub const ROW_HEIGHT: u32 = 0xB60C;
     pub const ROW_MIN_HEIGHT: u32 = 0xB66E;
+    /// 0 = `AutoGrow="false"`.
+    pub const ROW_AUTO_GROW: u32 = 0xB69F;
     /// A grid position that starts a cell; its value holds cell geometry.
     pub const CELL: u32 = 0xB666;
     /// A grid position covered by a merged cell.
@@ -35,6 +51,8 @@ pub mod attr {
 pub struct Row {
     pub height: Option<f64>,
     pub min_height: Option<f64>,
+    /// Stored auto-grow value (0 in every sample, `AutoGrow="false"`).
+    pub auto_grow: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,11 +64,39 @@ pub struct Cell {
     pub row_span: usize,
     pub column_span: usize,
     pub runs: Vec<TextRun>,
+    /// Formatting of the cell: its attribute set, if it has one.
+    pub format: Option<CellFormat>,
+}
+
+/// An attribute set shared by a run of cells in a row group.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CellFormat {
+    /// Local cell attributes (insets, fill, edge strokes, ...).
+    pub attrs: Attrs,
+    /// Applied cell style priority (IDML `AppliedCellStylePriority`).
+    pub style_priority: u32,
+    /// Applied cell style UID, 0 for none.
+    pub style: u32,
+}
+
+/// A cell or table style (class 0x2021A or 0xB63F).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableStyle {
+    pub uid: u32,
+    pub name: String,
+    /// The name is a built-in key, written with `$ID/` in IDML.
+    pub builtin: bool,
+    pub based_on: Option<u32>,
+    pub attrs: Attrs,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Table {
     pub uid: u32,
+    /// Applied table style.
+    pub style: Option<u32>,
+    /// Local table attributes.
+    pub attrs: Attrs,
     pub header_rows: u32,
     pub footer_rows: u32,
     pub rows: Vec<Row>,
@@ -86,9 +132,54 @@ struct Position {
     size: Option<(f64, f64)>,
     /// Covered by a merged cell.
     covered: bool,
+    format: Option<CellFormat>,
 }
 
 impl Reader<'_> {
+    /// An attribute list stored as a u16 count and records.
+    fn counted_attrs(&self, uid: u32, id: u32) -> Result<Attrs, Error> {
+        Ok(match self.chunk(uid, id)? {
+            Some(d) if d.len() >= 2 => {
+                let mut c = Cursor::new(&d);
+                let n = c.u16()? as usize;
+                Attrs::parse_text(&mut c, n)?
+            }
+            _ => Attrs::default(),
+        })
+    }
+
+    /// A cell or table style: name and base from chunk 0x230 (as for text
+    /// styles), attributes from `attrs_chunk`.
+    pub(super) fn table_style(
+        &self,
+        uid: u32,
+        attrs_chunk: u32,
+    ) -> Result<Option<TableStyle>, Error> {
+        let Some(data) = self.chunk(uid, super::chunk::STYLE_INFO)? else {
+            return Ok(None);
+        };
+        let based_on = Cursor::new(&data[4.min(data.len())..]).u32()?;
+        // A flag byte (1 = built-in name), then a non-empty in-object string.
+        let Some((at, name)) = (12..data.len().saturating_sub(6)).find_map(|i| {
+            if data[i] > 2 || data[i + 1] != 2 {
+                return None;
+            }
+            match Cursor::new(&data[i + 1..]).string() {
+                Ok(n) if !n.is_empty() => Some((i, n)),
+                _ => None,
+            }
+        }) else {
+            return Ok(None);
+        };
+        Ok(Some(TableStyle {
+            uid,
+            name,
+            builtin: data[at] == 1,
+            based_on: super::uid_or_none(based_on),
+            attrs: self.counted_attrs(uid, attrs_chunk)?,
+        }))
+    }
+
     /// The table owned by a table anchor object, without cell text.
     pub(super) fn table_of_anchor(&self, anchor: u32) -> Result<Option<Table>, Error> {
         let Some(d) = self.chunk(anchor, chunk::ANCHOR_TABLE)? else {
@@ -123,6 +214,7 @@ impl Reader<'_> {
                 let row = Row {
                     height: f64_attr(&a, attr::ROW_HEIGHT),
                     min_height: f64_attr(&a, attr::ROW_MIN_HEIGHT),
+                    auto_grow: a.get(attr::ROW_AUTO_GROW).and_then(Value::as_u32),
                 };
                 rows.extend(std::iter::repeat_n(row, count));
             }
@@ -132,13 +224,21 @@ impl Reader<'_> {
             Row {
                 height: None,
                 min_height: None,
+                auto_grow: None,
             },
         );
 
         let grid = self.cell_grid(uid)?;
         let cells = cells_from_grid(&grid, &rows, &columns);
+        let style = match self.chunk(uid, chunk::TABLE_STYLE)? {
+            Some(d) => super::uid_or_none(Cursor::new(&d).u32()?),
+            None => None,
+        };
+        let attrs = self.counted_attrs(uid, chunk::TABLE_ATTRS)?;
         Ok(Table {
             uid,
+            style,
+            attrs,
             header_rows,
             footer_rows,
             rows,
@@ -177,16 +277,27 @@ impl Reader<'_> {
             for _ in 0..groups {
                 let size = r.u32()? as usize;
                 let mut g = Cursor::new(r.bytes(size)?);
-                // Attribute sets shared by the cells: u32, u16, u16 count,
-                // attributes, u32, u32.
+                // Attribute sets, each shared by a run of columns: u32
+                // number of columns, u16 1 if attributes follow (u16 count,
+                // attributes), u32 cell style priority, u32 cell style.
                 let sets = g.u32()?;
+                let mut formats = Vec::new();
                 for _ in 0..sets {
-                    g.u32()?;
-                    g.u16()?;
-                    let na = g.u16()? as usize;
-                    Attrs::parse_text(&mut g, na)?;
-                    g.u32()?;
-                    g.u32()?;
+                    let columns = g.u32()? as usize;
+                    let attrs = if g.u16()? != 0 {
+                        let na = g.u16()? as usize;
+                        Attrs::parse_text(&mut g, na)?
+                    } else {
+                        Attrs::default()
+                    };
+                    let style_priority = g.u32()?;
+                    let style = g.u32()?;
+                    let f = CellFormat {
+                        attrs,
+                        style_priority,
+                        style,
+                    };
+                    formats.extend(std::iter::repeat_n(f, columns));
                 }
                 let nr = g.u32()?;
                 let mut ids = Vec::new();
@@ -204,10 +315,12 @@ impl Reader<'_> {
                     let row = row_ids
                         .into_iter()
                         .zip(raw)
-                        .map(|(id, (aid, value))| Position {
+                        .enumerate()
+                        .map(|(k, (id, (aid, value)))| Position {
                             id,
                             size: (aid == attr::CELL).then(|| cell_size(&value)).flatten(),
                             covered: aid == attr::COVERED,
+                            format: formats.get(k).cloned(),
                         })
                         .collect();
                     grid.push(row);
@@ -289,6 +402,7 @@ fn cells_from_grid(grid: &[Vec<Position>], rows: &[Row], columns: &[f64]) -> Vec
                 row_span,
                 column_span,
                 runs: Vec::new(),
+                format: pos.format.clone(),
             });
         }
     }

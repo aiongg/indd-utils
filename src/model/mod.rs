@@ -15,7 +15,7 @@ pub use attrs::{Attrs, Value};
 pub use color::{Color, Gradient, Tint};
 pub use font::{Font, FontFamily};
 pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
-pub use table::{Cell, Table};
+pub use table::{Cell, CellFormat, Table, TableStyle};
 pub use variable::TextVariable;
 pub use xref::CrossReferenceFormat;
 
@@ -370,6 +370,8 @@ pub struct Document {
     /// Style groups, including the root groups (empty name).
     pub style_groups: BTreeMap<u32, StyleGroup>,
     pub object_styles: BTreeMap<u32, ObjectStyle>,
+    pub cell_styles: BTreeMap<u32, TableStyle>,
+    pub table_styles: BTreeMap<u32, TableStyle>,
     pub sections: Vec<Section>,
     pub text_variables: Vec<TextVariable>,
     pub hyperlinks: Vec<Hyperlink>,
@@ -553,6 +555,8 @@ impl<'a> Reader<'a> {
         let mut languages = BTreeMap::new();
         let mut style_groups = BTreeMap::new();
         let mut object_styles = BTreeMap::new();
+        let mut cell_styles = BTreeMap::new();
+        let mut table_styles = BTreeMap::new();
         let mut text_variables = Vec::new();
         let mut hyperlinks = Vec::new();
         let mut text_sources = BTreeMap::new();
@@ -572,12 +576,17 @@ impl<'a> Reader<'a> {
                         Some(d) => Cursor::new(&d).u32()?,
                         None => 0,
                     };
-                    let children = self.children(uid, chunk::STYLE_ROOT_CHILDREN)?;
-                    let children = if children.is_empty() {
-                        self.children(uid, chunk::OBJECT_STYLE_ROOT_CHILDREN)?
-                    } else {
-                        children
-                    };
+                    let mut children = Vec::new();
+                    for id in [
+                        chunk::STYLE_ROOT_CHILDREN,
+                        chunk::OBJECT_STYLE_ROOT_CHILDREN,
+                        table::chunk::CELL_STYLE_ROOT_CHILDREN,
+                        table::chunk::TABLE_STYLE_ROOT_CHILDREN,
+                    ] {
+                        if children.is_empty() {
+                            children = self.children(uid, id)?;
+                        }
+                    }
                     style_groups.insert(
                         uid,
                         StyleGroup {
@@ -624,6 +633,16 @@ impl<'a> Reader<'a> {
                 class::STYLE => {
                     if let Some(style) = self.style(uid)? {
                         styles.insert(uid, style);
+                    }
+                }
+                table::class::CELL_STYLE => {
+                    if let Some(s) = self.table_style(uid, table::chunk::CELL_STYLE_ATTRS)? {
+                        cell_styles.insert(uid, s);
+                    }
+                }
+                table::class::TABLE_STYLE => {
+                    if let Some(s) = self.table_style(uid, table::chunk::TABLE_STYLE_ATTRS)? {
+                        table_styles.insert(uid, s);
                     }
                 }
                 color::class::COLOR => {
@@ -741,6 +760,8 @@ impl<'a> Reader<'a> {
             languages,
             style_groups,
             object_styles,
+            cell_styles,
+            table_styles,
             sections: self
                 .uid_list(doc, chunk::DOC_SECTIONS)?
                 .into_iter()

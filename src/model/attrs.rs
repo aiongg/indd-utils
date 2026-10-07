@@ -94,6 +94,10 @@ impl Attrs {
             let id = c.u32()?;
             let size = c.u16()? as usize;
             let mut p = Cursor::new(c.bytes(size)?);
+            // A record without values (for example a merged-cell marker).
+            if size < 2 {
+                continue;
+            }
             let count = p.u16()?;
             let mut first = None;
             for i in 0..count {
