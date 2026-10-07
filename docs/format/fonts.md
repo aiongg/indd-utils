@@ -59,7 +59,13 @@ in-object string, and InDesign 3.0 has no version (`big-endian.md`).
   Codes 0 (54 fonts) and 3 (1 font) occur in files without an IDML; the
   converter leaves out `FontType` for them.
 - `WritingScript`: 4,464 of 4,464 with the u32 after the font records
-  (values 0, 1 and 33).
+  (values 0, 1 and 33). Over all 654 pairs later in the corpus, 30,406
+  of 30,410 fonts; the other four, one family in one file, have 0 in the
+  INDD and 7 in the IDML.
+  One family in a file without an IDML stores `FF FF FF FF`. The schema
+  types `WritingScript` as `xsd:int`, and no corpus IDML has a negative
+  value, so the converter leaves the attribute out (with a warning) when
+  the u32 does not fit in an `int`.
 - `Name` is the family name, a space and the style name, and `Self` is
   the family's `Self`, `Fontn` and `Name` (4,464 of 4,464, taking the
   family name as IDML writes it).

@@ -74,8 +74,9 @@ const TOC_ANCHOR: [u8; 21] = [
 pub enum DestinationKind {
     Page {
         page: u32,
-        /// View zoom as a fraction (1 = 100 %).
-        zoom: f64,
+        /// View zoom as a fraction (1 = 100 %). `None` when outside the
+        /// 5–4000 % the IDML schema allows (0 in some files).
+        zoom: Option<f64>,
         /// View setting code.
         view: u32,
     },
@@ -203,7 +204,7 @@ impl Destination {
             };
             let mut c = Cursor::new(v);
             let page = c.u32()?;
-            let zoom = c.f64()?;
+            let zoom = Some(c.f64()?).filter(|z| (0.05..=40.0).contains(z));
             let view = c.u32()?;
             DestinationKind::Page { page, zoom, view }
         } else {
@@ -246,11 +247,11 @@ impl Bookmark {
 
 /// The bookmark list in document chunk 0x13501. From InDesign 6.0: u32,
 /// u16, then UID lists of text sources, hyperlinks and bookmarks. In 3.0
-/// and 4.0 files: UID lists of text sources, destinations, hyperlinks and
+/// to 5.0 files: UID lists of text sources, destinations, hyperlinks and
 /// bookmarks (`docs/format/hyperlinks.md`).
 pub fn document_bookmarks(data: &[u8], major: u32) -> Result<Vec<u32>, Error> {
     let mut c = Cursor::new(data);
-    if major <= 4 {
+    if major <= 5 {
         for _ in 0..3 {
             c.u32_list()?;
         }

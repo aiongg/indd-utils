@@ -17,6 +17,14 @@ against the local corpus (352 files, InDesign 3.0–21.6) and the fixtures.
 
 The file size is always a multiple of 4096.
 
+**Truncated files.** In 4,251 of 4,252 distinct corpus files with the
+signature and both master pages, the file is at least `db_pages × 4096`
+bytes long. The other one (InDesign 13.1) is 12,288 bytes, 3 pages,
+while both master pages give 129 database pages; it ends after its
+first database page. The converter reports a file shorter than two
+pages, or shorter than its active master page's database pages, as
+truncated, with the number of bytes it needs.
+
 ## Master pages
 
 Both master pages start with the header described in `header.md`. The one

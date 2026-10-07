@@ -109,10 +109,16 @@ Over 41 destinations (39, plus 2 in a pair from another save):
 - `Name`, `DestinationUniqueKey` and `Hidden` (all true): 41 of 41.
 - `DestinationPage`: 39 of 39, and 0 of 2 in the other save.
 - Zoom 1 and `ViewPercentage="100"`: 39 of 39; the other two have 91 in
-  IDML, also with zoom 1. The converter writes the zoom × 100.
-- View setting 1 and `ViewSetting="FitWindow"`: 41 of 41, the only
-  value. The converter writes `FitWindow` for 1 and leaves the attribute
-  out for other codes.
+  IDML, also with zoom 1. The converter writes the zoom × 100. Over the
+  654 pairs of the later corpus: 1,157 of 1,159 destinations (33 files),
+  with values from 75.35 to 800.
+- View setting 1 and `ViewSetting="FitWindow"`: 41 of 41, and 592 of 592
+  in 26 files of the later corpus. View setting 0 and
+  `ViewSetting="Fixed"`: 567 of 567 in 11 files. The converter writes
+  these two and leaves the attribute out for other codes.
+- One file without an IDML has three destinations with view setting 0
+  and zoom 0. The schema allows `ViewPercentage` from 5 to 4000, so the
+  converter leaves it out (with a warning) for a zoom outside 0.05–40.
 - `NameManually="true"` in all 41 has no located field and is left out,
   as is the `ViewBounds` property.
 
@@ -157,8 +163,17 @@ holds one text source (class 0x13502), the third one hyperlink (0x13501),
 and the four lists end the chunk. In two 4.0 files (big-endian) the
 second list holds 8 page destinations (0x13505) and the fourth 8
 bookmarks (0x1354C); then come three empty lists, a count of 8 and eight
-strings, not identified. The 6.0 layout above reads in all 1,203
-distinct 6.0–21.x files that have the chunk; no 5.0 file has it.
+strings, not identified. The 6.0 layout above reads in all 4,075
+distinct 6.0–21.x files that have the chunk.
+
+InDesign 5.0 files use the 3.0 and 4.0 layout. 18 of the 108 distinct
+5.0 files have the chunk, and in all 18 the four lists hold, in order,
+text sources (classes 0x13502 and 0x13503), destinations (0x13504,
+0x13505 and 0x13506), hyperlinks (0x13501) and bookmarks (0x1354C, in
+3 files; empty in the others). Read with the 6.0 layout, 17 of them give
+a list longer than the chunk. No 5.0 file has an IDML. Their page and
+URL destination objects (109, in 17 of these files) end before the fields
+described above, so the converter leaves them out with a warning.
 
 ## Order in designmap
 

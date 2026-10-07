@@ -20,6 +20,7 @@ pub enum Error {
     Io(std::io::Error),
     /// The file does not start with the INDD signature.
     NotIndd,
+    /// The file is shorter than its header or its database pages say.
     Truncated {
         needed: usize,
         got: usize,
@@ -47,7 +48,7 @@ impl std::fmt::Display for Error {
             Error::Io(e) => write!(f, "{e}"),
             Error::NotIndd => write!(f, "not an INDD file"),
             Error::Truncated { needed, got } => {
-                write!(f, "file too short: need {needed} bytes, got {got}")
+                write!(f, "file truncated: need {needed} bytes, got {got}")
             }
             Error::UnknownByteOrder(b) => write!(f, "unknown byte-order flag {b:#04x}"),
             Error::BadContigObject { offset } => {
@@ -109,6 +110,7 @@ pub fn convert(indd: &[u8], name: &str, out: impl std::io::Write) -> Result<Vec<
     let _tag = object::use_string_tag(object::string_tag_for(container.header.version));
     let db = container.database()?;
     let doc = model::Reader::new(&db).document(container.header.version)?;
-    idml::write(&doc, name, out)?;
-    Ok(doc.warnings)
+    let mut warnings = doc.warnings.clone();
+    warnings.extend(idml::write(&doc, name, out)?);
+    Ok(warnings)
 }

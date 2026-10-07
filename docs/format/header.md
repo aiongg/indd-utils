@@ -25,6 +25,17 @@ bytes, multiples of 1,024 but not of 4,096), so the container below does
 not apply. The converter reports them as not supported. Files from 2.0
 on start with the signature.
 
+## Files that are not INDD
+
+Eleven distinct files in the corpus with an `.indd` or `.indt` name do
+not start with the signature (nor with the InDesign 1.x layout). Their
+first bytes show what they are: a PDF (`%PDF-1.5`), an AppleDouble
+resource file from a `__MACOSX` folder (`00 05 16 07`, two copies),
+eight short text placeholders (108 to 209 bytes) and a 5,000-byte file
+that holds only the byte `04`. A 17-byte file holds the signature and
+one more byte. The converter checks the signature before the file size, so it reports
+the first group as not INDD files and the 17-byte file as truncated.
+
 ## Other observations
 
 These are observations, not yet explanations. The page layout, master page

@@ -70,19 +70,30 @@ pub struct Container<'a> {
 
 impl<'a> Container<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Container<'a>, Error> {
+        // The signature first, so that a short file of another kind is
+        // reported as not an INDD file.
+        let first = Header::parse(&bytes[..bytes.len().min(PAGE_SIZE)])?;
         if bytes.len() < 2 * PAGE_SIZE {
             return Err(Error::Truncated {
                 needed: 2 * PAGE_SIZE,
                 got: bytes.len(),
             });
         }
-        let first = Header::parse(&bytes[..PAGE_SIZE])?;
         Header::parse(&bytes[PAGE_SIZE..2 * PAGE_SIZE])?;
         let masters = [
             MasterPage::parse(&bytes[..PAGE_SIZE]),
             MasterPage::parse(&bytes[PAGE_SIZE..2 * PAGE_SIZE]),
         ];
         let active = usize::from(masters[1].sequence > masters[0].sequence);
+        // Every complete file holds at least its database pages
+        // (container.md).
+        let needed = masters[active].db_pages as usize * PAGE_SIZE;
+        if bytes.len() < needed {
+            return Err(Error::Truncated {
+                needed,
+                got: bytes.len(),
+            });
+        }
         let header = if active == 0 {
             first
         } else {
@@ -237,6 +248,25 @@ mod tests {
         let mut data = (packet.len() as u32).to_le_bytes().to_vec();
         data.extend_from_slice(packet);
         contig(7, &data)
+    }
+
+    #[test]
+    fn reports_missing_database_pages_as_truncated() {
+        let mut f = master(1, 129);
+        f.extend(master(0, 129));
+        f.extend(vec![0u8; PAGE_SIZE]);
+        assert!(matches!(
+            Container::parse(&f),
+            Err(Error::Truncated { needed, got }) if needed == 129 * PAGE_SIZE && got == 3 * PAGE_SIZE
+        ));
+    }
+
+    #[test]
+    fn reports_short_file_of_another_kind_as_not_indd() {
+        assert!(matches!(
+            Container::parse(b"%PDF-1.5 a short file of another kind"),
+            Err(Error::NotIndd)
+        ));
     }
 
     #[test]

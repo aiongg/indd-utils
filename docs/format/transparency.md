@@ -36,7 +36,7 @@ style on every attribute below.
 | 0x10816 | `BlendingSetting/Opacity` | f64, percent | 57 items in 4 files (40, 49, 50, 57, 69, 70) |
 | 0x10817 | `BlendingSetting/BlendMode` | i32 code (below) | 56 items in 4 files |
 | 0x1081A | `DropShadowSetting/Mode` | i32: 0 `None`, 1 `Drop` | 8 items with 1 in 2 files |
-| 0x10820 | `DropShadowSetting/Size` | f64 | 6 items, two values |
+| 0x10820 | `DropShadowSetting/Size` | f64 | 6 items, two values; 406 of 406 rectangles and text frames over the 654 pairs of the later corpus |
 | 0x1084D | `InnerShadowSetting/Applied` | u16: 1 true, 0 false | 10 items with 1 |
 | 0x1084E | `InnerShadowSetting/EffectColor` | swatch UID | 10 items (below) |
 | 0x10852 | `InnerShadowSetting/Distance` | f64 | 10 items with 0 |
@@ -57,6 +57,12 @@ default values (`Applied="false"`, `Distance="7"`, `Size="7"`, `Length="0"`).
 In pairs whose IDML is from an older version, 14 more items match on
 opacity and blend mode. One item there has 50 where the IDML says 100;
 that file was probably saved again after the export.
+
+**Values outside the schema's range.** Four items in a file without an
+IDML store a drop shadow size of −2.83; the schema allows 0 to 1000.
+The converter leaves out any value of the attributes above that is
+outside the schema's range, with a warning: sizes and distances 0–1000,
+opacity 0–100, angles −180–180.
 
 **Blend mode codes.** 1 `Multiply` (3 items), 3 `Overlay` (62),
 9 `Lighten` (5); 0 `Normal` in all 576 object styles, whose IDML blend mode

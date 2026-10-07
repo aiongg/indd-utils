@@ -4,9 +4,12 @@
 //! `corpus/exclude.txt` (local, optional) lists paths under `corpus/` to
 //! leave out, one per line, for example a folder still being downloaded.
 //!
-//! Two kinds of file cannot be converted, and the tests accept them: the
-//! InDesign 1.x layout ([`indd::Error::Unsupported`], `header.md`) and files
-//! without an object database ([`indd::Error::NoDatabase`], `database.md`).
+//! Some files cannot be converted, and the tests accept them: the
+//! InDesign 1.x layout ([`indd::Error::Unsupported`], `header.md`), files
+//! without an object database ([`indd::Error::NoDatabase`], `database.md`),
+//! files with an INDD name that are something else ([`indd::Error::NotIndd`])
+//! and files shorter than their header or database pages say
+//! ([`indd::Error::Truncated`], `container.md`).
 
 use std::path::{Path, PathBuf};
 
@@ -36,7 +39,10 @@ fn corpus_files(root: &Path) -> Vec<PathBuf> {
 fn known_unreadable(e: &indd::Error) -> bool {
     matches!(
         e,
-        indd::Error::Unsupported(_) | indd::Error::NoDatabase { .. }
+        indd::Error::Unsupported(_)
+            | indd::Error::NoDatabase { .. }
+            | indd::Error::NotIndd
+            | indd::Error::Truncated { .. }
     )
 }
 

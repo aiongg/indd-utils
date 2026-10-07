@@ -384,7 +384,9 @@ pub struct Ink {
     pub uid: u32,
     /// The IDML name, with `$ID/` for a built-in name.
     pub name: String,
-    pub neutral_density: f64,
+    /// `None` when the stored value is outside the 0.001–10 the IDML
+    /// schema allows (−1 in some files; `objects.md`).
+    pub neutral_density: Option<f64>,
     pub trap_order: u32,
     pub frequency: f64,
     pub angle: f64,
@@ -406,7 +408,7 @@ impl Ink {
         Ok(Some(Ink {
             uid,
             name: if builtin { format!("$ID/{name}") } else { name },
-            neutral_density: f(14)?,
+            neutral_density: Some(f(14)?).filter(|v| (0.001..=10.0).contains(v)),
             trap_order: Cursor::new(&d[end + 26..]).u32()? + 1,
             frequency: f(32)?,
             angle: f(40)?,

@@ -884,6 +884,8 @@ struct Writer<'a> {
     name: String,
     /// Names of the enclosing style groups of each style or group UID.
     group_path: std::collections::HashMap<u32, Vec<String>>,
+    /// Values left out while writing, reported with the model's warnings.
+    warnings: std::cell::RefCell<Vec<String>>,
 }
 
 fn group_paths(doc: &Document) -> std::collections::HashMap<u32, Vec<String>> {
@@ -1170,10 +1172,18 @@ impl Writer<'_> {
                         .attr("Self", d.reference())
                         .attr("Name", &d.name)
                         .attr("DestinationPage", uref(Some(*page)));
-                    if *view == 1 {
-                        x.attr("ViewSetting", "FitWindow");
+                    match view {
+                        0 => {
+                            x.attr("ViewSetting", "Fixed");
+                        }
+                        1 => {
+                            x.attr("ViewSetting", "FitWindow");
+                        }
+                        _ => {}
                     }
-                    x.attr("ViewPercentage", num(zoom * 100.0));
+                    if let Some(zoom) = zoom {
+                        x.attr("ViewPercentage", num(zoom * 100.0));
+                    }
                 }
                 DestinationKind::Url { url } => {
                     x.start("HyperlinkURLDestination")
@@ -1397,22 +1407,24 @@ impl Writer<'_> {
         }
         // The schema puts inks after the colours.
         for i in &self.doc.inks {
-            x.empty(
-                "Ink",
-                &[
-                    ("Self", format!("Ink/{}", self_name(&i.name))),
-                    ("Name", i.name.clone()),
-                    ("Angle", num(i.angle)),
-                    // These three are the same in every Ink of the corpus
-                    // IDML files (idml-values.md).
-                    ("ConvertToProcess", "false".into()),
-                    ("Frequency", num(i.frequency)),
-                    ("NeutralDensity", num(i.neutral_density)),
-                    ("PrintInk", "true".into()),
-                    ("TrapOrder", i.trap_order.to_string()),
-                    ("InkType", "Normal".into()),
-                ],
-            );
+            let mut attrs = vec![
+                ("Self", format!("Ink/{}", self_name(&i.name))),
+                ("Name", i.name.clone()),
+                ("Angle", num(i.angle)),
+                // These three are the same in every Ink of the corpus
+                // IDML files (idml-values.md).
+                ("ConvertToProcess", "false".into()),
+                ("Frequency", num(i.frequency)),
+            ];
+            if let Some(d) = i.neutral_density {
+                attrs.push(("NeutralDensity", num(d)));
+            }
+            attrs.extend([
+                ("PrintInk", "true".into()),
+                ("TrapOrder", i.trap_order.to_string()),
+                ("InkType", "Normal".into()),
+            ]);
+            x.empty("Ink", &attrs);
         }
         for (t, reference, name) in &self.doc.tints {
             let base = self.doc.swatches.get(&t.base).cloned().unwrap_or_default();
@@ -1891,8 +1903,11 @@ impl Writer<'_> {
                 if let Some(t) = font.type_name() {
                     x.attr("FontType", t);
                 }
-                x.attr("WritingScript", f.writing_script.to_string())
-                    .attr("FullName", &font.full_name)
+                // The schema's `xsd:int`; one file stores 0xFFFFFFFF (fonts.md).
+                if let Ok(w) = i32::try_from(f.writing_script) {
+                    x.attr("WritingScript", w.to_string());
+                }
+                x.attr("FullName", &font.full_name)
                     .attr("FullNameNative", &font.full_name_native)
                     .attr("FontStyleNameNative", &font.style_native)
                     // `$ID/` in every Font of the corpus IDML files.
@@ -2784,7 +2799,14 @@ impl Writer<'_> {
                 ],
             );
         }
-        transparency::write(x, &item.attrs, &uref(Some(item.uid)), &self.doc.swatches);
+        for (effect, attr, v) in
+            transparency::write(x, &item.attrs, &uref(Some(item.uid)), &self.doc.swatches)
+        {
+            self.warnings.borrow_mut().push(format!(
+                "item {}: {effect} {attr} {v} is outside the IDML range; left out",
+                item.uid
+            ));
+        }
         for child in &item.children {
             self.page_item(x, child);
         }
@@ -3396,12 +3418,15 @@ impl TextState {
 }
 
 /// Write `doc` as an IDML package. `name` is the document name (file name).
-pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::Result<()> {
+/// Write `doc` as an IDML package. Returns warnings about values left out
+/// because the IDML schema does not allow them.
+pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::Result<Vec<String>> {
     let w = Writer {
         doc,
         dom: format!("{}.0", doc.version.major),
         name: name.to_string(),
         group_path: group_paths(doc),
+        warnings: Default::default(),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();
     files.insert(
@@ -3439,7 +3464,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         z.add(path, content.as_bytes())?;
     }
     z.finish()?;
-    Ok(())
+    Ok(w.warnings.into_inner())
 }
 
 #[cfg(test)]
@@ -3503,6 +3528,7 @@ mod tests {
             dom: "20.0".into(),
             name: String::new(),
             group_path: Default::default(),
+            warnings: Default::default(),
         };
         let out: String = w
             .backing_story()

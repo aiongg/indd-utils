@@ -10,6 +10,8 @@ use crate::object::{f64_from, u32_at};
 #[derive(Clone, Copy)]
 enum Kind {
     Number,
+    /// A number the IDML schema limits to this range (inclusive).
+    Range(f64, f64),
     Bool,
     Point,
     Enum(&'static [(u32, &'static str)]),
@@ -55,7 +57,7 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "TransparencySetting",
         "BlendingSetting",
         "Opacity",
-        Kind::Number,
+        Kind::Range(0.0, 100.0),
     ),
     (
         0x1081A,
@@ -69,7 +71,7 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "TransparencySetting",
         "DropShadowSetting",
         "Size",
-        Kind::Number,
+        Kind::Range(0.0, 1000.0),
     ),
     (
         0x1084D,
@@ -90,14 +92,14 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "TransparencySetting",
         "InnerShadowSetting",
         "Distance",
-        Kind::Number,
+        Kind::Range(0.0, 1000.0),
     ),
     (
         0x10855,
         "TransparencySetting",
         "InnerShadowSetting",
         "Size",
-        Kind::Number,
+        Kind::Range(0.0, 1000.0),
     ),
     (
         0x1EB8A,
@@ -111,7 +113,7 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "TransparencySetting",
         "GradientFeatherSetting",
         "Angle",
-        Kind::Number,
+        Kind::Range(-180.0, 180.0),
     ),
     (
         0x1EB8E,
@@ -153,7 +155,7 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "StrokeTransparencySetting",
         "GradientFeatherSetting",
         "Angle",
-        Kind::Number,
+        Kind::Range(-180.0, 180.0),
     ),
     (
         0x1EB97,
@@ -181,7 +183,7 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "FillTransparencySetting",
         "GradientFeatherSetting",
         "Angle",
-        Kind::Number,
+        Kind::Range(-180.0, 180.0),
     ),
     (
         0x1EBA0,
@@ -249,8 +251,19 @@ fn stops(data: &[u8]) -> Option<Vec<Stop>> {
     )
 }
 
-fn value(v: &Value, kind: Kind, swatches: &BTreeMap<u32, String>) -> Option<String> {
-    match kind {
+/// A value as IDML text; `Err` with the value when it is outside the
+/// schema's range.
+fn value(v: &Value, kind: Kind, swatches: &BTreeMap<u32, String>) -> Option<Result<String, f64>> {
+    if let Kind::Range(lo, hi) = kind {
+        let f = v.as_f64()?;
+        return Some(if (lo..=hi).contains(&f) {
+            Ok(num(f))
+        } else {
+            Err(f)
+        });
+    }
+    Some(Ok(match kind {
+        Kind::Range(..) => unreachable!(),
         Kind::Number => v.as_f64().map(num),
         Kind::Bool => match v.as_u32()? {
             0 => Some("false".into()),
@@ -268,12 +281,20 @@ fn value(v: &Value, kind: Kind, swatches: &BTreeMap<u32, String>) -> Option<Stri
                 .map(|(_, n)| n.to_string())
         }
         Kind::Swatch => v.as_ref().and_then(|u| swatches.get(&u).cloned()),
-    }
+    }?))
 }
 
 /// Write the transparency settings found in a page item's attribute list.
-/// `item` is the item's `Self`, which names the opacity stops.
-pub(super) fn write(x: &mut Xml, attrs: &Attrs, item: &str, swatches: &BTreeMap<u32, String>) {
+/// `item` is the item's `Self`, which names the opacity stops. Returns the
+/// values left out because they are outside the schema's range, as
+/// (effect, attribute, value).
+pub(super) fn write(
+    x: &mut Xml,
+    attrs: &Attrs,
+    item: &str,
+    swatches: &BTreeMap<u32, String>,
+) -> Vec<(&'static str, &'static str, f64)> {
+    let mut left_out = Vec::new();
     let inner_shadow_applied = attrs.get(INNER_SHADOW_APPLIED).and_then(Value::as_u32) == Some(1);
     for &setting in SETTINGS {
         let mut effects: Vec<Effect> = Vec::new();
@@ -286,8 +307,10 @@ pub(super) fn write(x: &mut Xml, attrs: &Attrs, item: &str, swatches: &BTreeMap<
                 if matches!(kind, Kind::Swatch) && !inner_shadow_applied {
                     continue;
                 }
-                if let Some(t) = attrs.get(id).and_then(|v| value(v, kind, swatches)) {
-                    values.push((name, t));
+                match attrs.get(id).and_then(|v| value(v, kind, swatches)) {
+                    Some(Ok(t)) => values.push((name, t)),
+                    Some(Err(f)) => left_out.push((effect, name, f)),
+                    None => {}
                 }
             }
             let stop_list = if effect == "GradientFeatherSetting" {
@@ -332,6 +355,7 @@ pub(super) fn write(x: &mut Xml, attrs: &Attrs, item: &str, swatches: &BTreeMap<
         }
         x.end();
     }
+    left_out
 }
 
 #[cfg(test)]

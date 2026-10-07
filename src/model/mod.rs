@@ -940,6 +940,13 @@ impl<'a> Reader<'a> {
                     }
                     class::FONT_FAMILY => match FontFamily::read(uid, &*self.object(uid)?) {
                         Ok(Some(f)) => {
+                            if i32::try_from(f.writing_script).is_err() {
+                                self.warn(format!(
+                                    "font family {uid}: writing script {:#x} is not an IDML \
+                                     integer; left out",
+                                    f.writing_script
+                                ));
+                            }
                             fonts.insert(uid, f);
                         }
                         Ok(None) => {}
@@ -976,6 +983,11 @@ impl<'a> Reader<'a> {
                     }
                     hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
                         if let Some(d) = Destination::read(uid, cls, &*self.object(uid)?)? {
+                            if let hyperlink::DestinationKind::Page { zoom: None, .. } = d.kind {
+                                self.warn(format!(
+                                    "destination {uid}: view zoom is outside 5–4000 %; left out"
+                                ));
+                            }
                             destinations.push(d);
                         }
                     }
@@ -1006,6 +1018,11 @@ impl<'a> Reader<'a> {
                     }
                     color::class::INK => {
                         if let Some(i) = Ink::read(uid, &*self.object(uid)?)? {
+                            if i.neutral_density.is_none() {
+                                self.warn(format!(
+                                    "ink {uid}: neutral density is outside 0.001–10; left out"
+                                ));
+                            }
                             inks.push(i);
                         }
                     }
