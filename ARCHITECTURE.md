@@ -109,6 +109,7 @@ group cycles, table sizes larger than their cell data.
 | `attrs.rs` | attribute tables: INDD attribute ID → IDML name and value kind |
 | `kind.rs` | `Kind`: how each kind of value becomes IDML text |
 | `transparency.rs` | transparency effects of page items |
+| `applied.rs` | the effective values of an object style, which page item values are compared with |
 | `values.rs` | lookups in the generated value files |
 | `format.rs` | number, matrix, base64 and name formats |
 | `xml.rs`, `zip.rs` | the XML and ZIP writers |
