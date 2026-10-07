@@ -34,7 +34,8 @@ pub struct GradientStop {
     pub color: u32,
     /// 0–1.
     pub location: f64,
-    /// 0–1, between this stop and the next one.
+    /// Position of the midpoint between this stop and the next one, 0–1,
+    /// measured from the start of the gradient.
     pub midpoint: f64,
 }
 
@@ -61,6 +62,18 @@ impl Gradient {
                 self.name.replace('%', "%25").replace(':', "%3a")
             )
         }
+    }
+
+    /// IDML `Midpoint` of stop `i` (from 1): the midpoint between stops
+    /// `i`−1 and `i`, in percent of the distance between them. `None` for
+    /// the first stop, and when the value is outside the 13–87 that IDML
+    /// allows.
+    pub fn idml_midpoint(&self, i: usize) -> Option<f64> {
+        let (prev, stop) = (self.stops.get(i.checked_sub(1)?)?, self.stops.get(i)?);
+        let m = (prev.midpoint - prev.location) / (stop.location - prev.location) * 100.0;
+        // Rounded as IDML writes it, so that 12.9999999 counts as 13.
+        let m = crate::idml::round(m);
+        (13.0..=87.0).contains(&m).then_some(m)
     }
 
     pub fn idml_name(&self) -> String {
@@ -326,6 +339,38 @@ mod tests {
         };
         assert_eq!(t.idml_name(&color("Black", 2)), "[Black] 40%");
         assert_eq!(t.reference(&color("Gold", 0)), "Tint/Gold 40%25");
+    }
+
+    #[test]
+    fn gradient_midpoints_are_relative_to_the_gap() {
+        let stop = |location, midpoint| GradientStop {
+            color: 0,
+            location,
+            midpoint,
+        };
+        let g = Gradient {
+            uid: 0x100,
+            name: String::new(),
+            builtin_name: false,
+            kind: 1,
+            // Stops at 0, 0.5, 0.5 and 1; the stored midpoints are positions
+            // from the start of the gradient.
+            stops: vec![
+                stop(0.0, 0.25),
+                stop(0.5, 0.5),
+                stop(0.5, 0.95),
+                stop(1.0, 1.0),
+            ],
+            removable: true,
+            visible: true,
+            editable: true,
+        };
+        assert_eq!(g.idml_midpoint(0), None);
+        assert_eq!(g.idml_midpoint(1), Some(50.0));
+        // No gap between two stops at the same location.
+        assert_eq!(g.idml_midpoint(2), None);
+        // 90 % is outside what IDML allows.
+        assert_eq!(g.idml_midpoint(3), None);
     }
 }
 

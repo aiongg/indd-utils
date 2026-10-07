@@ -643,7 +643,7 @@ pub fn num(v: f64) -> String {
 }
 
 /// Round away binary noise from scaled values (0.8 * 100 = 80.00000000000001).
-fn round(v: f64) -> f64 {
+pub(crate) fn round(v: f64) -> f64 {
     (v * 1e9).round() / 1e9
 }
 
@@ -1425,9 +1425,8 @@ impl Writer<'_> {
                     .attr("Self", format!("{}GradientStop{i}", uref(Some(g.uid))))
                     .attr("StopColor", color)
                     .attr("Location", num(round(stop.location * 100.0)));
-                // The midpoint between stops i-1 and i is stored with stop i-1.
-                if i > 0 {
-                    x.attr("Midpoint", num(round(g.stops[i - 1].midpoint * 100.0)));
+                if let Some(m) = g.idml_midpoint(i) {
+                    x.attr("Midpoint", num(m));
                 }
                 x.end();
             }

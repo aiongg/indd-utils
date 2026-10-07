@@ -561,12 +561,28 @@ last paragraph return of a story is not written to IDML.
 ## Styles (0x205)
 
 Paragraph and character styles share the class. Chunk 0x230: u32 next
-style (0 = itself), u32 based-on style, fields not yet identified, u32 1
-for paragraph styles or 0 for character styles, u8 1 if the name is a
-built-in key (`$ID/` in IDML), the name as an in-object string, then a GUID
-string in newer files. The name's offset varies (23–26 bytes), so the
-converter locates it as a flag byte followed by a valid in-object string.
+style (0 = itself), u32 based-on style, fields not yet identified, u16 1
+for paragraph styles or 0 for character styles, u16 not identified, u8 1
+if the name is a built-in key (`$ID/` in IDML), the name as an in-object
+string, then a GUID string in newer files. The name's offset varies (23–26
+bytes), so the converter locates it as a flag byte followed by a valid
+in-object string.
 All 486 style names and 291 `NextStyle` values in the pairs match.
+
+**Kind field.** The kind and the unidentified u16 after it can be read
+as one u32 in most files, because the second u16 is 0. The InDesign 7.5
+template in `tests/fixtures/scml-template/` (no IDML) has 1 there in 600
+of its styles: 151 have `00 00 01 00` before the flag and 449 have
+`01 00 01 00`. The 151 are all listed in the tree of the root character
+style group (chunk 0x28C2 = 0xCA0D, below) and the 449 in the tree of the
+root paragraph style group, so the kind is the first u16 alone. Read as a
+u32, the 151 character styles were taken for paragraph styles, which gave
+`ParagraphStyle/…` references and a `NextStyle` that the schema does not
+allow on a character style. In every other distinct little-endian corpus
+file the u32 is 0 or 1 (2,125 styles), and the kind agrees with the root
+group in all of them. In the two big-endian files the u16 kind is also
+the first two bytes (`00 01` for their three paragraph styles, `00 00`
+for their two character styles).
 
 IDML writes a `BasedOn` of the root `[No paragraph style]` or
 `[No character style]` as a string (`$ID/[No paragraph style]`), and any
@@ -841,10 +857,34 @@ pairs.
 The `None` swatch is class 0x6E0B (name in chunk 0x1F30).
 
 **Gradients (0x5503).** Chunk 0x5503: u16 stop count *n*, *n* u32 stop
-colour UIDs, *n* f64 locations (0–1), *n* f64 midpoints (the midpoint
-between stops i and i+1 is stored with stop i), u32 type (1 linear).
-Chunk 0x5505: flag byte, name, u32 flags as for colours. All 99 gradients
-and 198 stops in the pairs match.
+colour UIDs, *n* f64 locations (0–1), *n* f64 midpoints, u32 type (1
+linear). Chunk 0x5505: flag byte, name, u32 flags as for colours. All 99
+gradients and 198 stops in the pairs match.
+
+The midpoint stored with stop *i* is the position of the midpoint between
+stops *i* and *i*+1, measured from the start of the gradient (0–1), as
+for opacity gradient stops (`transparency.md`). IDML writes it on stop
+*i*+1 as a percentage of the distance between the two stops:
+`Midpoint` = (midpoint *i* − location *i*) / (location *i*+1 − location
+*i*) × 100. Evidence:
+
+- Most pairs have two stops at locations 0 and 1, where both readings
+  give the same value. Two gradients in one pair have their first stop at
+  0.0037; stored midpoints 0.50184 and 0.60147 give IDML `Midpoint` 50
+  and 60 with this formula (2 of 2), not 50.18 and 60.15.
+- Gradients with more than two stops, or with stops not at 0 and 1,
+  occur in 26 files, 392 gradients. Only the two above are in a
+  reference IDML. In all 426 stop gaps of non-zero width, the stored midpoint lies
+  between the two stops' locations, as a position from the start of the
+  gradient must (for example stops at 0, 0.5 and 1 with stored midpoints
+  0.25 and 0.75). Written to IDML unconverted, 13 of them were outside
+  the 13–87 that the IDML schema allows for `Midpoint`; converted, all
+  426 are inside it.
+- 8 gaps, all in one file, have width 0 (two stops at the same
+  location), so the formula gives no value.
+
+When the computed value is outside 13–87 or there is none, the converter
+leaves the `Midpoint` out and warns.
 
 ## Inks (0x1F07)
 

@@ -151,3 +151,15 @@ fn little_endian_fixtures_convert() {
         assert!(text.contains("designmap.xml"), "{rel}");
     }
 }
+
+/// The InDesign 7.5 template has character styles whose kind field is
+/// followed by a non-zero u16 (`docs/format/objects.md`, Styles).
+#[test]
+fn style_kind_is_a_u16() {
+    let bytes = std::fs::read(fixture("scml-template/scml.indt")).unwrap();
+    let mut out = Vec::new();
+    indd::convert(&bytes, "test.indd", &mut out).unwrap();
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains(r#"<CharacterStyle Self="CharacterStyle/abbr" Name="abbr">"#));
+    assert!(!text.contains(r#"<CharacterStyle Self="ParagraphStyle/"#));
+}

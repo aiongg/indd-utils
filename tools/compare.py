@@ -9,9 +9,16 @@ matches. Also reports story text agreement.
 
 Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
                                    [--schemas DIR --jing DIR] [--bin PATH]
+                                   [--all] [--exclude PREFIX]... [--jobs N]
 Run from the repository root after `cargo build --release`. With --schemas
 and --jing, also validates every output with tools/validate.sh. --bin runs
 another converter binary, for example a copy of the previous build.
+
+--all also converts every other INDD and INDT file under corpus/ (any
+version, either byte order, without a usable IDML), validates the output
+if schemas are given, and reports failures for those files separately.
+--exclude leaves out files whose path under corpus/ starts with PREFIX.
+Converter warnings are counted by kind over all converted files.
 
 Embedded file data (`Contents`) is compared by digest, so it is reported as
 `md5:<hex> <length>` rather than as the full text.
@@ -19,6 +26,7 @@ Embedded file data (`Contents`) is compared by digest, so it is reported as
 
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -26,21 +34,23 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target" / "release" / "indd"
 
 
-def pairs(limit, substr):
+def pairs(limit, substr, exclude, seen):
+    """Corpus files with a same-version reference IDML, without duplicates.
+    Adds the digest of each file to `seen`."""
     rows = (ROOT / "corpus" / "inventory.tsv").read_text().splitlines()[1:]
-    seen = set()
     out = []
     for row in rows:
         path, _size, _valid, order, ver, _creator, dom = row.split("\t")
         if order != "LE" or not dom or ver.split(".")[0] != dom.split(".")[0]:
             continue
-        if substr and substr not in path:
+        if substr and substr not in path or any(path.startswith(e) for e in exclude):
             continue
         indd = ROOT / "corpus" / path
         digest = hashlib.md5(indd.read_bytes()).hexdigest()
@@ -49,6 +59,40 @@ def pairs(limit, substr):
         seen.add(digest)
         out.append((indd, indd.with_suffix(".idml")))
     return out[:limit] if limit else out
+
+
+def unpaired(substr, exclude, seen):
+    """Every other INDD and INDT file under corpus/, without duplicates."""
+    out = []
+    for indd in sorted((ROOT / "corpus").rglob("*")):
+        if indd.suffix.lower() not in (".indd", ".indt") or not indd.is_file():
+            continue
+        path = str(indd.relative_to(ROOT / "corpus"))
+        if substr and substr not in path or any(path.startswith(e) for e in exclude):
+            continue
+        digest = hashlib.md5(indd.read_bytes()).hexdigest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        out.append(indd)
+    return out
+
+
+def warning_kind(msg):
+    """A warning with its numbers and quoted names replaced, for counting."""
+    msg = re.sub(r'"[^"]*"', '"…"', msg)
+    msg = re.sub(r"\b0x[0-9a-fA-F]+\b", "#", msg)
+    return re.sub(r"\b\d+(\.\d+)?\b", "#", msg)
+
+
+def validate(out, args):
+    """Schema errors of an output (empty if valid); runs tools/validate.sh."""
+    v = subprocess.run(
+        [ROOT / "tools" / "validate.sh", out, args.schemas, args.jing],
+        capture_output=True, text=True)
+    if v.returncode == 0:
+        return []
+    return v.stdout.strip().splitlines() or [v.stderr.strip()]
 
 
 def text_ranges(story):
@@ -170,7 +214,16 @@ def main():
     ap.add_argument("--schemas", help="IDML RelaxNG schema directory (validate output)")
     ap.add_argument("--jing", help="directory with jing.jar, isorelax.jar, saxon.jar")
     ap.add_argument("--bin", default=str(BIN), help="converter binary")
+    ap.add_argument("--all", action="store_true",
+                    help="also convert and validate files without a reference IDML")
+    ap.add_argument("--exclude", action="append", default=[],
+                    help="leave out files whose path under corpus/ starts with this (repeatable)")
+    ap.add_argument("--warnings", type=int, default=15,
+                    help="number of warning kinds to list")
+    ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+                    help="schema validations run in parallel")
     args = ap.parse_args()
+    check = bool(args.schemas and args.jing)
 
     found = Counter()
     total = Counter()
@@ -178,20 +231,41 @@ def main():
     examples = defaultdict(list)
     story_ok = Counter()
     failures = []
-    invalid = []
+    warnings = Counter()
+    warned_files = Counter()
+    seen = set()
+    todo = pairs(args.limit, args.file, args.exclude, seen)
+    others = unpaired(args.file, args.exclude, seen) if args.all else []
+    other_failures = []
+    pool = ThreadPoolExecutor(max(1, args.jobs))
+    checks = []  # (name, paired, future of schema errors)
+
+    def convert(indd, out):
+        r = subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
+        kinds = set()
+        for line in r.stderr.splitlines():
+            if line.startswith("warning: "):
+                kind = warning_kind(line[len("warning: "):])
+                warnings[kind] += 1
+                kinds.add(kind)
+        for kind in kinds:
+            warned_files[kind] += 1
+        if r.returncode == 0 and check:
+            checks.append((indd.name, pool.submit(validate, out, args)))
+        return r
+
     with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "out.idml"
-        for indd, idml in pairs(args.limit, args.file):
-            r = subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
+        for n, indd in enumerate(others):
+            r = convert(indd, Path(tmp) / f"other{n}.idml")
+            if r.returncode != 0:
+                other_failures.append((indd.name, r.stderr.strip()))
+        n_others = len(checks)
+        for n, (indd, idml) in enumerate(todo):
+            out = Path(tmp) / f"pair{n}.idml"
+            r = convert(indd, out)
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
-            if args.schemas and args.jing:
-                v = subprocess.run(
-                    [ROOT / "tools" / "validate.sh", out, args.schemas, args.jing],
-                    capture_output=True, text=True)
-                if v.returncode != 0:
-                    invalid.append((indd.name, v.stdout.strip().splitlines()[:3]))
             ref_el, ref_st, ref_rg = load(idml)
             our_el, our_st, our_rg = load(out)
             for (tag, s), el in ref_el.items():
@@ -240,14 +314,30 @@ def main():
                     story_ok["wrong"] += 1
                     if len(examples[("Story", "text")]) < max(args.show, 3):
                         examples[("Story", "text")].append((indd.name, sid, text[:80], our_st[sid][:80]))
+        invalid = [(name, f.result()) for name, f in checks]
+        pool.shutdown()
+    other_invalid = [(name, errs) for name, errs in invalid[:n_others] if errs]
+    invalid = [(name, errs) for name, errs in invalid[n_others:] if errs]
 
-    print(f"conversion failures: {len(failures)}")
+    print(f"conversion failures: {len(failures)} of {len(todo)} paired files")
     for name, err in failures[:10]:
         print(f"  {name}: {err}")
-    if args.schemas:
+    if check:
         print(f"schema validation failures: {len(invalid)}")
         for name, errs in invalid[:10]:
-            print(f"  {name}: {errs}")
+            print(f"  {name}: {len(errs)} errors, {errs[:3]}")
+    if args.all:
+        print(f"files without a reference: {len(others)}, "
+              f"conversion failures: {len(other_failures)}")
+        for name, err in other_failures[:10]:
+            print(f"  {name}: {err}")
+        if check:
+            print(f"files without a reference: schema validation failures: {len(other_invalid)}")
+            for name, errs in other_invalid[:10]:
+                print(f"  {name}: {len(errs)} errors, {errs[:3]}")
+    print(f"warnings: {sum(warnings.values())} (count, files, kind)")
+    for kind, count in warnings.most_common(args.warnings):
+        print(f"  {count:6} {warned_files[kind]:4}  {kind[:150]}")
     st = sum(story_ok.values())
     print(f"story text: {story_ok['ok']}/{st} exact, {story_ok['wrong']} differ, {story_ok['missing']} missing")
     print("\nelements (produced / in reference):")

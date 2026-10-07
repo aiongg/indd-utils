@@ -900,6 +900,14 @@ impl<'a> Reader<'a> {
                     }
                     color::class::GRADIENT => {
                         if let Some(g) = Gradient::read(uid, &*self.object(uid)?)? {
+                            for i in 1..g.stops.len() {
+                                if g.idml_midpoint(i).is_none() {
+                                    self.warn(format!(
+                                        "gradient {uid}: midpoint before stop {i} is not \
+                                         within 13–87 %; left out"
+                                    ));
+                                }
+                            }
                             swatches.insert(uid, g.reference());
                             gradients.push(g);
                         }
@@ -1786,12 +1794,13 @@ impl<'a> Reader<'a> {
         let based_on = c.u32()?;
         // The header before the name is 4 bytes shorter in files from
         // InDesign 13 and earlier, so locate the name by its structure: a
-        // flag byte (1 = built-in name), then an in-object string. The u32
-        // before the flag is 1 for paragraph styles and 0 for character styles.
+        // flag byte (1 = built-in name), then an in-object string. Four
+        // bytes before the flag, a u16 is 1 for paragraph styles and 0 for
+        // character styles; the u16 after it is not identified.
         let Some((at, builtin, name)) = find_flagged_string(&data, 12, |_| true) else {
             return Err(Error::Corrupt(format!("style {uid}: no name")));
         };
-        let paragraph = Cursor::new(&data[at - 4..]).u32()? != 0;
+        let paragraph = Cursor::new(&data[at - 4..]).u16()? != 0;
         let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {
             Some(d) if d.len() >= 2 => {
                 let mut c = Cursor::new(&d);
