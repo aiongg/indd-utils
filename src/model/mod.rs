@@ -51,6 +51,7 @@ pub mod class {
     pub const FONT_FAMILY: u32 = 0x3E03;
     pub const LANGUAGE: u32 = 0x2D07;
     pub const TOC_STYLE: u32 = 0x11605;
+    pub const NAMED_GRID: u32 = 0xCD12;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
@@ -121,6 +122,7 @@ pub mod chunk {
     /// The TOC style of a table of contents.
     pub const TOC_STYLE_OF: u32 = 0x11613;
     pub const TOC_STYLE: u32 = 0x11605;
+    pub const NAMED_GRID: u32 = 0xCD28;
     pub const STRAND_DATA: u32 = 0x261;
     pub const STRAND_RUNS: u32 = 0x262;
     pub const STYLE_INFO: u32 = 0x230;
@@ -659,6 +661,9 @@ pub struct Document {
     pub active_layer: Option<u32>,
     /// Document users (chunk 0xA443): flag byte and name.
     pub users: Vec<(u8, String)>,
+    /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
+    /// a built-in key, and the name), in UID order.
+    pub named_grids: Vec<(bool, String)>,
     pub spreads: Vec<Spread>,
     pub master_spreads: Vec<Spread>,
     pub stories: Vec<Story>,
@@ -1361,6 +1366,7 @@ impl<'a> Reader<'a> {
             languages,
             language_list,
             toc_styles: self.toc_styles(),
+            named_grids: self.named_grids(),
             style_groups,
             object_styles,
             cell_styles,
@@ -2696,6 +2702,32 @@ impl<'a> Reader<'a> {
                 None => None,
             },
         })
+    }
+
+    /// The named grids, in UID order.
+    fn named_grids(&self) -> Vec<(bool, String)> {
+        let mut out = Vec::new();
+        for &(uid, cls) in self.db.classes() {
+            if cls != class::NAMED_GRID {
+                continue;
+            }
+            let read = (|| -> Result<Option<(u32, bool, String)>, Error> {
+                let Some(d) = self.chunk(uid, chunk::NAMED_GRID)? else {
+                    return Ok(None);
+                };
+                let mut c = Cursor::new(&d);
+                c.u32()?;
+                let builtin = c.flag()? == 1;
+                Ok(Some((uid, builtin, c.string()?)))
+            })();
+            match read {
+                Ok(Some(g)) => out.push(g),
+                Ok(None) => {}
+                Err(e) => self.warn(format!("named grid {uid} left out: {e}")),
+            }
+        }
+        out.sort_by_key(|g| g.0);
+        out.into_iter().map(|(_, b, n)| (b, n)).collect()
     }
 
     /// The table of contents styles, in UID order.

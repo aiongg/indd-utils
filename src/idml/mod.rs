@@ -1198,6 +1198,29 @@ impl Writer<'_> {
                 n.write(x);
             }
         };
+        // Named grids. Their grid settings are those all document pages
+        // have (objects.md, named grids).
+        let grids: Vec<_> = doc
+            .spreads
+            .iter()
+            .flat_map(|s| &s.pages)
+            .filter_map(|p| p.grid.as_ref())
+            .collect();
+        let grid = grids.first().filter(|g| grids.iter().all(|h| h == *g));
+        for (builtin, name) in &doc.named_grids {
+            let name = if *builtin {
+                format!("$ID/{name}")
+            } else {
+                name.clone()
+            };
+            x.start("NamedGrid")
+                .attr("Self", format!("NamedGrid/{}", self_name(&name)))
+                .attr("Name", &name);
+            if let Some(g) = grid {
+                self.grid_data(&mut x, g);
+            }
+            x.end();
+        }
         singleton(&mut x, "ConditionalTextPreference");
         x.empty(
             "idPkg:Preferences",
@@ -2600,7 +2623,20 @@ impl Writer<'_> {
         let mut node = if root {
             values::root_style("ObjectStyle", major)
         } else {
-            values::object_style(major)
+            let mut n = values::object_style(major);
+            // The export options every object style of the version has,
+            // which also covers versions before 12 (idml-values.md).
+            if let Some(e) = values::element("ObjectStyle/ObjectExportOption", major) {
+                match n
+                    .children
+                    .iter_mut()
+                    .find(|c| c.tag == "ObjectExportOption")
+                {
+                    Some(c) => c.merge(&e),
+                    None => n.children.push(e),
+                }
+            }
+            n
         };
         let mut attrs = self.item_attr_values(&os.attrs);
         for (id, name) in [
@@ -3590,7 +3626,13 @@ impl Writer<'_> {
                 ],
             );
         }
-        let Some(g) = &p.grid else { return };
+        if let Some(g) = &p.grid {
+            self.grid_data(x, g);
+        }
+    }
+
+    /// `GridDataInformation` of layout grid settings (chunk 0xCD02).
+    fn grid_data(&self, x: &mut Xml, g: &crate::model::GridData) {
         x.start("GridDataInformation")
             .attr("FontStyle", &g.font_style);
         let [size, character_aki, line_aki, h_scale, v_scale] = g.numbers;

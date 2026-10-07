@@ -350,6 +350,11 @@ groups are tagged as artifacts with custom text. Their INDD objects hold
 these settings in chunk 0x1E206 (its first u32 is 5 in items with the
 usual values, 8 or 0 in those items), which is not decoded.
 
+Object styles other than `[None]` (2,657 `ObjectExportOption`
+elements) have 22 of the same values from DOM 9 on, `EpubType` from 10
+and `EpubAriaRole` from 21; the converter writes them on those styles,
+in addition to the object style values above.
+
 The converter writes these values on every page item. From DOM 12 on it
 adds the values that every object style other than `[None]` has in the
 files the object style values were made from (above); all 6,151

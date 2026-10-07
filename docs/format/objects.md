@@ -225,6 +225,18 @@ true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
 
+## Named grids (0xCD12)
+
+Chunk 0xCD28: u32, a flag byte (1 = built-in key) and the name
+(`[Page Grid]`, IDML `$ID/[Page Grid]`). IDML writes a `NamedGrid` per
+object, with a `GridDataInformation` that holds no INDD field of its
+own: it equals the layout grid settings of the document pages (chunk
+0xCD02, pages above) when all pages have the same, which is so in 494 of
+the 495 trustworthy pairs; the named grid's settings match those in
+493 of the 494. The converter writes the named grid with the pages'
+settings when they agree, and without `GridDataInformation` otherwise.
+Over the trustworthy pairs: 494 of 496 named grids, all names.
+
 ## Table of contents styles (0x11605)
 
 Chunk 0x11605: a flag byte (1 = built-in key) and the name, three u32
