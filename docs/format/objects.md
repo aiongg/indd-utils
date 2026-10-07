@@ -799,6 +799,31 @@ From the frame's multi-column frame object (class 0x263):
 
 Inset spacing is 0 in every sample and not located.
 
+**Text orientation (chunk 0x2DE).** The multi-column frame holds a
+matrix (six f64) in chunk 0x2DE. Its first four values are 1 0 0 1 for
+horizontal text and 0 1 −1 0 (a quarter turn) for vertical text. IDML
+has no frame attribute for this; it writes the orientation on the story
+(`StoryPreference`, `StoryOrientation`). Evidence:
+
+- All 18,207 multi-column frames in the 239 distinct little-endian
+  public files that have text frames have 1 0 0 1. All 2,094 stories in
+  the corpus IDML files have `StoryOrientation="Horizontal"`.
+- A sample typeset vertically has 0 1 −1 0 in the frames of some
+  stories and 1 0 0 1 in the others. In its print PDF, the text of every
+  frame with the quarter turn is set in vertical columns ordered right to
+  left (glyphs of a column share an x position and follow each other
+  downwards), and the text of every frame with 1 0 0 1 is set in
+  horizontal lines, such as the running heads. The frames of one story
+  always agree.
+- In the rotated frames, `TextColumnFixedWidth` (chunk 0x2D1) equals
+  the frame's height, not its width: the columns run down the page.
+
+The last two values of the matrix are not identified. The converter
+writes `Vertical` for a story whose frames all have the quarter turn,
+and otherwise `Horizontal`, the value every IDML has. A story whose
+frames disagree or have another matrix gets a warning. Two frames in
+the InDesign 3.0 file have no chunk 0x2DE; they do not count.
+
 **First baseline offset.** IDML writes `FirstBaselineOffset` on a frame's
 `TextFramePreference` only when it differs from the frame's object style.
 Over the frames of the corpus pairs, compared with the value written on

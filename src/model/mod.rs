@@ -120,6 +120,9 @@ pub mod chunk {
     pub const BULLETS: u32 = 0x1A488;
     pub const FRAME_COLUMNS: u32 = 0x2D1;
     pub const FRAME_JUSTIFICATION: u32 = 0x2CE;
+    /// Matrix of a multi-column frame; its first four values give the
+    /// text orientation.
+    pub const FRAME_TEXT_TRANSFORM: u32 = 0x2DE;
     pub const GRAPHIC_BOUNDS: u32 = 0x1633;
     pub const GRAPHIC_LINK: u32 = 0x8CBC;
     pub const LINK_INFO: u32 = 0x8C9B;
@@ -439,6 +442,16 @@ pub struct Story {
     pub xml_markers: BTreeMap<usize, XmlMarker>,
     /// The XML element whose content is this story.
     pub xml_element: Option<xml::Key>,
+    /// Text orientation, from the frames that show the story; `None` when
+    /// it has no frame or its frames disagree.
+    pub orientation: Option<Orientation>,
+}
+
+/// Text orientation of a story (IDML `StoryOrientation`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
 }
 
 /// What an XML marker character (U+FEFF) in story text stands for.
@@ -648,6 +661,8 @@ pub struct Reader<'a> {
     warnings: std::cell::RefCell<Vec<String>>,
     /// XML nodes found in the stories read so far.
     xml_nodes: std::cell::RefCell<BTreeMap<xml::Key, xml::Node>>,
+    /// Text orientation of each text frame read so far, by story.
+    frame_orientations: std::cell::RefCell<BTreeMap<u32, Vec<Option<Orientation>>>>,
 }
 
 fn uid_or_none(v: u32) -> Option<u32> {
@@ -661,6 +676,7 @@ impl<'a> Reader<'a> {
             cache: Default::default(),
             warnings: Default::default(),
             xml_nodes: Default::default(),
+            frame_orientations: Default::default(),
         }
     }
 
@@ -1047,6 +1063,10 @@ impl<'a> Reader<'a> {
             }
             _ => None,
         };
+        let mut stories = stories;
+        for story in &mut stories {
+            story.orientation = self.story_orientation(story.uid);
+        }
         let xml = XmlStructure {
             story: xml_story,
             elements: self.xml_elements(&xml_tag_names)?,
@@ -1126,6 +1146,22 @@ impl<'a> Reader<'a> {
             xml_tags,
             xml,
         })
+    }
+
+    /// The text orientation shared by all frames of a story. A story
+    /// whose frames disagree, or have an orientation that is not known,
+    /// gets none, with a warning.
+    fn story_orientation(&self, story: u32) -> Option<Orientation> {
+        let map = self.frame_orientations.borrow();
+        let frames = map.get(&story)?;
+        let first = frames[0];
+        if first.is_none() || frames.iter().any(|&o| o != first) {
+            self.warn(format!(
+                "story {story}: text orientation of its frames is not known or differs; written as horizontal"
+            ));
+            return None;
+        }
+        first
     }
 
     /// An interface colour (class 0x1F11): chunk 0x1F01 holds u32 space
@@ -1232,6 +1268,25 @@ impl<'a> Reader<'a> {
             bleed: [f(70)?, f(78)?, f(86)?, f(94)?],
             intent: u(142)?,
             page_binding: binding,
+        }))
+    }
+
+    /// Text orientation of a multi-column frame (chunk 0x2DE): the
+    /// identity gives horizontal text, the rotation 0 1 −1 0 vertical
+    /// text (`docs/format/objects.md`). `None` without the chunk;
+    /// `Some(None)` for another matrix.
+    fn frame_orientation(&self, mcf: u32) -> Result<Option<Option<Orientation>>, Error> {
+        let Some(d) = self.chunk(mcf, chunk::FRAME_TEXT_TRANSFORM)? else {
+            return Ok(None);
+        };
+        if d.len() < 48 {
+            return Ok(Some(None));
+        }
+        let Matrix([a, b, c, dd, _, _]) = Matrix::read(&mut Cursor::new(&d))?;
+        Ok(Some(match [a, b, c, dd] {
+            [1.0, 0.0, 0.0, 1.0] => Some(Orientation::Horizontal),
+            [0.0, 1.0, -1.0, 0.0] => Some(Orientation::Vertical),
+            _ => None,
         }))
     }
 
@@ -1586,11 +1641,13 @@ impl<'a> Reader<'a> {
         let mut graphics = Vec::new();
         let mut text_column = None;
         let mut frame_prefs = None;
+        let mut frame_mcf = None;
         for &child in &child_uids {
             if let Some(g) = self.graphic(child)? {
                 graphics.push(g);
             } else if self.class(child) == Some(class::MULTI_COLUMN_FRAME) {
                 frame_prefs = self.text_frame_preferences(child)?;
+                frame_mcf = Some(child);
                 text_column = self
                     .children(child, chunk::ITEM_HIERARCHY)?
                     .into_iter()
@@ -1612,8 +1669,20 @@ impl<'a> Reader<'a> {
             ItemKind::Group
         } else if let Some(column) = text_column {
             let mut kind = self.text_frame_links(column)?;
-            if let ItemKind::TextFrame { preferences, .. } = &mut kind {
+            if let ItemKind::TextFrame {
+                preferences, story, ..
+            } = &mut kind
+            {
                 *preferences = frame_prefs;
+                if let (Some(story), Some(mcf)) = (*story, frame_mcf)
+                    && let Some(o) = self.frame_orientation(mcf)?
+                {
+                    self.frame_orientations
+                        .borrow_mut()
+                        .entry(story)
+                        .or_default()
+                        .push(o);
+                }
             }
             kind
         } else {
@@ -2059,6 +2128,7 @@ impl<'a> Reader<'a> {
             sources,
             xml_markers,
             xml_element,
+            orientation: None,
         })
     }
 

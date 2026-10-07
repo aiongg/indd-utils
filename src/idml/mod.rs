@@ -8,10 +8,10 @@ pub mod zip;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Page, PageItem, Path, Section,
-    Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun, TextVariable,
-    TextWrap, Value, XmlElement, XmlMarker, hyperlink::DestinationKind, numbering, root_kind,
-    variable::Instance, wrap_mode, xml::Key as XmlKey,
+    Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Orientation, Page, PageItem,
+    Path, Section, Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun,
+    TextVariable, TextWrap, Value, XmlElement, XmlMarker, hyperlink::DestinationKind, numbering,
+    root_kind, variable::Instance, wrap_mode, xml::Key as XmlKey,
 };
 
 #[derive(Clone, Copy)]
@@ -2976,7 +2976,16 @@ impl Writer<'_> {
                 ("OpticalMarginAlignment", "false".into()),
                 ("OpticalMarginSize", "12".into()),
                 ("FrameType", "TextFrameType".into()),
-                ("StoryOrientation", "Horizontal".into()),
+                // Read from the story's frames; otherwise the value every
+                // exported IDML has (`idml-values.md`).
+                (
+                    "StoryOrientation",
+                    match s.orientation {
+                        Some(Orientation::Vertical) => "Vertical",
+                        _ => "Horizontal",
+                    }
+                    .into(),
+                ),
                 ("StoryDirection", "LeftToRightDirection".into()),
             ],
         );
@@ -3433,6 +3442,7 @@ mod tests {
             sources: Vec::new(),
             xml_markers: markers.into_iter().collect(),
             xml_element: None,
+            orientation: None,
         };
         let doc = Document {
             xml: XmlStructure {

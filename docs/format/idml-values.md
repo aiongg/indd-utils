@@ -118,6 +118,13 @@ alignment is off in every corpus story, so the field that turns it on is
 not known and a document that uses it is converted without it.
 `AppliedTOCStyle` is left out: it names a TOC style in 4 stories.
 
+`StoryOrientation` is read from the story's frames when they agree
+(`objects.md`, text orientation); the observed `Horizontal` is written
+only for other stories. For a sample typeset vertically, no field was
+found that sets `StoryDirection` or `FrameType` apart from horizontal
+samples, so these keep the observed values there too. Its object styles
+store direction code 1, as horizontal samples do.
+
 ## Graphic settings without an INDD field
 
 All 496 `Image` elements in the 240 corpus IDML files (119 files) have
@@ -241,4 +248,11 @@ For example `TextDefault` keeps 264 of its 317 values,
   in a later version is kept only when at least 10 files show it.
 
 Some of these values are probably stored in the INDD and may differ in a
-document outside the corpus; none of them is read from the INDD yet.
+document outside the corpus; none of them is read from the INDD yet. A
+sample typeset vertically shows this: two 2-byte fields of the
+preferences object (chunks 0xCD14 and 0xCD1C) are 1 there and 0 in all
+250 distinct little-endian public files, and the values most likely to
+depend on vertical layout (`StoryPreference` `StoryOrientation`,
+`DocumentPreference` and `MarginPreference` `ColumnDirection`) are
+written as observed. The print PDF cannot show which preference each
+field holds, so they are not mapped.
