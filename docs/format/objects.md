@@ -510,11 +510,32 @@ than 0, 1 and 2.
 | 0x1F10 | u8 1 if the name is a built-in key; name; u32 flags: bit 0 removable, bit 1 visible, bit 2 editable |
 | 0x1F01 | u32 space (5 RGB, 6 CMYK), u16 count, f64 components as fractions |
 | 0x1F09 | u32 model: 0 Process, 2 Registration |
-| 0x1F24 | f64 (−1), then u32 `ColorOverride`: 0 Normal, 1 Specialpaper, 2 Specialblack, 3 Specialregistration, 4 Hiddenreserved |
+| 0x1F24 | f64 tint value (−1 for a colour, see tints below), then u32 `ColorOverride`: 0 Normal, 1 Specialpaper, 2 Specialblack, 3 Specialregistration, 4 Hiddenreserved |
 
 Unnamed colours are referenced by UID (`Color/u93`). All 1,296 colours in
 the pairs match on `Model`, `Space`, `ColorValue`, `ColorOverride`,
 `Name` and the three flags.
+
+**Tints** are objects of the same class without chunks 0x1F10 and
+0x1F01. Chunk 0x117 is the UID of the base colour, and chunk 0x1F24 holds
+the tint value in percent (IDML `TintValue`) where a colour has −1,
+followed by the colour override as for colours. IDML names a tint after
+its base colour and value: `Name="Gold 80%"` and `Self="Tint/Gold 80%25"`
+for 80 % of a colour named `Gold`. The black swatch (override
+Specialblack) is written in brackets: `[Black] 40%`.
+
+Evidence: all 2,107 colours with a name in the distinct little-endian
+files have −1 at the start of chunk 0x1F24. The same files have 26 tints
+in 24 files, all with this layout and a named base colour. The pairs have
+3 IDML `Tint` elements (2 files, one of them on black), and all 3 match on
+`TintValue`, `BaseColor`, `Name` and `ColorOverride`. Their 19 references
+(`FillColor` of 15 page items, `StrokeColor` of 3, one gradient stop)
+match too.
+
+Tints have no flags chunk, so `ColorEditable`, `ColorRemovable` and
+`Visible` (true in all 3 IDML tints) are not written. Brackets are known
+only for black; other reserved colours as a tint base do not occur in the
+pairs.
 
 The `None` swatch is class 0x6E0B (name in chunk 0x1F30).
 

@@ -13,7 +13,10 @@ pub mod chunk {
     pub const COLOR_VALUE: u32 = 0x1F01;
     pub const COLOR_MODEL: u32 = 0x1F09;
     pub const COLOR_NAME: u32 = 0x1F10;
+    /// f64 tint value (−1 for colours), then u32 colour override.
     pub const COLOR_OVERRIDE: u32 = 0x1F24;
+    /// Base colour of a tint.
+    pub const TINT_BASE: u32 = 0x117;
     pub const GRADIENT_STOPS: u32 = 0x5503;
     pub const GRADIENT_NAME: u32 = 0x5505;
 }
@@ -96,6 +99,76 @@ impl Gradient {
     }
 }
 
+/// A tint swatch: a colour object with a base colour and a tint value
+/// instead of a name and colour values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tint {
+    pub uid: u32,
+    pub base: u32,
+    /// Percent.
+    pub value: f64,
+    pub color_override: u32,
+}
+
+impl Tint {
+    pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Tint>, Error> {
+        if obj.chunk(chunk::COLOR_NAME).is_some() {
+            return Ok(None);
+        }
+        let (Some(base), Some(tint)) = (
+            obj.chunk(chunk::TINT_BASE),
+            obj.chunk(chunk::COLOR_OVERRIDE),
+        ) else {
+            return Ok(None);
+        };
+        let base = Cursor::new(base).u32()?;
+        let mut c = Cursor::new(tint);
+        let value = c.f64()?;
+        let color_override = c.u32()?;
+        if base == 0 || value < 0.0 {
+            return Ok(None);
+        }
+        Ok(Some(Tint {
+            uid,
+            base,
+            value,
+            color_override,
+        }))
+    }
+
+    /// IDML `Name`: the base colour's name and the tint value, with the
+    /// black swatch written as `[Black]`.
+    pub fn idml_name(&self, base: &Color) -> String {
+        let name = if base.color_override == 2 {
+            format!("[{}]", base.name)
+        } else {
+            base.name.clone()
+        };
+        format!("{name} {}%", crate::idml::num(self.value))
+    }
+
+    pub fn reference(&self, base: &Color) -> String {
+        format!(
+            "Tint/{}",
+            self.idml_name(base).replace('%', "%25").replace(':', "%3a")
+        )
+    }
+
+    pub fn override_name(&self) -> &'static str {
+        override_name(self.color_override)
+    }
+}
+
+fn override_name(code: u32) -> &'static str {
+    match code {
+        1 => "Specialpaper",
+        2 => "Specialblack",
+        3 => "Specialregistration",
+        4 => "Hiddenreserved",
+        _ => "Normal",
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Space {
     Rgb,
@@ -171,13 +244,7 @@ impl Color {
     }
 
     pub fn override_name(&self) -> &'static str {
-        match self.color_override {
-            1 => "Specialpaper",
-            2 => "Specialblack",
-            3 => "Specialregistration",
-            4 => "Hiddenreserved",
-            _ => "Normal",
-        }
+        override_name(self.color_override)
     }
 
     pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<Color>, Error> {
@@ -219,5 +286,37 @@ impl Color {
             editable: flags & 4 != 0,
             color_override,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn color(name: &str, color_override: u32) -> Color {
+        Color {
+            uid: 0xb,
+            name: name.into(),
+            builtin_name: false,
+            model: 0,
+            space: Space::Cmyk,
+            values: vec![0.0, 0.0, 0.0, 1.0],
+            editable: false,
+            removable: false,
+            visible: true,
+            color_override,
+        }
+    }
+
+    #[test]
+    fn names_tints_after_their_base() {
+        let t = Tint {
+            uid: 0x3fa,
+            base: 0xb,
+            value: 40.0,
+            color_override: 0,
+        };
+        assert_eq!(t.idml_name(&color("Black", 2)), "[Black] 40%");
+        assert_eq!(t.reference(&color("Gold", 0)), "Tint/Gold 40%25");
     }
 }

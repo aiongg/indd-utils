@@ -1106,6 +1106,19 @@ impl Writer<'_> {
                 ],
             );
         }
+        for (t, reference, name) in &self.doc.tints {
+            let base = self.doc.swatches.get(&t.base).cloned().unwrap_or_default();
+            x.empty(
+                "Tint",
+                &[
+                    ("Self", reference.clone()),
+                    ("TintValue", num(t.value)),
+                    ("BaseColor", base),
+                    ("Name", name.clone()),
+                    ("ColorOverride", t.override_name().into()),
+                ],
+            );
+        }
         x.empty(
             "Swatch",
             &[

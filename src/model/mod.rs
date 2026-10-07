@@ -12,7 +12,7 @@ pub mod xref;
 use std::collections::{BTreeMap, HashMap};
 
 pub use attrs::{Attrs, Value};
-pub use color::{Color, Gradient};
+pub use color::{Color, Gradient, Tint};
 pub use font::{Font, FontFamily};
 pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
 pub use table::{Cell, Table};
@@ -357,6 +357,8 @@ pub struct Document {
     pub stories: Vec<Story>,
     pub styles: BTreeMap<u32, Style>,
     pub colors: Vec<Color>,
+    /// Tint swatches, with their IDML reference and name.
+    pub tints: Vec<(Tint, String, String)>,
     pub gradients: Vec<Gradient>,
     /// IDML reference (`Color/...`, `Swatch/None`) for each swatch UID.
     pub swatches: BTreeMap<u32, String>,
@@ -544,6 +546,7 @@ impl<'a> Reader<'a> {
             .collect::<Result<Vec<_>, _>>()?;
         let mut styles = BTreeMap::new();
         let mut colors = Vec::new();
+        let mut tint_objects = Vec::new();
         let mut gradients = Vec::new();
         let mut swatches = BTreeMap::new();
         let mut fonts = BTreeMap::new();
@@ -627,9 +630,12 @@ impl<'a> Reader<'a> {
                     if self.db.object(uid)?.is_none() {
                         continue;
                     }
-                    if let Some(c) = Color::read(uid, &*self.object(uid)?)? {
+                    let obj = self.object(uid)?;
+                    if let Some(c) = Color::read(uid, &obj)? {
                         swatches.insert(uid, c.reference());
                         colors.push(c);
+                    } else if let Some(t) = Tint::read(uid, &obj)? {
+                        tint_objects.push(t);
                     }
                 }
                 color::class::SWATCH_NONE => {
@@ -702,6 +708,23 @@ impl<'a> Reader<'a> {
                 _ => {}
             }
         }
+        let mut tints = Vec::new();
+        for t in tint_objects {
+            match colors
+                .iter()
+                .find(|c| c.uid == t.base && !c.name.is_empty())
+            {
+                Some(base) => {
+                    let reference = t.reference(base);
+                    swatches.insert(t.uid, reference.clone());
+                    tints.push((t.clone(), reference, t.idml_name(base)));
+                }
+                None => self.warn(format!(
+                    "tint {}: left out: base colour {} has no name",
+                    t.uid, t.base
+                )),
+            }
+        }
         Ok(Document {
             version,
             layers,
@@ -711,6 +734,7 @@ impl<'a> Reader<'a> {
             stories,
             styles,
             colors,
+            tints,
             gradients,
             swatches,
             fonts,
