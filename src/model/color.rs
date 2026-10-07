@@ -15,6 +15,8 @@ pub mod chunk {
     pub const COLOR_VALUE: u32 = 0x1F01;
     pub const COLOR_MODEL: u32 = 0x1F09;
     pub const COLOR_NAME: u32 = 0x1F10;
+    /// Alternate colour: as 0x1F01.
+    pub const COLOR_ALTERNATE: u32 = 0x1F0A;
     /// f64 tint value (−1 for colours), then u32 colour override.
     pub const COLOR_OVERRIDE: u32 = 0x1F24;
     /// Base colour of a tint.
@@ -195,6 +197,9 @@ pub enum Space {
     Rgb,
     Cmyk,
     Lab,
+    /// Hue, saturation and brightness as fractions; IDML writes the colour
+    /// as RGB with `ConvertToHsb="true"`.
+    Hsb,
     Other(u32),
 }
 
@@ -213,6 +218,28 @@ pub struct Color {
     pub removable: bool,
     pub visible: bool,
     pub color_override: u32,
+    /// `SwatchCreatorID`: the u32 at the end of chunk 0x1F10.
+    pub creator: Option<u32>,
+    /// The alternate colour (chunk 0x1F0A): space code and components.
+    pub alternate: Option<(u32, Vec<f64>)>,
+}
+
+/// Red, green and blue fractions of a colour given as hue (a fraction of
+/// a full turn), saturation and brightness: the hue picks the side of the
+/// colour hexagon, saturation mixes towards white and brightness scales.
+fn hsb_to_rgb(h: f64, s: f64, b: f64) -> [f64; 3] {
+    let h6 = (h.rem_euclid(1.0)) * 6.0;
+    let sector = h6.floor();
+    let f = h6 - sector;
+    let (p, q, t) = (b * (1.0 - s), b * (1.0 - s * f), b * (1.0 - s * (1.0 - f)));
+    match sector as u32 {
+        0 => [b, t, p],
+        1 => [q, b, p],
+        2 => [p, b, t],
+        3 => [p, q, b],
+        4 => [t, p, b],
+        _ => [b, p, q],
+    }
 }
 
 impl Color {
@@ -250,7 +277,7 @@ impl Color {
 
     pub fn space_name(&self) -> &'static str {
         match self.space {
-            Space::Rgb => "RGB",
+            Space::Rgb | Space::Hsb => "RGB",
             Space::Lab => "LAB",
             _ => "CMYK",
         }
@@ -262,6 +289,10 @@ impl Color {
         match self.space {
             Space::Cmyk => self.values.iter().map(|v| v * 100.0).collect(),
             Space::Rgb => self.values.iter().map(|v| v * 255.0).collect(),
+            Space::Hsb => match self.values[..] {
+                [h, s, b] => hsb_to_rgb(h, s, b).iter().map(|v| v * 255.0).collect(),
+                _ => self.values.clone(),
+            },
             _ => self.values.clone(),
         }
     }
@@ -280,11 +311,31 @@ impl Color {
         let builtin_name = c.flag()? == 1;
         let name_str = c.string()?;
         let flags = c.u32()?;
+        // Two u32, then the creator.
+        let creator = (c.remaining() >= 12)
+            .then(|| -> Result<u32, Error> {
+                c.skip(8)?;
+                c.u32()
+            })
+            .transpose()?;
+        let alternate = match obj.chunk(chunk::COLOR_ALTERNATE) {
+            Some(d) => {
+                let mut a = Cursor::new(d);
+                let space = a.u32()?;
+                let n = a.u16()?;
+                Some((
+                    space,
+                    (0..n).map(|_| a.f64()).collect::<Result<Vec<_>, _>>()?,
+                ))
+            }
+            None => None,
+        };
         let mut v = Cursor::new(value);
         let space = match v.u32()? {
             5 => Space::Rgb,
             6 => Space::Cmyk,
             7 => Space::Lab,
+            14 => Space::Hsb,
             other => Space::Other(other),
         };
         let n = v.u16()?;
@@ -308,7 +359,21 @@ impl Color {
             visible: flags & 2 != 0,
             editable: flags & 4 != 0,
             color_override,
+            creator,
+            alternate,
         }))
+    }
+
+    /// IDML `AlternateSpace` and `AlternateColorValue`: space code 3 or no
+    /// chunk is none; 6 is CMYK (percentages), 7 LAB. `None` for another
+    /// code.
+    pub fn idml_alternate(&self) -> Option<(&'static str, Vec<f64>)> {
+        match &self.alternate {
+            None | Some((3, _)) => Some(("NoAlternateColor", Vec::new())),
+            Some((6, v)) => Some(("CMYK", v.iter().map(|x| x * 100.0).collect())),
+            Some((7, v)) => Some(("LAB", v.clone())),
+            Some(_) => None,
+        }
     }
 }
 
@@ -328,7 +393,16 @@ mod tests {
             removable: false,
             visible: true,
             color_override,
+            creator: None,
+            alternate: None,
         }
+    }
+
+    #[test]
+    fn converts_hsb_to_rgb() {
+        assert_eq!(hsb_to_rgb(0.0, 1.0, 1.0), [1.0, 0.0, 0.0]);
+        assert_eq!(hsb_to_rgb(0.5, 1.0, 1.0), [0.0, 1.0, 1.0]);
+        assert_eq!(hsb_to_rgb(0.25, 0.0, 0.5), [0.5, 0.5, 0.5]);
     }
 
     #[test]

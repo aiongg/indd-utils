@@ -265,6 +265,17 @@ same value, in at least 3 files (a `Keyed` block of the values file):
 63 languages. Romanian and Japanese have two variants each and are left
 out.
 
+### Swatches
+
+| Element | Values kept |
+|---|---|
+| `Tint` | `ColorOverride="Normal"`, `AlternateSpace="NoAlternateColor"`, `AlternateColorValue=""`, `ColorEditable`, `ColorRemovable`, `Visible` (`true`) and `SwatchCreatorID="7937"` from DOM 8 (37 tints in 26 files); `ConvertToHsb="false"` from 18 |
+| `Gradient` | `SwatchCreatorID="7937"` (and the flags, which the converter reads) from DOM 7 |
+| `Swatch` (`None`) | `SwatchCreatorID="7937"` from DOM 7 |
+
+Colours have their creator and alternate colour in the INDD
+(`objects.md`, colours).
+
 ### Trap presets
 
 All 683 IDML files list the same two `TrapPreset` elements at the end of

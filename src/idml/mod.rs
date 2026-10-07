@@ -1677,9 +1677,35 @@ impl Writer<'_> {
         x.end();
     }
 
+    /// `SwatchColorGroupReference` of each swatch in a colour group: the
+    /// `ColorGroupSwatch` that names it. See `docs/format/objects.md`.
+    fn group_swatches(&self) -> std::collections::HashMap<String, String> {
+        let mut out = std::collections::HashMap::new();
+        for g in &self.doc.color_groups {
+            for (n, s) in g.swatches.iter().enumerate() {
+                if let Some(r) = self.doc.swatches.get(s) {
+                    out.entry(r.clone())
+                        .or_insert_with(|| format!("{}ColorGroupSwatch{n:x}", uref(Some(g.uid))));
+                }
+            }
+        }
+        out
+    }
+
     fn graphic(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Graphic");
+        let groups = self.group_swatches();
+        // IDML names the colour group swatch of every swatch from DOM 12
+        // on (`n` for none).
+        let group_ref = |x: &mut Xml, reference: &str| {
+            if self.doc.version.major >= 12 {
+                x.attr(
+                    "SwatchColorGroupReference",
+                    groups.get(reference).map_or("n", String::as_str),
+                );
+            }
+        };
         for c in &self.doc.colors {
             let name = c.idml_name();
             let mut attrs = vec![("Self", c.reference())];
@@ -1695,7 +1721,23 @@ impl Writer<'_> {
                 ("ColorRemovable", c.removable.to_string()),
                 ("Visible", c.visible.to_string()),
             ]);
-            x.empty("Color", &attrs);
+            if let Some((space, values)) = c.idml_alternate() {
+                attrs.push(("AlternateSpace", space.into()));
+                attrs.push(("AlternateColorValue", nums(&values)));
+            }
+            if let Some(id) = c.creator {
+                attrs.push(("SwatchCreatorID", id.to_string()));
+            }
+            if self.doc.version.major >= 16 {
+                let hsb = c.space == crate::model::color::Space::Hsb;
+                attrs.push(("ConvertToHsb", hsb.to_string()));
+            }
+            x.start("Color");
+            for (k, v) in &attrs {
+                x.attr(k, v);
+            }
+            group_ref(&mut x, &c.reference());
+            x.end();
         }
         // The schema puts inks after the colours.
         for i in &self.doc.inks {
@@ -1720,27 +1762,25 @@ impl Writer<'_> {
         }
         for (t, reference, name) in &self.doc.tints {
             let base = self.doc.swatches.get(&t.base).cloned().unwrap_or_default();
-            x.empty(
-                "Tint",
-                &[
-                    ("Self", reference.clone()),
-                    ("TintValue", num(t.value)),
-                    ("BaseColor", base),
-                    ("Name", name.clone()),
-                    ("ColorOverride", t.override_name().into()),
-                ],
-            );
+            x.start("Tint")
+                .attr("Self", reference)
+                .attr("TintValue", num(t.value))
+                .attr("BaseColor", base)
+                .attr("Name", name)
+                .attr("ColorOverride", t.override_name());
+            group_ref(&mut x, reference);
+            x.attrs_missing(self.observed("Tint").iter());
+            x.end();
         }
-        x.empty(
-            "Swatch",
-            &[
-                ("Self", "Swatch/None".into()),
-                ("Name", "None".into()),
-                ("ColorEditable", "false".into()),
-                ("ColorRemovable", "false".into()),
-                ("Visible", "true".into()),
-            ],
-        );
+        x.start("Swatch")
+            .attr("Self", "Swatch/None")
+            .attr("Name", "None")
+            .attr("ColorEditable", "false")
+            .attr("ColorRemovable", "false")
+            .attr("Visible", "true");
+        group_ref(&mut x, "Swatch/None");
+        x.attrs_missing(self.observed("Swatch").iter());
+        x.end();
         // The schema requires gradients after the swatches.
         for g in &self.doc.gradients {
             x.start("Gradient")
@@ -1750,6 +1790,8 @@ impl Writer<'_> {
                 .attr("ColorEditable", g.editable.to_string())
                 .attr("ColorRemovable", g.removable.to_string())
                 .attr("Visible", g.visible.to_string());
+            group_ref(&mut x, &g.reference());
+            x.attrs_missing(self.observed("Gradient").iter());
             for (i, stop) in g.stops.iter().enumerate() {
                 let color = self
                     .doc
@@ -3315,7 +3357,8 @@ impl Writer<'_> {
     /// A ruler guide. `origin` is the top-left corner of the spread's
     /// pages, from which IDML measures `Location` with the ruler origin
     /// `SpreadOrigin`. See `docs/format/objects.md`.
-    fn guide(x: &mut Xml, g: &Guide, origin: (f64, f64)) {
+    /// `page_index` is IDML `PageIndex` (see `docs/format/objects.md`).
+    fn guide(x: &mut Xml, g: &Guide, origin: (f64, f64), page_index: i64) {
         let (left, top) = origin;
         x.start("Guide")
             .attr("Self", uref(Some(g.uid)))
@@ -3347,6 +3390,21 @@ impl Writer<'_> {
                 x.attr("GuideType", "Liquid");
             }
             _ => {}
+        }
+        x.attr("Locked", g.locked.to_string())
+            .attr("PageIndex", page_index.to_string());
+        if let Some(z) = g.zone {
+            x.attr("GuideZone", num(z));
+        }
+        if let Some((master, ids)) = &g.overridden {
+            let ids = if *master == 0 {
+                String::new()
+            } else {
+                join_numbers(ids)
+            };
+            x.attr("OverriddenPageItemProps", ids);
+        } else if g.zone.is_some() {
+            x.attr("OverriddenPageItemProps", "");
         }
         if g.color == 6 {
             Self::properties(
@@ -3580,10 +3638,20 @@ impl Writer<'_> {
             // A guide belongs to a page, or to the spread; IDML writes a
             // spread's guides in its first page.
             let first = p.uid == s.pages[0].uid;
+            // Pages count from the spine: left of it -1, -2, ..., right of
+            // it 1, 2, ...; a master spread's spine is at its left edge.
+            let position = s.pages.iter().position(|q| q.uid == p.uid).unwrap_or(0) as i64;
+            let binding = if master { 0 } else { s.binding_location as i64 };
+            let from_spine = if position < binding {
+                position - binding
+            } else {
+                position - binding + 1
+            };
             for g in &s.guides {
                 let own_page = s.pages.iter().any(|q| q.uid == g.owner);
                 if g.owner == p.uid || (first && !own_page) {
-                    Self::guide(&mut x, g, origin);
+                    let index = if own_page { from_spine } else { 0 };
+                    Self::guide(&mut x, g, origin, index);
                 }
             }
             self.page_layout(&mut x, p);
@@ -4247,9 +4315,12 @@ mod tests {
             color: 6,
             guide_type: Some(0),
             layer: 0xcc,
+            locked: false,
+            zone: Some(1.0),
+            overridden: None,
         };
         let mut x = Xml::new();
-        Writer::guide(&mut x, &guide, origin);
+        Writer::guide(&mut x, &guide, origin, -1);
         let out = x.finish();
         assert!(
             out.contains("Orientation=\"Horizontal\" Location=\"735.5\""),
@@ -4260,13 +4331,14 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("<GuideColor type=\"enumeration\">Cyan</GuideColor>"));
+        assert!(out.contains("PageIndex=\"-1\" GuideZone=\"1\""), "{out}");
         let vertical = Guide {
             horizontal: false,
             position: 28.0,
             ..guide
         };
         let mut x = Xml::new();
-        Writer::guide(&mut x, &vertical, origin);
+        Writer::guide(&mut x, &vertical, origin, 1);
         assert!(x.finish().contains("Location=\"640\""));
     }
 

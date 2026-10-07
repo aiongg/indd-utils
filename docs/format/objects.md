@@ -183,11 +183,21 @@ no field separates them in the objects searched (every class with at most
 `ViewPreference` with `RulerOrigin="SpreadOrigin"` and measures guide
 locations from the spread, so the two agree.
 
-**Not converted.** `Locked` (false for all 81 IDML guides),
-`GuideZone` (1) and `OverriddenPageItemProps` (empty) have no identified
-field. `PageIndex` is 0 for all 22 spread guides and the page's position
-in the spread plus 1 for 46 of the 49 page guides; the other 3 do not
-follow from the owner, so it is left out.
+**Other settings.** A guide has chunks 0x2C2D (`Locked`) and 0x1424
+(`OverriddenPageItemProps`) as page items do (`Page item settings`),
+and the f64 at offset 44 of the 52-byte record is `GuideZone`. Over the
+7,003 guides of the trustworthy pairs: `Locked` 7,003 of 7,003 (3
+locked), `GuideZone` 6,988 of the 6,988 with a 52-byte record (464 with
+0), `OverriddenPageItemProps` 6,988 of 6,988; the 15 guides with a
+40-byte record have neither attribute in IDML.
+
+`PageIndex` counts from the spine of the spread: 0 for a guide of the
+spread itself; for a page guide, the pages left of the spine are −1,
+−2, … (counting outwards) and those right of it 1, 2, …, the spine being
+after `BindingLocation` pages; on master spreads it is at the left edge.
+This gives 6,998 of 7,003 (1,215 spread guides 0; 2,266 of 2,269 page
+guides on document spreads, 473 of them −1 and 12 −2;
+3,517 of 3,519 on master spreads).
 
 ## Layers (0x302)
 
@@ -1178,6 +1188,31 @@ Built-in tables have only `Self` and `Name` in IDML. Mojikumi chunk
 | 0x1F01 | u32 space (5 RGB, 6 CMYK), u16 count, f64 components as fractions |
 | 0x1F09 | u32 model: 0 Process, 1 Spot, 2 Registration (below) |
 | 0x1F24 | f64 tint value (−1 for a colour, see tints below), then u32 `ColorOverride`: 0 Normal, 1 Specialpaper, 2 Specialblack, 3 Specialregistration, 4 Hiddenreserved |
+| 0x1F0A | Alternate colour, as 0x1F01: space 3 none, 6 CMYK, 7 LAB |
+
+After the flags, chunk 0x1F10 has two u32 and the `SwatchCreatorID`
+(7937 for colours made in the document, other numbers for colours from a
+swatch library, such as 31527). `AlternateSpace` is `NoAlternateColor`
+with `AlternateColorValue=""` without chunk 0x1F0A or with space 3;
+otherwise the space and the values, CMYK as percentages. Evidence over
+the 12,197 colours of the trustworthy pairs whose IDML colour has the
+same name: `SwatchCreatorID` 12,197 of 12,197; alternate space and
+values 12,197 of 12,197 (7,527 without the chunk, 4,624 with space 3,
+33 LAB and 13 CMYK alternates, all library colours).
+
+Space 14 holds hue, saturation and brightness as fractions. IDML writes
+such a colour as `RGB` with `ConvertToHsb="true"`; the 9 such colours in
+the pairs (all hue 0, saturation 1, brightness 1) are `255 0 0`. The
+converter converts with the usual hexagon formula. Every other colour
+has `ConvertToHsb="false"` (4,695 of 4,695 colours of the IDML files
+from DOM 16 on, where the attribute exists).
+
+**Colour groups.** From DOM 12 on, every swatch (colour, tint, gradient,
+`None`) has `SwatchColorGroupReference`: the `ColorGroupSwatch` of the
+colour group that lists it, or `n`. Over the trustworthy pairs from DOM
+12 on: colours 9,135 of 9,135, gradients 450 of 450, `None` 353 of 353,
+tints 24 of 24. DOM 11 files have the attribute on some swatches only
+(639 of 1,584 colours), and the converter writes it from DOM 12 on.
 
 Unnamed colours are referenced by UID (`Color/u93`). All 1,296 colours in
 the pairs match on `Model`, `Space`, `ColorValue`, `ColorOverride`,

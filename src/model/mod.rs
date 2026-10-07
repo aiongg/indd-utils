@@ -519,6 +519,12 @@ pub struct Guide {
     pub guide_type: Option<u32>,
     /// Document layer.
     pub layer: u32,
+    /// Chunk 0x2C2D, as for page items.
+    pub locked: bool,
+    /// f64 at 44 of the 52-byte record (`GuideZone`).
+    pub zone: Option<f64>,
+    /// Chunk 0x1424, as for page items.
+    pub overridden: Option<(u32, Vec<u32>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1808,6 +1814,18 @@ impl<'a> Reader<'a> {
             fit_to_page: h(26)? == 1,
             guide_type: if d.len() >= 52 { Some(u(40)?) } else { None },
             layer,
+            locked: self
+                .chunk(uid, chunk::ITEM_LOCKED)?
+                .is_some_and(|d| u32_at(&d, 0) == Some(1)),
+            zone: if d.len() >= 52 { Some(f(44)?) } else { None },
+            overridden: match self.chunk(uid, chunk::ITEM_OVERRIDE)? {
+                Some(o) => {
+                    let mut c = Cursor::new(&o);
+                    let master = c.u32()?;
+                    Some((master, c.u32_list()?))
+                }
+                None => None,
+            },
         }))
     }
 
