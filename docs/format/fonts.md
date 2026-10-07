@@ -61,10 +61,37 @@ Strings are in-object strings (`objects.md`).
   the family's `Self`, `Fontn` and `Name` (4,464 of 4,464, taking the
   family name as IDML writes it).
 - `FontFamily/@Name`: 622 of 630. The other 8 have a technology suffix in
-  IDML (`Minion Pro (OTF)`, `Montserrat (OTF)`, `Times (TT)`) that the
-  INDD data does not determine; the converter writes the plain name, also
-  in the fonts' `FontFamily`, `Name` and `Self`.
+  IDML that the INDD name lacks (`Montserrat (OTF)` 6 times, `Minion Pro
+  (OTF)` and `Trustpilot Display (OTF)` once each). A family whose INDD
+  name already ends in ` (TT)` keeps it. The converter writes the INDD
+  name, also in the fonts' `FontFamily`, `Name` and `Self`.
 - IDML lists the families in UID order (135 of 135 pairs).
+
+**Why the suffix is not predicted.** No field of the family record
+separates the 8 from the other 622 families:
+
+- The font type does not. The 8 hold OpenType CFF fonts (2) and
+  OpenType TrueType fonts (6), and both types occur in families without
+  a suffix: 130 other families with the name of the suffixed CFF family
+  hold the same CFF fonts, and 4 other `Montserrat` families the same
+  TrueType font.
+- The first byte of the family record is 4 in 7 of the 8 and 1 in the
+  other, but 68 families without a suffix also have 4. One `Montserrat`
+  family with 4 has no suffix.
+- A second family of the same name does not explain it. Only one of the
+  8 documents has one: two `Trustpilot Display` families, where the CFF
+  one has the suffix and the TrueType one has none. Other documents have
+  4 and 2 families of one name and type without a suffix.
+- The other bytes of the record do not. The byte after the name is 0 in
+  the 8 and in 613 others. The first byte of each font record is 1 in
+  the 8 and in most others. The 6 bytes before the font count, read as
+  three u16, are (0, 0, 0xFFFF) or (0, 0xFFFF, 0xFFFF) in 7 of the 8,
+  as in 387 families without a suffix; the eighth has (0, 0, 2), and the
+  last u16 takes 12 different values in families without a suffix (2 in
+  4 of them), so it does not look like a flag.
+
+The suffix most likely depends on the fonts installed where the IDML
+was exported, as `Status` does (below).
 
 Text formatting refers to a family by UID (`AppliedFont`, `BulletsFont`;
 see `attributes.md`) and IDML writes the family name there.
