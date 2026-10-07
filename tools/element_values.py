@@ -61,11 +61,12 @@ ELEMENTS = [
     "TextFrame/ObjectExportOption", "Rectangle/ObjectExportOption",
     "Oval/ObjectExportOption", "Polygon/ObjectExportOption",
     "GraphicLine/ObjectExportOption", "Group/ObjectExportOption",
+    "Spread", "MasterSpread", "Page", "Spread/FlattenerPreference", "Layer",
 ]
 # Of those, the elements every IDML has one of (from some version on).
 SINGLETONS = {p for p in ELEMENTS if p.startswith("Document/")}
 # Elements with Self written as a whole list.
-LISTS = []
+LISTS = ["TrapPreset"]
 # Values that are nearly constant; the exceptions are read from the INDD.
 # (path, key) -> reason, as recorded in docs/format/idml-values.md.
 EXPLAINED = {}

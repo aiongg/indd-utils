@@ -23,7 +23,7 @@ pub use variable::TextVariable;
 pub use xref::CrossReferenceFormat;
 
 use crate::audit::List;
-use crate::object::{Cursor, Object, i16_from, u16_from, u32_from};
+use crate::object::{Cursor, Object, f64_at, i16_from, u16_at, u16_from, u32_at, u32_from};
 use crate::{Database, Error, Version};
 
 /// Class IDs.
@@ -82,6 +82,22 @@ pub mod chunk {
     pub const SPREAD_LAYER_LAYER: u32 = 0x302;
     pub const SPREAD_LAYER_CHILDREN: u32 = 0x303;
     pub const LAYER_PROPS: u32 = 0x304;
+    /// u16 0 if document pages may shuffle across the spread.
+    pub const SPREAD_SHUFFLE: u32 = 0x1A8;
+    /// Flattener settings of a spread.
+    pub const SPREAD_FLATTENER: u32 = 0x10833;
+    /// Tab orders: u32 count, then per page u32 page and a UID list.
+    pub const SPREAD_TAB_ORDERS: u32 = 0x14580;
+    /// u16 0 if a master spread hides the items of its own master.
+    pub const MASTER_SHOW_ITEMS: u32 = 0x140D;
+    /// Overridden master page items: u32 count, two UID lists.
+    pub const PAGE_OVERRIDES: u32 = 0x1404;
+    /// Layout grid use: six bytes, the last u16 1 to use the master's.
+    pub const PAGE_GRID_USE: u32 = 0xCD04;
+    /// Layout rule: u32, then u32 code.
+    pub const PAGE_LAYOUT_RULE: u32 = 0x563;
+    /// Page colour: u32 0 none, 1 the master's, else an interface colour.
+    pub const PAGE_COLOR: u32 = 0x5FF;
     pub const PAGE_MASTER: u32 = 0x140F;
     pub const PAGE_TRANSFORM: u32 = 0x5CC;
     pub const PAGE_BOUNDS: u32 = 0x5DD;
@@ -218,6 +234,33 @@ pub struct Layer {
     pub locked: bool,
     /// The hidden layer that holds pages; not written to IDML.
     pub internal: bool,
+    /// The other settings, when chunk 0x304 has the layout of the samples.
+    pub settings: Option<LayerSettings>,
+}
+
+/// Layer settings in chunk 0x304. See `docs/format/objects.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerSettings {
+    pub printable: bool,
+    pub lock_guides: bool,
+    pub ui: bool,
+    pub ignore_wrap: bool,
+    /// The layer colour (an interface colour object).
+    pub color: Option<[f64; 3]>,
+}
+
+/// A colour setting that names an interface colour (class 0x1F11), or
+/// one of two codes. See `docs/format/objects.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum UiColorRef {
+    /// Code 1, or no chunk: the colour of the master.
+    #[default]
+    UseMaster,
+    /// Code 0.
+    Nothing,
+    Rgb([f64; 3]),
+    /// Any other value.
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -235,6 +278,22 @@ pub struct Page {
     pub columns: Option<Columns>,
     /// Layout grid settings (chunk 0xCD02).
     pub grid: Option<GridData>,
+    pub settings: PageSettings,
+}
+
+/// Settings of a page. See `docs/format/objects.md`, page settings.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PageSettings {
+    /// Master page items overridden on the page, each with its override
+    /// (0 for none), from chunk 0x1404.
+    pub overrides: Vec<(u32, u32)>,
+    /// Chunk 0xCD04: whether the page uses its master's layout grid.
+    pub use_master_grid: Option<bool>,
+    /// Layout rule code (chunk 0x563); `None` without the chunk.
+    pub layout_rule: Option<u32>,
+    pub color: UiColorRef,
+    /// Page items in tab order (the spread's chunk 0x14580).
+    pub tab_order: Vec<u32>,
 }
 
 /// Page margins from chunk 0x51A: four f64 (left, top, right, bottom),
@@ -424,6 +483,12 @@ pub struct Spread {
     pub pages: Vec<Page>,
     pub items: Vec<PageItem>,
     pub guides: Vec<Guide>,
+    /// Chunk 0x1A8: `None` without it.
+    pub shuffle: Option<u16>,
+    /// The two resolutions in chunk 0x10833, when it is there.
+    pub flattener_resolution: Option<[f64; 2]>,
+    /// Master spreads: chunk 0x140D.
+    pub show_master_items: Option<u16>,
 }
 
 /// A ruler guide (class 0x3301, chunk 0x3308). See `docs/format/objects.md`.
@@ -650,6 +715,12 @@ pub struct Section {
     pub start: u32,
     /// Page number style code (see `numbering`).
     pub style: u32,
+    /// `SectionPrefix` and `Marker`; empty if the chunk is missing.
+    pub prefix: String,
+    pub marker: String,
+    /// The alternate layout name after the numbers, with the flag byte
+    /// before it (1: a built-in key); `None` if the chunk ends before it.
+    pub alternate_layout: Option<(u8, String)>,
 }
 
 /// Page number style codes of sections.
@@ -1400,23 +1471,35 @@ impl<'a> Reader<'a> {
             continue_numbering: true,
             start: 1,
             style: numbering::ARABIC,
+            prefix: String::new(),
+            marker: String::new(),
+            alternate_layout: None,
         };
-        // u8, string, u8, string, u32 first page, u32 page number start,
-        // u32 numbering style, u32 continue.
+        // u8, string (prefix), u8, string (marker), u32 first page, u32
+        // page number start, u32 numbering style, u32 continue, u32, then
+        // u8 and string (alternate layout).
         if let Some(d) = self.chunk(uid, chunk::SECTION_INFO)? {
             let mut c = Cursor::new(&d);
-            let parsed = (|| -> Result<[u32; 4], Error> {
+            let parsed = (|| -> Result<(String, String, [u32; 4]), Error> {
                 c.u8()?;
-                c.string()?;
+                let prefix = c.string()?;
                 c.u8()?;
-                c.string()?;
-                Ok([c.u32()?, c.u32()?, c.u32()?, c.u32()?])
+                let marker = c.string()?;
+                Ok((prefix, marker, [c.u32()?, c.u32()?, c.u32()?, c.u32()?]))
             })();
-            if let Ok([page, start, style, cont]) = parsed {
+            if let Ok((prefix, marker, [page, start, style, cont])) = parsed {
                 section.page = uid_or_none(page);
                 section.start = start;
                 section.style = style;
                 section.continue_numbering = cont != 0;
+                section.prefix = prefix;
+                section.marker = marker;
+                section.alternate_layout = (|| -> Result<(u8, String), Error> {
+                    c.u32()?;
+                    let flag = c.flag()?;
+                    Ok((flag, c.string()?))
+                })()
+                .ok();
             }
         }
         if ![numbering::ARABIC, numbering::LOWER_ROMAN, numbering::KANJI].contains(&section.style) {
@@ -1436,12 +1519,50 @@ impl<'a> Reader<'a> {
         c.skip(14)?;
         // A string follows; its position varies, so search for the tag.
         let name = find_string(&data, 18)?;
+        let settings = self.layer_settings(&data)?;
         Ok(Layer {
             uid,
             internal: name == "Internal_pages_layer_name",
             name,
             visible,
             locked,
+            settings,
+        })
+    }
+
+    /// The settings in chunk 0x304 when the name is at offset 19, as in
+    /// all corpus pairs: u16 printable at 4, u16 lock guides at 6, u32
+    /// colour at 10, u16 UI at 14; after the name, u16 ignore wrap.
+    fn layer_settings(&self, data: &[u8]) -> Result<Option<LayerSettings>, Error> {
+        if crate::object::big_endian() || data.len() < 23 || data[19] != 2 {
+            return Ok(None);
+        }
+        let mut c = Cursor::new(&data[19..]);
+        c.string()?;
+        let ignore_wrap = c.u16()? != 0;
+        let flag = |at: usize| u16_at(data, at).is_some_and(|v| v != 0);
+        let color = match u32_at(data, 10) {
+            Some(u) => self.ui_color(u)?,
+            None => None,
+        };
+        Ok(Some(LayerSettings {
+            printable: flag(4),
+            lock_guides: flag(6),
+            ui: flag(14),
+            ignore_wrap,
+            color,
+        }))
+    }
+
+    /// A colour setting: 0 none, 1 the master's, else an interface colour.
+    fn ui_color_ref(&self, code: u32) -> Result<UiColorRef, Error> {
+        Ok(match code {
+            0 => UiColorRef::Nothing,
+            1 => UiColorRef::UseMaster,
+            u => match self.ui_color(u)? {
+                Some(rgb) => UiColorRef::Rgb(rgb),
+                None => UiColorRef::Unknown,
+            },
         })
     }
 
@@ -1489,6 +1610,27 @@ impl<'a> Reader<'a> {
                 }
             }
         }
+        if let Some(d) = self.chunk(uid, chunk::SPREAD_TAB_ORDERS)? {
+            let mut c = Cursor::new(&d);
+            let n = c.u32()?;
+            for _ in 0..n {
+                let page = c.u32()?;
+                let order = c.u32_list()?;
+                if let Some(p) = pages.iter_mut().find(|p| p.uid == page) {
+                    p.settings.tab_order = order;
+                }
+            }
+        }
+        let flattener_resolution = match self.chunk(uid, chunk::SPREAD_FLATTENER)? {
+            Some(d) => match (f64_at(&d, 20), f64_at(&d, 28)) {
+                (Some(a), Some(b)) => Some([a, b]),
+                _ => None,
+            },
+            None => None,
+        };
+        let short = |id: u32| -> Result<Option<u16>, Error> {
+            Ok(self.chunk(uid, id)?.and_then(|d| u16_at(&d, 0)))
+        };
         Ok(Spread {
             uid,
             master_name,
@@ -1497,6 +1639,9 @@ impl<'a> Reader<'a> {
             pages,
             items,
             guides,
+            shuffle: short(chunk::SPREAD_SHUFFLE)?,
+            flattener_resolution,
+            show_master_items: short(chunk::MASTER_SHOW_ITEMS)?,
         })
     }
 
@@ -1617,6 +1762,34 @@ impl<'a> Reader<'a> {
             }
             None => None,
         };
+        // u32 count, then (unless it is 0) the two lists.
+        let overrides = match self.chunk(uid, chunk::PAGE_OVERRIDES)? {
+            Some(d) if u32_at(&d, 0).is_some_and(|n| n > 0) => {
+                let mut c = Cursor::new(&d[4..]);
+                let items = c.u32_list()?;
+                let with = c.u32_list()?;
+                items.into_iter().zip(with).collect()
+            }
+            _ => Vec::new(),
+        };
+        let settings = PageSettings {
+            overrides,
+            use_master_grid: self
+                .chunk(uid, chunk::PAGE_GRID_USE)?
+                .and_then(|d| u16_at(&d, 4))
+                .map(|v| v != 0),
+            layout_rule: self
+                .chunk(uid, chunk::PAGE_LAYOUT_RULE)?
+                .and_then(|d| u32_at(&d, 4)),
+            color: match self
+                .chunk(uid, chunk::PAGE_COLOR)?
+                .and_then(|d| u32_at(&d, 0))
+            {
+                Some(code) => self.ui_color_ref(code)?,
+                None => UiColorRef::UseMaster,
+            },
+            tab_order: Vec::new(),
+        };
         Ok(Page {
             uid,
             bounds,
@@ -1626,6 +1799,7 @@ impl<'a> Reader<'a> {
             margins,
             columns,
             grid,
+            settings,
         })
     }
 
@@ -2700,6 +2874,7 @@ mod tests {
             margins: Some(m),
             columns: None,
             grid: None,
+            settings: Default::default(),
         };
         let spread = |uid, pages| Spread {
             uid,
@@ -2709,6 +2884,9 @@ mod tests {
             pages,
             items: Vec::new(),
             guides: Vec::new(),
+            shuffle: None,
+            flattener_resolution: None,
+            show_master_items: None,
         };
         // Master B (pages listed right to left) is based on master A.
         let mut masters = vec![

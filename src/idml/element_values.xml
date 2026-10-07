@@ -23,6 +23,16 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Polygon StoryTitle="$ID/" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
 		<GraphicLine LockState="None" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
 		<Group GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
+		<Spread PageTransitionType="None" PageTransitionDirection="NotApplicable" PageTransitionDuration="Medium" ShowMasterItems="true" FlattenerOverride="Default">
+			<FlattenerPreference ClipComplexRegions="false" ConvertAllStrokesToOutlines="false" ConvertAllTextToOutlines="false">
+				<Properties>
+					<RasterVectorBalance type="double">50</RasterVectorBalance>
+				</Properties>
+			</FlattenerPreference>
+		</Spread>
+		<MasterSpread OverriddenPageItemProps="" ItemTransform="1 0 0 1 0 0" />
+		<Page AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName" GridStartingPoint="TopOutside" />
+		<Layer ShowGuides="true" Expendable="true" />
 	</Values>
 	<Values MinimumVersion="8">
 		<Rectangle TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
@@ -68,6 +78,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</ObjectExportOption>
 		</TextFrame>
+		<Page SnapshotBlendingMode="IgnoreLayoutSnapshots" OptionalPage="false" />
 	</Values>
 	<Values MinimumVersion="10">
 		<TextFrame>
@@ -89,6 +100,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<ObjectExportOption EpubType="$ID/" />
 		</Group>
 	</Values>
+	<Values MinimumVersion="19">
+		<Spread SpreadHidden="false" />
+	</Values>
 	<Values MinimumVersion="21">
 		<TextFrame FlexItemWidthMode="FlexFixed" FlexItemHeightMode="FlexFixed">
 			<ObjectExportOption EpubAriaRole="$ID/" />
@@ -109,4 +123,8 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<ObjectExportOption EpubAriaRole="$ID/" />
 		</Group>
 	</Values>
+	<List Tag="TrapPreset" MinimumVersion="7">
+		<TrapPreset Self="TrapPreset/$ID/k[No Trap Preset]" Name="$ID/k[No Trap Preset]" DefaultTrapWidth="0.25" BlackWidth="0.5" TrapJoin="MiterEndJoin" TrapEnd="MiterTrapEnds" ObjectsToImages="true" ImagesToImages="true" InternalImages="false" OneBitImages="true" ImagePlacement="CenterEdges" StepThreshold="10" BlackColorThreshold="100" BlackDensity="1.6" SlidingTrapThreshold="70" ColorReduction="100" />
+		<TrapPreset Self="TrapPreset/$ID/kDefaultTrapStyleName" Name="$ID/kDefaultTrapStyleName" DefaultTrapWidth="0.25" BlackWidth="0.5" TrapJoin="MiterEndJoin" TrapEnd="MiterTrapEnds" ObjectsToImages="true" ImagesToImages="true" InternalImages="false" OneBitImages="true" ImagePlacement="CenterEdges" StepThreshold="10" BlackColorThreshold="100" BlackDensity="1.6" SlidingTrapThreshold="70" ColorReduction="100" />
+	</List>
 </ElementValues>

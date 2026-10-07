@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Orientation, Page, PageItem,
     Path, Section, Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun,
-    TextVariable, TextWrap, Value, XmlElement, XmlMarker, hyperlink::DestinationKind, numbering,
-    root_kind, variable::Instance, wrap_mode, xml::Key as XmlKey,
+    TextVariable, TextWrap, UiColorRef, Value, XmlElement, XmlMarker, hyperlink::DestinationKind,
+    numbering, root_kind, variable::Instance, wrap_mode, xml::Key as XmlKey,
 };
 
 #[derive(Clone, Copy)]
@@ -84,7 +84,13 @@ fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
 /// The IDML name of an XML tag colour (red, green, blue fractions);
 /// `None` for colours without evidence. See `docs/format/objects.md`.
 fn xml_tag_color(rgb: [f64; 3]) -> Option<&'static str> {
-    const NAMES: [([f64; 3], &str); 10] = [
+    ui_color_name(rgb)
+}
+
+/// The IDML name of an interface colour (class 0x1F11) by its red, green
+/// and blue fractions. See `docs/format/objects.md`, interface colours.
+fn ui_color_name(rgb: [f64; 3]) -> Option<&'static str> {
+    const NAMES: [([f64; 3], &str); 25] = [
         ([0.31, 0.6, 1.0], "LightBlue"),
         ([1.0, 0.0, 0.0], "Red"),
         ([0.31, 1.0, 0.31], "Green"),
@@ -95,11 +101,62 @@ fn xml_tag_color(rgb: [f64; 3]) -> Option<&'static str> {
         ([0.5, 0.5, 0.5], "Gray"),
         ([0.0, 0.0, 0.0], "Black"),
         ([0.6, 0.0, 0.0], "BrickRed"),
+        ([1.0, 0.6, 0.0], "Gold"),
+        ([1.0, 0.4, 0.0], "Orange"),
+        ([0.0, 0.33, 0.0], "DarkGreen"),
+        ([0.6, 0.6, 1.0], "Lavender"),
+        ([0.67, 0.64, 0.71], "Charcoal"),
+        ([0.6, 0.2, 1.0], "Violet"),
+        ([1.0, 1.0, 1.0], "White"),
+        ([1.0, 0.6, 0.8], "Pink"),
+        ([0.61, 0.87, 0.61], "GridGreen"),
+        ([0.0, 0.0, 0.53], "DarkBlue"),
+        ([0.6, 0.8, 0.0], "GrassGreen"),
+        ([0.81, 0.51, 0.71], "Lipstick"),
+        ([1.0, 0.71, 0.42], "GridOrange"),
+        ([0.97, 0.35, 0.42], "Fiesta"),
+        ([0.0, 0.6, 0.6], "Teal"),
     ];
     NAMES
         .iter()
         .find(|(c, _)| c.iter().zip(rgb).all(|(a, b)| (a - b).abs() < 1e-4))
         .map(|(_, n)| *n)
+}
+
+/// A `Properties` child for an interface colour: its name as an
+/// enumeration, or, for a colour of whole 255ths without a name, the three
+/// numbers as a list. `None` for other colours.
+fn ui_color_property(tag: &str, rgb: [f64; 3]) -> Option<Node> {
+    if let Some(name) = ui_color_name(rgb) {
+        return Some(Node {
+            tag: tag.into(),
+            attrs: vec![("type".into(), "enumeration".into())],
+            text: Some(name.into()),
+            children: Vec::new(),
+        });
+    }
+    let whole: Vec<f64> = rgb.iter().map(|v| (v * 255.0).round()).collect();
+    if whole
+        .iter()
+        .zip(rgb)
+        .any(|(w, v)| (w / 255.0 - v).abs() > 1e-6)
+    {
+        return None;
+    }
+    Some(Node {
+        tag: tag.into(),
+        attrs: vec![("type".into(), "list".into())],
+        text: None,
+        children: whole
+            .iter()
+            .map(|w| Node {
+                tag: "ListItem".into(),
+                attrs: vec![("type".into(), "double".into())],
+                text: Some(num(*w)),
+                children: Vec::new(),
+            })
+            .collect(),
+    })
 }
 
 /// Frame fitting attributes of `attrs` with IDs in `ids`, in IDML order.
@@ -848,6 +905,52 @@ fn section_ranges(doc: &Document) -> Vec<(&Section, usize, usize)> {
         .collect()
 }
 
+/// The IDML `AlternateLayout` of a section: its name, with `$ID/` before
+/// a built-in key.
+fn alternate_layout_name(s: &Section) -> Option<String> {
+    s.alternate_layout.as_ref().map(|(flag, name)| match flag {
+        1 => format!("$ID/{name}"),
+        _ => name.clone(),
+    })
+}
+
+/// For each section of `section_ranges`, the number of pages from its
+/// start to the start of the next alternate layout (a section with a
+/// layout name) or the end of the document; and for each document page,
+/// the section that starts its alternate layout. See
+/// `docs/format/objects.md`, sections.
+fn alternate_layouts(doc: &Document) -> (Vec<usize>, Vec<u32>) {
+    let ranges = section_ranges(doc);
+    let total: usize = ranges.iter().map(|&(_, _, n)| n).sum();
+    let starts: Vec<(usize, u32)> = ranges
+        .iter()
+        .filter(|(s, _, _)| alternate_layout_name(s).is_some_and(|n| !n.is_empty() && n != "$ID/"))
+        .map(|&(s, i, _)| (i, s.uid))
+        .collect();
+    let lengths = ranges
+        .iter()
+        .map(|&(_, i, _)| {
+            starts
+                .iter()
+                .find(|&&(j, _)| j > i)
+                .map_or(total, |&(j, _)| j)
+                - i
+        })
+        .collect();
+    let first = ranges.first().map(|(s, _, _)| s.uid);
+    let pages = (0..total)
+        .filter_map(|p| {
+            starts
+                .iter()
+                .rev()
+                .find(|&&(j, _)| j <= p)
+                .map(|&(_, u)| u)
+                .or(first)
+        })
+        .collect();
+    (lengths, pages)
+}
+
 /// IDML `PageNumberStyle` of a section's style code.
 fn number_style(code: u32) -> Option<&'static str> {
     match code {
@@ -916,6 +1019,18 @@ fn page_names(doc: &Document) -> Vec<String> {
 
 /// The number shown on each document page, from the sections. Pages
 /// not covered by a section are numbered by their position.
+/// The section and page number of each document page.
+fn page_sections(doc: &Document) -> Vec<(Section, u32)> {
+    let numbers = page_numbers(doc);
+    let mut out = Vec::new();
+    for (s, first, length) in section_ranges(doc) {
+        for &n in numbers.iter().skip(first).take(length) {
+            out.push((s.clone(), n));
+        }
+    }
+    out
+}
+
 fn page_numbers(doc: &Document) -> Vec<u32> {
     let count = document_pages(doc).len();
     let mut out: Vec<u32> = (1..=count as u32).collect();
@@ -944,6 +1059,11 @@ struct Writer<'a> {
     group_path: std::collections::HashMap<u32, Vec<String>>,
     /// Values left out while writing, reported with the model's warnings.
     warnings: std::cell::RefCell<Vec<String>>,
+    /// For each document page, the section that starts its alternate
+    /// layout (`alternate_layouts`).
+    page_layouts: Vec<u32>,
+    /// For each document page, its section and page number.
+    page_sections: Vec<(Section, u32)>,
     /// Observed attributes by element path (`values::element_attrs`).
     observed: std::cell::RefCell<std::collections::HashMap<String, Observed>>,
 }
@@ -1076,15 +1196,24 @@ impl Writer<'_> {
         self.text_variables(&mut x);
         x.empty("idPkg:Tags", &[("src", "XML/Tags.xml".into())]);
         for l in doc.layers.iter().filter(|l| !l.internal) {
-            x.empty(
-                "Layer",
-                &[
-                    ("Self", uref(Some(l.uid))),
-                    ("Name", l.name.clone()),
-                    ("Visible", l.visible.to_string()),
-                    ("Locked", l.locked.to_string()),
-                ],
-            );
+            x.start("Layer")
+                .attr("Self", uref(Some(l.uid)))
+                .attr("Name", &l.name)
+                .attr("Visible", l.visible.to_string())
+                .attr("Locked", l.locked.to_string());
+            let mut color = None;
+            if let Some(st) = &l.settings {
+                x.attr("IgnoreWrap", st.ignore_wrap.to_string())
+                    .attr("LockGuides", st.lock_guides.to_string())
+                    .attr("UI", st.ui.to_string())
+                    .attr("Printable", st.printable.to_string());
+                color = st.color.and_then(|c| ui_color_property("LayerColor", c));
+            }
+            x.attrs_missing(self.observed("Layer").iter());
+            if let Some(c) = color {
+                Self::properties_with(&mut x, &[], &[c]);
+            }
+            x.end();
         }
         for s in &doc.master_spreads {
             x.empty(
@@ -1102,21 +1231,28 @@ impl Writer<'_> {
             );
         }
         let pages = document_pages(doc);
-        for (section, first, length) in section_ranges(doc) {
+        let (layout_lengths, _) = alternate_layouts(doc);
+        for (k, (section, first, length)) in section_ranges(doc).into_iter().enumerate() {
             x.start("Section")
                 .attr("Self", uref(Some(section.uid)))
                 .attr("Length", length.to_string())
                 .attr("Name", "")
                 .attr("ContinueNumbering", section.continue_numbering.to_string())
                 .attr("IncludeSectionPrefix", "false")
-                .attr("Marker", "")
+                .attr("Marker", &section.marker)
                 .attr("PageStart", uref(Some(pages[first])));
+            if doc.version.major >= 8
+                && let Some(name) = alternate_layout_name(section)
+            {
+                x.attr("AlternateLayoutLength", layout_lengths[k].to_string())
+                    .attr("AlternateLayout", name);
+            }
             // IDML gives a start number only to sections that restart
             // numbering.
             if !section.continue_numbering {
                 x.attr("PageNumberStart", section.start.to_string());
             }
-            x.attr("SectionPrefix", "");
+            x.attr("SectionPrefix", &section.prefix);
             if let Some(style) = number_style(section.style) {
                 x.start("Properties")
                     .start("PageNumberStyle")
@@ -2270,6 +2406,10 @@ impl Writer<'_> {
             x.end();
         }
         x.end();
+        // The trap presets every IDML has (idml-values.md).
+        for n in values::list("TrapPreset", self.doc.version.major) {
+            n.write(&mut x);
+        }
         x.end();
         x.finish()
     }
@@ -3070,6 +3210,92 @@ impl Writer<'_> {
         x.end();
     }
 
+    /// The settings of a page: its tab order, overridden master items,
+    /// layout grid use, layout rule and colour, and the values every IDML
+    /// of the version has. See `docs/format/objects.md`, page settings.
+    fn page_settings(&self, x: &mut Xml, p: &Page, section: Option<&(Section, u32)>) {
+        let st = &p.settings;
+        let tab: Vec<String> = st.tab_order.iter().map(|&u| uref(Some(u))).collect();
+        x.attr("TabOrder", tab.join(" "));
+        let overrides: Vec<String> = st
+            .overrides
+            .iter()
+            .flat_map(|&(item, with)| [uref(Some(item)), uref((with != 0).then_some(with))])
+            .collect();
+        x.attr("OverrideList", overrides.join(" "));
+        if let Some(v) = st.use_master_grid {
+            x.attr("UseMasterGrid", v.to_string());
+        }
+        if self.doc.version.major >= 8 {
+            const RULES: [&str; 6] = [
+                "",
+                "Recenter",
+                "ObjectBased",
+                "Scale",
+                "GuideBased",
+                "UseMaster",
+            ];
+            match st.layout_rule {
+                None => {
+                    x.attr("LayoutRule", "Off");
+                }
+                Some(code) => {
+                    if let Some(r) = RULES.get(code as usize).filter(|r| !r.is_empty()) {
+                        x.attr("LayoutRule", *r);
+                    }
+                }
+            }
+        }
+        x.attrs_missing(self.observed("Page").iter());
+        let color = match st.color {
+            UiColorRef::UseMaster => Some("UseMasterColor"),
+            UiColorRef::Nothing => Some("Nothing"),
+            _ => None,
+        };
+        let node = match (color, st.color) {
+            (Some(name), _) => Some(Node {
+                tag: "PageColor".into(),
+                attrs: vec![("type".into(), "enumeration".into())],
+                text: Some(name.into()),
+                children: Vec::new(),
+            }),
+            (None, UiColorRef::Rgb(rgb)) => ui_color_property("PageColor", rgb),
+            _ => None,
+        };
+        let mut props: Vec<Node> = node.into_iter().collect();
+        // A document page describes its numbering: section prefix, style,
+        // continue, include prefix, page number (from DOM 20 twice) and
+        // marker.
+        if let Some((s, number)) = section
+            && let Some(style) = number_style(s.style)
+        {
+            let item = |ty: &str, text: String| Node {
+                tag: "ListItem".into(),
+                attrs: vec![("type".into(), ty.into())],
+                text: Some(text),
+                children: Vec::new(),
+            };
+            let mut items = vec![
+                item("string", s.prefix.clone()),
+                item("enumeration", style.into()),
+                item("boolean", s.continue_numbering.to_string()),
+                item("boolean", "false".into()),
+                item("long", number.to_string()),
+            ];
+            if self.doc.version.major >= 20 {
+                items.push(item("long", number.to_string()));
+            }
+            items.push(item("string", s.marker.clone()));
+            props.push(Node {
+                tag: "Descriptor".into(),
+                attrs: vec![("type".into(), "list".into())],
+                text: None,
+                children: items,
+            });
+        }
+        Self::properties_with(x, &[], &props);
+    }
+
     /// `MarginPreference` and `GridDataInformation` of a page. Margins
     /// and columns are those in effect (see `resolve_page_layout`). The
     /// grid values that are the same in every sample are written only
@@ -3139,6 +3365,36 @@ impl Writer<'_> {
             x.attr("Name", format!("{prefix}-{base}"))
                 .attr("NamePrefix", &prefix)
                 .attr("BaseName", &base);
+            match s.show_master_items {
+                None => {
+                    x.attr("ShowMasterItems", "true");
+                }
+                Some(0) => {
+                    x.attr("ShowMasterItems", "false");
+                }
+                Some(_) => {}
+            }
+        } else {
+            match s.shuffle {
+                Some(0) => {
+                    x.attr("AllowPageShuffle", "true");
+                }
+                Some(1) | None => {
+                    x.attr("AllowPageShuffle", "false");
+                }
+                Some(_) => {}
+            }
+        }
+        x.attrs_missing(self.observed(kind).iter());
+        let major = self.doc.version.major;
+        if !master && let Some(mut fp) = values::element("Spread/FlattenerPreference", major) {
+            if let Some([line_art, gradient]) = s.flattener_resolution {
+                fp.attrs
+                    .insert(0, ("GradientAndMeshResolution".into(), num(gradient)));
+                fp.attrs
+                    .insert(0, ("LineArtAndTextResolution".into(), num(line_art)));
+            }
+            fp.write(&mut x);
         }
         for p in &s.pages {
             let name = if master {
@@ -3150,6 +3406,12 @@ impl Writer<'_> {
                     .cloned()
                     .unwrap_or_else(|| page_index.to_string())
             };
+            // Master pages have none (`n`).
+            let layout = if master {
+                None
+            } else {
+                self.page_layouts.get(*page_index - 1).copied()
+            };
             let [x0, y0, x1, y1] = p.bounds;
             x.start("Page")
                 .attr("Self", uref(Some(p.uid)))
@@ -3159,6 +3421,15 @@ impl Writer<'_> {
                 // A master page can itself be based on a master.
                 .attr("AppliedMaster", uref(p.master))
                 .attr("MasterPageTransform", matrix(&p.master_transform));
+            if self.doc.version.major >= 8 {
+                x.attr("AppliedAlternateLayout", uref(layout));
+            }
+            let section = if master {
+                None
+            } else {
+                self.page_sections.get(*page_index - 1)
+            };
+            self.page_settings(&mut x, p, section);
             // A guide belongs to a page, or to the spread; IDML writes a
             // spread's guides in its first page.
             let first = p.uid == s.pages[0].uid;
@@ -3604,6 +3875,8 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         group_path: group_paths(doc),
         warnings: Default::default(),
         observed: Default::default(),
+        page_layouts: alternate_layouts(doc).1,
+        page_sections: page_sections(doc),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();
     files.insert(
@@ -3707,6 +3980,8 @@ mod tests {
             group_path: Default::default(),
             warnings: Default::default(),
             observed: Default::default(),
+            page_layouts: Vec::new(),
+            page_sections: Vec::new(),
         };
         let out: String = w
             .backing_story()
@@ -3741,6 +4016,7 @@ mod tests {
             margins: None,
             columns: None,
             grid: None,
+            settings: Default::default(),
         };
         let section = |uid, page, continue_numbering, start| Section {
             uid,
@@ -3748,6 +4024,9 @@ mod tests {
             continue_numbering,
             start,
             style: numbering::ARABIC,
+            prefix: String::new(),
+            marker: String::new(),
+            alternate_layout: None,
         };
         let doc = Document {
             spreads: vec![Spread {
@@ -3758,6 +4037,9 @@ mod tests {
                 pages: (10..16).map(page).collect(),
                 items: Vec::new(),
                 guides: Vec::new(),
+                shuffle: None,
+                flattener_resolution: None,
+                show_master_items: None,
             }],
             // Listed out of page order, as in some samples.
             sections: vec![
@@ -3804,6 +4086,7 @@ mod tests {
             margins: None,
             columns: None,
             grid: None,
+            settings: Default::default(),
         };
         let origin = spread_origin(&[page(1, -612.0), page(2, 0.0)]);
         assert_eq!(origin, (-612.0, -396.0));

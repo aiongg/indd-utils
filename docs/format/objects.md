@@ -72,6 +72,35 @@ are in `big-endian.md`.
 | 0x503 | u32 self, u32 0, UID list of spread layers |
 | 0x56E | Matrix: `ItemTransform` |
 | 0x1B8 | u32: `BindingLocation` |
+| 0x1A8 | u16: 0 = `AllowPageShuffle="true"`, 1 = `false` |
+| 0x10833 | Flattener settings (below) |
+| 0x14580 | Tab orders: u32 count, then per page u32 page UID and a UID list (the page's `TabOrder`) |
+| 0x140D | Master spreads: u16, 0 = `ShowMasterItems="false"` |
+
+Evidence, over the 5,129 spreads and 914 master spreads of the 495
+trustworthy pairs:
+
+- `AllowPageShuffle`: 0x1A8 is 0 in 5,064 spreads, all `true`, and 1 in
+  53, all `false`. The 12 spreads without the chunk (in 7 documents) are
+  all `false`.
+- `ShowMasterItems` of master spreads: 913 have no chunk 0x140D and are
+  `true`; the one with the chunk (0) is `false`.
+- `TabOrder` of pages: the list for the page in its spread's chunk 0x14580
+  equals the IDML list for 9,367 of 9,367 pages (8 with a tab order);
+  pages not in the chunk have an empty `TabOrder`.
+
+**Flattener settings.** Every IDML spread has a `FlattenerPreference`
+child. Chunk 0x10833 (52 bytes) is in 20 spreads of 5 trustworthy
+documents, always with the same bytes: f64 0.5 at offset 8, f64 400 at
+offsets 20 and 28, 2 at 36 and 800 at 44. Their IDML has
+`LineArtAndTextResolution` and `GradientAndMeshResolution` 400 and
+`RasterVectorBalance` 50. The converter writes the f64 at 20 and 28 as
+the two resolutions; which is which is not known, as they are equal in
+every sample. Without the chunk, 5,080 spreads have 300 and 150 and 29
+spreads (all spreads of 9 documents, DOM 8 to 20) have 400 and 400; the field that decides this was not found in the
+spread or the document preferences, so the converter leaves the two
+resolutions out. The other four values are the same in every IDML
+(`idml-values.md`).
 
 **Spread layers (0x301)** hold the items of one document layer on one
 spread. Chunk 0x302: u32 document layer UID, u16 1 for the layer's guide
@@ -146,9 +175,61 @@ follow from the owner, so it is left out.
 
 ## Layers (0x302)
 
-Chunk 0x304: u16 locked, u16 visible, then fields not yet identified, then
-the name as an in-object string. The internal layer is named
-`Internal_pages_layer_name` and has no IDML element.
+Chunk 0x304:
+
+| Offset | Contents | IDML |
+|---|---|---|
+| 0 | u16 | `Locked` (1 = true) |
+| 2 | u16 | `Visible` |
+| 4 | u16 | `Printable` |
+| 6 | u16 | `LockGuides` |
+| 8 | u16, 1 in every sample | |
+| 10 | u32 UID of an interface colour | `LayerColor` (below) |
+| 14 | u16 | `UI` |
+| 16 | u16, 1 in every sample | |
+| 18 | u8 flag, in-object string | `Name` |
+| after the name | u16 | `IgnoreWrap` |
+
+The internal layer is named `Internal_pages_layer_name` and has no IDML
+element. In all 1,053 layers of the trustworthy pairs the name starts at
+offset 19, and each field above equals the IDML value for 1,053 of 1,053
+layers (127 locked, 55 hidden, 59 not printable, 4 with locked guides,
+1 without `UI`, 2 ignoring text wrap). `ShowGuides` and `Expendable` are
+true in every layer; the two fields that are 1 in every sample may hold
+them. The converter reads the fields only when the name starts at offset
+19 (in all little-endian corpus pairs, 1,465 layers).
+
+## Interface colours (0x1F11)
+
+Layers, pages and XML tags name their colour by the UID of an object of
+class 0x1F11. Chunk 0x1F01 of that object: u32 5 (RGB), u16 3, three f64
+fractions. IDML writes the colour as one of its named colours, or, for
+other colours, as a list of three numbers (0 to 255):
+
+| Red, green, blue | IDML | Red, green, blue | IDML |
+|---|---|---|---|
+| 0.31, 0.6, 1 | `LightBlue` | 1, 0.6, 0 | `Gold` |
+| 1, 0, 0 | `Red` | 1, 0.4, 0 | `Orange` |
+| 0.31, 1, 0.31 | `Green` | 0, 0.33, 0 | `DarkGreen` |
+| 0, 0, 1 | `Blue` | 0.6, 0.6, 1 | `Lavender` |
+| 1, 1, 0.31 | `Yellow` | 0.67, 0.64, 0.71 | `Charcoal` |
+| 1, 0.31, 1 | `Magenta` | 0.6, 0.2, 1 | `Violet` |
+| 0, 1, 1 | `Cyan` | 1, 1, 1 | `White` |
+| 0.5, 0.5, 0.5 | `Gray` | 1, 0.6, 0.8 | `Pink` |
+| 0, 0, 0 | `Black` | 0.61, 0.87, 0.61 | `GridGreen` |
+| 0.6, 0, 0 | `BrickRed` | 0, 0, 0.53 | `DarkBlue` |
+| 0.6, 0.8, 0 | `GrassGreen` | 0.81, 0.51, 0.71 | `Lipstick` |
+| 1, 0.71, 0.42 | `GridOrange` | 0.97, 0.35, 0.42 | `Fiesta` |
+| 0, 0.6, 0.6 | `Teal` | | |
+
+Evidence: in the layers and pages of the trustworthy pairs every colour
+object with these components has this name (1,107 layers and pages; from
+491 `LightBlue` down to 1 `Teal`). Two other colours occur, 1, 0.4863,
+0.651 (3 layers) and 0.9412 three times (1 layer); IDML writes them as
+the lists 255, 124, 166 and 240, 240, 240, the components times 255.
+The converter writes such a list for a colour whose components are whole
+multiples of 1/255 and that is not in the table, and leaves the colour
+out otherwise. XML tags use the table but no list, as before.
 
 ## Pages (0x50F)
 
@@ -161,6 +242,25 @@ the name as an in-object string. The internal layer is named
 Files from InDesign 3.0 and 4.0 store the page transform and bounds in
 chunks 0x151 and 0x154, and chunk 0x140F has no matrix
 (`big-endian.md`).
+
+**Page settings.**
+
+| Chunk | Contents | IDML | Without the chunk |
+|---|---|---|---|
+| 0x1404 | u32 count; if not 0, a UID list of master page items and a UID list of their overrides | `OverrideList`: each item and its override (`n` for 0) | empty |
+| 0xCD04 | 6 bytes, the last u16 | `UseMasterGrid` (1 = true) | |
+| 0x563 | u32, u32 code: 1 `Recenter`, 2 `ObjectBased`, 3 `Scale`, 4 `GuideBased`, 5 `UseMaster` | `LayoutRule` | `Off` |
+| 0x5FF | u32: 0 `Nothing`, 1 `UseMasterColor`, else an interface colour | `PageColor` | `UseMasterColor` |
+
+Evidence over the 9,366 pages (document and master pages) of the
+trustworthy pairs that the converter writes: `OverrideList`,
+`UseMasterGrid` and `PageColor` 9,366 of 9,366 each, `LayoutRule` 9,347
+of the 9,347 pages that have it. Of the 9,367 IDML pages, 1,352 have
+overrides and 2,445 `UseMasterGrid="false"`; 5,111 have no chunk 0x563
+and `Off`, 4,117 `UseMaster`, 92 `ObjectBased`, 24 `GuideBased`, 3
+`Recenter` and 1 `Scale`; 9,260 have no chunk 0x5FF, 44 code 1, 5 code 0
+and 58 an interface colour. `LayoutRule` is in IDML from DOM 8 on (no
+page of the DOM 7 files has it).
 | 0x51A | Margins: four f64 (left, top, right, bottom), u16 own-margins flag |
 | 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, 4 bytes |
 | 0xCD02 | Layout grid (`GridDataInformation`, below) |
@@ -782,12 +882,37 @@ Section chunk 0x4C02:
 
 | Field | Contents |
 |---|---|
-| u8, string | Not identified; empty in most samples |
-| u8, string | Not identified; empty in most samples |
+| u8, string | `SectionPrefix` |
+| u8, string | `Marker` |
 | u32 | First page of the section; 0 for the section that starts at the document's first page |
 | u32 | Page number start (`PageNumberStart`) |
 | u32 | Page number style: 0x4C15 = `Arabic`, 0x4C17 = `LowerRoman`, 0x4C12 = `Kanji` |
 | u32 | Continue numbering (1 = true, `ContinueNumbering`) |
+| u32 | Not identified |
+| u8 flag, string | `AlternateLayout`: the string, with `$ID/` before it if the flag is 1 |
+
+In the 546 sections of the trustworthy pairs, 539 chunks have all these
+fields; the prefix, marker and alternate layout equal the IDML values in
+539 of 539 (417 named layouts such as `Letter V`, 82 empty, 40 `$ID/`).
+The 7 shorter chunks are in DOM 7 and 8 files and end after the second
+u32 above.
+
+**Alternate layouts.** A section with a layout name (not empty and not
+`$ID/`) starts an alternate layout, and so does the first section.
+`AlternateLayoutLength` of a section is the number of pages from its
+first page to the start of the next layout, or to the end of the
+document (538 of 539). The `AppliedAlternateLayout` of a document page
+is the section that starts its layout; master pages have `n`. Both are
+in IDML from DOM 8 on. Over the trustworthy pairs the converted
+`AppliedAlternateLayout` equals the IDML value for 9,347 of 9,347 pages.
+
+**Page descriptor.** A document page has a `Descriptor` property, a list
+of the section prefix, the page number style, `ContinueNumbering`,
+`false`, the page number and the marker; from DOM 20 on the page number
+is in the list twice. Over the trustworthy pairs: 7,800 of 7,924 pages;
+64 others are in sections with a style the converter does not know (IDML
+gives it as an empty string), and the converter leaves their descriptor
+out. The fourth item is `IncludeSectionPrefix`, false in every sample.
 
 Evidence:
 

@@ -223,6 +223,29 @@ as `Name`, `Visible`, `Locked`, the gradient angles and the layout
 constraints are not kept: they differ in some elements, and those
 values come from the INDD.
 
+### Spreads, pages and layers
+
+| Element | Elements | Values kept |
+|---|---|---|
+| `Spread` | 7,281 | `PageTransitionType="None"`, `PageTransitionDirection="NotApplicable"`, `PageTransitionDuration="Medium"`, `ShowMasterItems="true"`, `FlattenerOverride="Default"` from DOM 7; `SpreadHidden="false"` from 19 |
+| `FlattenerPreference` of spreads | 7,281 | `ClipComplexRegions`, `ConvertAllStrokesToOutlines`, `ConvertAllTextToOutlines` (`false`) and `RasterVectorBalance` 50 from DOM 7 |
+| `MasterSpread` | 1,412 | `OverriddenPageItemProps=""` from DOM 7 |
+| `Page` | 12,639 | `AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName"`, `GridStartingPoint="TopOutside"` from DOM 7; `SnapshotBlendingMode="IgnoreLayoutSnapshots"`, `OptionalPage="false"` from 8 |
+| `Layer` | 1,546 | `ShowGuides` and `Expendable` (`true`) from DOM 7 |
+
+Every spread has one `FlattenerPreference`, so the converter writes the
+element on every spread. The other attributes of these elements come
+from the INDD (`objects.md`).
+
+### Trap presets
+
+All 683 IDML files list the same two `TrapPreset` elements at the end of
+`Resources/Styles.xml`, with the same attributes: `$ID/k[No Trap
+Preset]` and `$ID/kDefaultTrapStyleName`, which every page applies. The
+converter writes the list (a `List` block of the values file). A
+document with trap presets of its own would have more; the corpus has
+none, so their INDD objects are not decoded.
+
 ### Export options of page items
 
 `ObjectExportOption` of page items has different attributes in

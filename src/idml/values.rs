@@ -242,6 +242,18 @@ pub fn element_attrs(path: &str, major: u32) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+/// The list of `tag` elements every IDML of InDesign version `major` in
+/// the corpus has, in order (`List` blocks of `element_values.xml`);
+/// empty if there is none.
+pub fn list(tag: &str, major: u32) -> Vec<Node> {
+    element_values()
+        .children
+        .iter()
+        .filter(|b| b.tag == "List" && b.attr("Tag") == Some(tag) && applies(b, major))
+        .flat_map(|b| b.children.clone())
+        .collect()
+}
+
 fn unescape(s: &str) -> String {
     s.replace("&lt;", "<")
         .replace("&gt;", ">")
@@ -377,6 +389,7 @@ mod tests {
         assert!(new.child("Properties").is_some());
         // Export options differ between versions.
         assert!(new.attr("EpubType").is_some());
+        assert_eq!(list("TrapPreset", 21).len(), 2);
         assert!(
             element("Polygon/ObjectExportOption", 8)
                 .unwrap()
