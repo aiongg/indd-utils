@@ -73,6 +73,8 @@ pub mod class {
     pub const UI_COLOR: u32 = 0x1F11;
     /// A colour profile: its name (chunk 0x13C).
     pub const COLOR_PROFILE: u32 = 0x7D03;
+    /// Page item defaults.
+    pub const ITEM_DEFAULTS: u32 = 0x6E07;
 }
 
 /// Chunk IDs.

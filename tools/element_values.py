@@ -74,6 +74,28 @@ ELEMENTS = [
     "Document/TaggedPDFPreference", "Document/AdjustLayoutPreference",
     "Document/HTMLFXLExportPreference", "Document/PublishExportPreference",
 ]
+# The top-level elements of Resources/Preferences.xml, as paths
+# "Preferences/<tag>". tools/root_values.py collects them from the IDML
+# files of an earlier, smaller corpus; values found here are written where
+# that file has none.
+PREFERENCES = [
+    "ButtonPreference", "PrintPreference", "PrintBookletOption",
+    "PrintBookletPrintPreference", "PageItemDefault", "FrameFittingOption",
+    "StoryPreference", "TextFramePreference", "TextPreference", "TextDefault",
+    "DictionaryPreference", "AnchoredObjectDefault", "AnchoredObjectSetting",
+    "BaselineFrameGridOption", "FootnoteOption", "TextWrapPreference",
+    "MojikumiUiPreference", "XMLImportPreference", "XMLExportPreference",
+    "XMLPreference", "ExportForWebPreference", "IndexOptions",
+    "IndexHeaderSetting", "TinDocumentDataObject", "ChapterNumberPreference",
+    "DocumentPreference", "GridPreference", "GuidePreference",
+    "MarginPreference", "PasteboardPreference", "ViewPreference",
+    "TransparencyPreference", "TransparencyDefaultContainerObject",
+    "LayoutGridDataInformation", "StoryGridDataInformation",
+    "CjkGridPreference", "DataMergeOption", "LayoutAdjustmentPreference",
+    "EPubExportPreference", "HTMLExportPreference",
+    "EPubFixedLayoutExportPreference",
+]
+ELEMENTS += ["Preferences/" + t for t in PREFERENCES]
 # Of those, the elements every IDML has one of (from some version on).
 SINGLETONS = {p for p in ELEMENTS if p.startswith("Document/")}
 # Elements with Self written as a whole list.
@@ -179,6 +201,11 @@ def scan(arg):
         if not name.endswith(".xml"):
             continue
         root = ET.fromstring(z.read(name))
+        if name == "Resources/Preferences.xml":
+            for el in root:
+                path = "Preferences/" + el.tag
+                if path in wanted:
+                    found[path].append(flatten(el))
         for el in root.iter():
             if el.tag in LISTS:
                 lists[el.tag].append(prop_text(el))

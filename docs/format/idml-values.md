@@ -432,6 +432,16 @@ For example `TextDefault` keeps 264 of its 317 values,
 - 20 values that only the 2 files with DOM 20 have. A value first seen
   in a later version is kept only when at least 10 files show it.
 
+`tools/element_values.py` also collects the preference elements from all
+683 IDML files of the larger corpus (paths `Preferences/<tag>` in
+`src/idml/element_values.xml`), with its rule for other elements (per
+range of DOM versions, at least 10 files). The converter adds these
+values where `preference_values.xml` has none. They add, for example,
+the auto-sizing values of `TextFramePreference` for DOM 8 to 11 and the
+values of `EPubExportPreference` and `HTMLExportPreference` that all
+files from DOM 8 on have. `PageItemDefault` values that name an object
+style are written only when the package has that style.
+
 Some of these values are probably stored in the INDD and may differ in a
 document outside the corpus; none of them is read from the INDD yet. A
 sample typeset vertically shows this: two 2-byte fields of the

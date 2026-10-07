@@ -872,9 +872,25 @@ them non-zero in 2 files (−3.54 and −111.46). `VerticalAlignment`: 42 of
 25 have 1 and `CenterAlign`, and all have 0 at offset 0 and
 `AnchorYoffset="0"`. IDML writes an item's `AnchoredObjectSetting` with
 the values that differ from its object style (14 of the 42 items); the
-converter does the same. The other fields of the chunk are not
-identified: `PinPosition` and `AnchorPoint` change together with three
-other u16 fields in the object styles.
+converter does the same.
+
+Two groups of u16 fields change together in every sample, so each group
+is written as a whole, for the combinations observed only:
+
+| u16 at 46, 50, 56 | `AnchorPoint`, `PinPosition` |
+|---|---|
+| 0, 2, 1 | `BottomRightAnchor`, `true` |
+| 2, 0, 0 | `TopLeftAnchor`, `false` |
+
+| u16 at 40, 48 | `AnchoredPosition`, `HorizontalAlignment` |
+|---|---|
+| 0, 2 | `InlinePosition`, `LeftAlign` |
+| 2, 1 | `AboveLine`, `CenterAlign` |
+
+Evidence: 2,858 object styles in the 654 pairs whose IDML style has the
+same name (2,628 and 230 for the first table; 2,821 and 37 for the
+second) and the preferences of 527 files (`preferences.md`). Which
+field holds which attribute is not known.
 
 **Positions count characters.** A text record's run length counts
 UTF-16 code units, but every other position counts characters, a
@@ -1055,10 +1071,8 @@ styles that differ in them (10 without fill, 13 without stroke, 506
 without general options and 531 without baseline options).
 
 **Anchored object settings** are in chunk 0x2800, as for anchors (see
-stories). **Not written:** `AnchoredObjectSetting` `PinPosition` and
-`AnchorPoint` change together (312 against 25 styles) with
-`VerticalAlignment` and three other u16 fields of chunk 0x2800, so they
-cannot be told apart.
+stories), including the two groups of fields that are written
+together.
 The other values of object styles come from IDML observation
 (`idml-values.md`).
 

@@ -26,6 +26,11 @@ pub struct Prefs {
     pub colors: Vec<(&'static str, &'static str, [f64; 3])>,
     /// The text defaults (chunk 0x23F, a text attribute list).
     pub text_defaults: Option<Attrs>,
+    /// Default anchored object settings (chunk 0x2800, as object styles
+    /// have).
+    pub anchor: Option<Vec<u8>>,
+    /// Page item defaults (class 0x6E07), a page item attribute list.
+    pub item_defaults: Option<Attrs>,
 }
 
 /// Chunks of the preferences object.
@@ -43,6 +48,17 @@ mod id {
     pub const COLOR_INTENT: u32 = 0x7C08;
     pub const COLOR_POLICIES: u32 = 0x7C44;
     pub const WATERMARK: u32 = 0x16344;
+    pub const TEXT: u32 = 0x280;
+    pub const SMART_TEXT_REFLOW: u32 = 0x28BE;
+    pub const MARGINS: u32 = 0x550;
+    pub const COLUMNS: u32 = 0x555;
+    pub const ANCHOR: u32 = 0x2800;
+    pub const PASTEBOARD: u32 = 0x5D2;
+    pub const XML_TAGS: u32 = 0xBF4F;
+    pub const GRIDS_IN_BACK: u32 = 0x567;
+    pub const TEXT_WRAP: u32 = 0x3768;
+    /// The chunk of the page item defaults object (class 0x6E07).
+    pub const ITEM_DEFAULTS: u32 = 0x6E07;
     /// Name of a colour profile object (class 0x7D03).
     pub const PROFILE_NAME: u32 = 0x13C;
 }
@@ -226,6 +242,7 @@ impl Reader<'_> {
                 "TextPreference",
                 "ShowInvisibles",
             ),
+            (id::GRIDS_IN_BACK, true, "GridPreference", "GridsInBack"),
         ] {
             if let Some(v) = flag(id, absent)? {
                 set(element, name, v);
@@ -247,6 +264,165 @@ impl Reader<'_> {
             set("DocumentPreference", "SlugBottomOffset", num(f(128)?));
             set("DocumentPreference", "DocumentSlugUniformSize", b(136));
         }
+
+        // Text preferences and the default text frame columns.
+        if let Some(d) = get(id::TEXT)?.filter(|d| d.len() >= 174) {
+            let f = |o: usize| Cursor::new(&d[o..]).f64();
+            let b = |o: usize| (d[o] != 0).to_string();
+            for (o, name) in [
+                (0, "SmallCap"),
+                (8, "SuperscriptSize"),
+                (16, "SubscriptSize"),
+                (24, "SuperscriptPosition"),
+                (32, "SubscriptPosition"),
+                (88, "LeadingKeyIncrement"),
+                (96, "BaselineShiftKeyIncrement"),
+            ] {
+                set("TextPreference", name, num(f(o)?));
+            }
+            set(
+                "TextPreference",
+                "KerningKeyIncrement",
+                num(f(104)? * 1000.0),
+            );
+            set("TextPreference", "TypographersQuotes", b(118));
+            set("TextPreference", "LinkTextFilesWhenImporting", b(130));
+            set("TextPreference", "UseParagraphLeading", b(162));
+            if d.len() >= 212 {
+                set("TextPreference", "QuoteCharactersRotatedInVertical", b(184));
+            }
+            if d.len() >= 214 {
+                set("TextPreference", "ShapeIndicAndLatinWithHarbuzz", b(212));
+            }
+            set("TextFramePreference", "TextColumnGutter", num(f(40)?));
+            set(
+                "TextFramePreference",
+                "TextColumnCount",
+                Cursor::new(&d[112..]).u32()?.to_string(),
+            );
+            const BASELINE: [&str; 5] = [
+                "LeadingOffset",
+                "AscentOffset",
+                "CapHeight",
+                "EmboxHeight",
+                "XHeight",
+            ];
+            if let Some(v) = BASELINE.get(d[142] as usize) {
+                set("TextFramePreference", "FirstBaselineOffset", v.to_string());
+            }
+        }
+        match get(id::SMART_TEXT_REFLOW)? {
+            Some(d) if d.len() >= 14 => {
+                let b = |o: usize| (d[o] != 0).to_string();
+                set("TextPreference", "SmartTextReflow", b(4));
+                set("TextPreference", "LimitToMasterTextFrames", b(6));
+                set("TextPreference", "DeleteEmptyPages", b(8));
+                set("TextPreference", "PreserveFacingPageSpreads", b(10));
+                if d.len() >= 16 {
+                    set("TextPreference", "SmartTextReflowSync", b(12));
+                }
+            }
+            Some(_) => {}
+            None => {
+                set("TextPreference", "SmartTextReflow", "false".into());
+                set("TextPreference", "LimitToMasterTextFrames", "true".into());
+            }
+        }
+
+        // Default margins and columns of new pages.
+        let margins = match get(id::MARGINS)? {
+            Some(d) if d.len() >= 32 => {
+                let f = |o: usize| Cursor::new(&d[o..]).f64();
+                Some([f(0)?, f(8)?, f(16)?, f(24)?])
+            }
+            Some(_) => None,
+            None => Some([36.0; 4]),
+        };
+        if let Some([left, top, right, bottom]) = margins {
+            set("MarginPreference", "Left", num(left));
+            set("MarginPreference", "Top", num(top));
+            set("MarginPreference", "Right", num(right));
+            set("MarginPreference", "Bottom", num(bottom));
+        }
+        let columns = match get(id::COLUMNS)? {
+            Some(d) if d.len() >= 12 => Some((Cursor::new(&d).u32()?, Cursor::new(&d[4..]).f64()?)),
+            Some(_) => None,
+            None => Some((1, 12.0)),
+        };
+        if let Some((count, gutter)) = columns {
+            set("MarginPreference", "ColumnCount", count.to_string());
+            set("MarginPreference", "ColumnGutter", num(gutter));
+        }
+        let anchor = get(id::ANCHOR)?;
+        if anchor.is_none() {
+            set(
+                "AnchoredObjectSetting",
+                "VerticalAlignment",
+                "TopAlign".into(),
+            );
+        }
+
+        // Pasteboard: f64 horizontal and vertical margins.
+        let pasteboard = match get(id::PASTEBOARD)? {
+            Some(d) if d.len() >= 16 => {
+                let f = |o: usize| Cursor::new(&d[o..]).f64();
+                Some((f(0)?, f(8)?))
+            }
+            Some(_) => None,
+            None => Some((-1.0, 72.0)),
+        };
+        if let Some((h, v)) = pasteboard {
+            set(
+                "PasteboardPreference",
+                "PasteboardMargins",
+                format!("{} {}", num(h), num(v)),
+            );
+            set("PasteboardPreference", "MinimumSpaceAboveAndBelow", num(v));
+        }
+        // Text wrap: u8 at 2.
+        if let Some(d) = get(id::TEXT_WRAP)?.filter(|d| d.len() >= 3) {
+            set("TextPreference", "ZOrderTextWrap", (d[2] != 0).to_string());
+        }
+        // Default XML tags: name (u32 length, text segments) and u32 UID of
+        // an interface colour, for story, table, (untagged), cell, image.
+        if let Some(d) = get(id::XML_TAGS)? {
+            let mut c = Cursor::new(&d);
+            for (name, color) in [
+                (Some("DefaultStoryTagName"), "DefaultStoryTagColor"),
+                (Some("DefaultTableTagName"), "DefaultTableTagColor"),
+                (None, ""),
+                (Some("DefaultCellTagName"), "DefaultCellTagColor"),
+                (Some("DefaultImageTagName"), "DefaultImageTagColor"),
+            ] {
+                let n = c.u32()? as usize;
+                let tag = c.segments(n)?;
+                let ui = c.u32()?;
+                if let Some(name) = name {
+                    set("XMLPreference", name, tag);
+                    if let Some(rgb) = self.ui_color(ui)? {
+                        colors.push(("XMLPreference", color, rgb));
+                    }
+                }
+            }
+        }
+        // Page item defaults: u32, u32, u32 n, n 12-byte entries, then a
+        // page item attribute list.
+        let item_defaults = match self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::ITEM_DEFAULTS)
+        {
+            Some(&(u, _)) => match self.chunk(u, id::ITEM_DEFAULTS)? {
+                Some(d) if d.len() >= 12 => {
+                    let n = Cursor::new(&d[8..]).u32()? as usize;
+                    d.get(12 + 12 * n..)
+                        .and_then(|rest| Attrs::parse(rest, List::Item).ok())
+                }
+                _ => None,
+            },
+            None => None,
+        };
 
         // Grids.
         if let Some(d) = get(id::BASELINE_GRID)?.filter(|d| d.len() >= 26) {
@@ -307,6 +483,8 @@ impl Reader<'_> {
             values,
             colors,
             text_defaults,
+            anchor,
+            item_defaults,
         })
     }
 }

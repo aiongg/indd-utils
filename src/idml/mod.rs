@@ -59,9 +59,10 @@ fn fitting_value(id: u32, v: &Value) -> Option<String> {
     }
 }
 
-/// Anchored object settings from chunk 0x2800 (of an anchor or an object
-/// style): f64 `AnchorYoffset` at 0, u16 `VerticalAlignment` at 52. See
-/// `docs/format/objects.md`.
+/// Anchored object settings from chunk 0x2800 (of an anchor, an object
+/// style or the preferences): f64 `AnchorYoffset` at 0, u16
+/// `VerticalAlignment` at 52, and two groups of u16 fields that change
+/// together. See `docs/format/objects.md`.
 fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
     let mut out = Vec::new();
     if d.len() < 54 {
@@ -78,6 +79,33 @@ fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
         out.push(("VerticalAlignment", a.to_string()));
     }
     out.push(("AnchorYoffset", num(y)));
+    if d.len() >= 58 {
+        let u = |o: usize| u16_from([d[o], d[o + 1]]);
+        // Fields that change together in every sample: only the observed
+        // combinations are written.
+        match (u(46), u(50), u(56)) {
+            (0, 2, 1) => {
+                out.push(("AnchorPoint", "BottomRightAnchor".into()));
+                out.push(("PinPosition", "true".into()));
+            }
+            (2, 0, 0) => {
+                out.push(("AnchorPoint", "TopLeftAnchor".into()));
+                out.push(("PinPosition", "false".into()));
+            }
+            _ => {}
+        }
+        match (u(40), u(48)) {
+            (0, 2) => {
+                out.push(("AnchoredPosition", "InlinePosition".into()));
+                out.push(("HorizontalAlignment", "LeftAlign".into()));
+            }
+            (2, 1) => {
+                out.push(("AnchoredPosition", "AboveLine".into()));
+                out.push(("HorizontalAlignment", "CenterAlign".into()));
+            }
+            _ => {}
+        }
+    }
     out
 }
 
@@ -127,10 +155,15 @@ fn ui_color_name(rgb: [f64; 3]) -> Option<&'static str> {
 /// supplies values for.
 const PREFERENCE_TAGS: &[&str] = &[
     "ViewPreference",
+    "MarginPreference",
+    "TextFramePreference",
+    "AnchoredObjectSetting",
     "GridPreference",
     "GuidePreference",
     "DocumentPreference",
     "TextPreference",
+    "PasteboardPreference",
+    "XMLPreference",
 ];
 
 /// A `Properties` child as a values node.
@@ -2558,6 +2591,34 @@ impl Writer<'_> {
         // Values every exported IDML has (docs/format/idml-values.md);
         // values read from the INDD take precedence.
         let mut nodes = values::preferences(self.doc.version.major);
+        // Values every IDML of the version has in the larger corpus, where
+        // the file above has none.
+        for n in &mut nodes {
+            if let Some(e) =
+                values::element(&format!("Preferences/{}", n.tag), self.doc.version.major)
+            {
+                n.merge(&e);
+            }
+        }
+        // Object styles named by the page item defaults must be in the
+        // package.
+        let styles: std::collections::HashSet<String> = self
+            .doc
+            .object_styles
+            .values()
+            .map(|os| {
+                let name = if os.builtin {
+                    format!("$ID/{}", os.name)
+                } else {
+                    os.name.clone()
+                };
+                format!("ObjectStyle/{}", self_name(&name))
+            })
+            .collect();
+        for n in nodes.iter_mut().filter(|n| n.tag == "PageItemDefault") {
+            n.attrs
+                .retain(|(k, v)| !k.ends_with("ObjectStyle") || styles.contains(v));
+        }
         // Observed values the INDD contradicts but the converter cannot
         // replace: (element, attribute).
         let mut drop: Vec<(&str, &str)> = Vec::new();
@@ -2631,6 +2692,48 @@ impl Writer<'_> {
         {
             let i = ours_of(&mut ours, v.element);
             ours[i].attrs.push((v.name.to_string(), v.value.clone()));
+        }
+        if let Some(d) = &prefs.anchor {
+            let i = ours_of(&mut ours, "AnchoredObjectSetting");
+            ours[i].attrs.extend(
+                anchored_settings(d)
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v)),
+            );
+        }
+        if let Some(a) = &prefs.item_defaults {
+            let i = ours_of(&mut ours, "PageItemDefault");
+            let values = self.item_attr_values(a);
+            ours[i]
+                .attrs
+                .extend(values.into_iter().map(|(k, v)| (k.to_string(), v)));
+            let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
+            let fitting = fitting_attrs(a, &all);
+            if !fitting.is_empty() {
+                let i = ours_of(&mut ours, "FrameFittingOption");
+                ours[i]
+                    .attrs
+                    .extend(fitting.into_iter().map(|(k, v)| (k.to_string(), v)));
+            }
+        }
+        for &(tag, name, rgb) in &prefs.colors {
+            if !PREFERENCE_TAGS.contains(&tag) {
+                continue;
+            }
+            if let Some(p) = ui_color_property(name, rgb) {
+                let i = ours_of(&mut ours, tag);
+                match ours[i].children.iter_mut().find(|c| c.tag == "Properties") {
+                    Some(props) => props.children.push(p),
+                    None => ours[i].children.insert(
+                        0,
+                        Node {
+                            tag: "Properties".into(),
+                            children: vec![p],
+                            ..Node::default()
+                        },
+                    ),
+                }
+            }
         }
         if let Some(a) = &prefs.text_defaults {
             let (mut plain, props) = self.text_attrs(a);

@@ -135,3 +135,92 @@ styles. Over all pairs this reproduces 182,742 of 196,543 `TextDefault`
 values, against 159,982 from the observed values alone; no attribute
 reproduced before is lost. As for paragraph styles, `KerningValue` is
 left out: the schema does not allow it there.
+
+## Text (`TextPreference`, `TextFramePreference`)
+
+Chunk 0x280 (174 bytes in InDesign 7, 212 in 8 to 14, 214 from 15):
+
+| Offset | Type | Attribute |
+|---|---|---|
+| 0 | f64 | `SmallCap` |
+| 8, 16 | f64 | `SuperscriptSize`, `SubscriptSize` |
+| 24, 32 | f64 | `SuperscriptPosition`, `SubscriptPosition` |
+| 40 | f64 | `TextFramePreference` `TextColumnGutter` |
+| 88 | f64 | `LeadingKeyIncrement` |
+| 96 | f64 | `BaselineShiftKeyIncrement` |
+| 104 | f64 | `KerningKeyIncrement` divided by 1000 |
+| 112 | u32 | `TextFramePreference` `TextColumnCount` |
+| 118 | u8 | `TypographersQuotes` |
+| 130 | u8 | `LinkTextFilesWhenImporting` |
+| 142 | u8 | `TextFramePreference` `FirstBaselineOffset`: 0 `LeadingOffset`, 1 `AscentOffset`, 2 `CapHeight`, 3 `EmboxHeight`, 4 `XHeight` |
+| 162 | u8 | `UseParagraphLeading` |
+| 184 | u8 | `QuoteCharactersRotatedInVertical` (212 bytes and more) |
+| 212 | u8 | `ShapeIndicAndLatinWithHarbuzz` (214 bytes) |
+
+Each matches all 654 pairs that have the attribute (288 for the last,
+645 for the one before), and the two positions match each other's
+attribute too, except where the files show different values: positions
+differ in 2 files, which tells 24 from 32; the sizes are equal in every
+file, so 8 and 16 follow the order of the positions. Offsets 168 and 170
+match both `UseCidMojikumi` and `UseNewVerticalScaling`, which are equal
+in every file; they are not written.
+
+Chunk 0x28BE (14 bytes, 16 from InDesign 18), u8 flags: 4
+`SmartTextReflow`, 6 `LimitToMasterTextFrames`, 8 `DeleteEmptyPages`, 10
+`PreserveFacingPageSpreads`, 12 `SmartTextReflowSync` (16 bytes). 620 of
+620 files with the chunk (283 of 283 for the last). The 34 files without
+it have `SmartTextReflow="false"` and `LimitToMasterTextFrames="true"`.
+
+Chunk 0x3768 (4 bytes), u8 at 2: `ZOrderTextWrap`; 654 of 654.
+
+## Margins and columns of new pages (`MarginPreference`)
+
+Chunk 0x550: f64 `Left`, `Top`, `Right`, `Bottom` at 0, 8, 16, 24 (528
+of 528 files). The 126 files without it have 36 for all four.
+
+Chunk 0x555: u32 `ColumnCount` at 0, f64 `ColumnGutter` at 4 (119 of
+119). Without it, `ColumnCount` is 1 (535 of 535) and `ColumnGutter` 12
+(526 of 535; 9 files have another gutter stored elsewhere).
+
+## Anchored objects (`AnchoredObjectSetting`)
+
+Chunk 0x2800, as anchors and object styles have (`objects.md`): 527
+files. `VerticalAlignment` and the two groups of fields described there
+match 527 of 527. The 127 files without the chunk have
+`VerticalAlignment="TopAlign"`.
+
+## Pasteboard (`PasteboardPreference`)
+
+Chunk 0x5D2: f64 horizontal and vertical margin at 0 and 8, written as
+`PasteboardMargins`; the vertical one is also
+`MinimumSpaceAboveAndBelow`. 130 of 130 files with the chunk; the 524
+without it have `-1 72` and 72, except one stale pair. Four u32 UIDs of
+interface colours follow; the IDML colours (`LightGray`, `GridBlue`) are
+not in the table of `objects.md`, so they are not written.
+
+## Default XML tags (`XMLPreference`)
+
+Chunk 0xBF4F: five entries, each a name (u32 length, text segments) and
+the u32 UID of an interface colour: the story, table, untagged
+(`[None]`, not in IDML), cell and image tags. `DefaultStoryTagName`,
+`DefaultTableTagName`, `DefaultCellTagName` and `DefaultImageTagName`
+match 654 of 654; the names are in the language of the InDesign that
+made the document (`Story`, `Article`, `Textabschnitt`, ...). The
+colours are written as `Default…TagColor`.
+
+## Grids in back
+
+Chunk 0x567 (u16, 53 files): `GridPreference` `GridsInBack`; 53 of 53.
+The 601 files without it have `true`.
+
+## Page item defaults (`PageItemDefault`, `FrameFittingOption`)
+
+The object of class 0x6E07 has a chunk 0x6E07: u32, u32, u32 *n*, *n*
+12-byte entries, then a page item attribute list (u32 count, records;
+`attributes.md`) and more data. The list has the attribute IDs of page
+items. Written with the page item attribute table, it gives
+`PageItemDefault` `StrokeWeight` in 628 of 628 files in which an
+analysis script found the list; over all pairs the converter reproduces
+`StrokeWeight`, `CornerRadius` and `MiterLimit` of every file, and the
+frame fitting attributes of the list are written to the preference
+`FrameFittingOption`.
