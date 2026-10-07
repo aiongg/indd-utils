@@ -272,3 +272,35 @@ impl Writer<'_> {
         x.end();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_without_text_are_written_as_zero() {
+        assert_eq!(num(1.5), "1.5");
+        assert_eq!(num(f64::NAN), "0");
+        assert_eq!(num(f64::INFINITY), "0");
+        assert_eq!(num(f64::NEG_INFINITY), "0");
+    }
+
+    #[test]
+    fn formats_numbers_like_idml() {
+        assert_eq!(num(205.2), "205.2");
+        assert_eq!(num(-0.0), "-0");
+        assert_eq!(num(1.0), "1");
+        assert_eq!(num(-89.99999999999999), "-89.99999999999999");
+    }
+
+    #[test]
+    fn encodes_base64_in_lines() {
+        assert_eq!(base64_lines(b""), "");
+        assert_eq!(base64_lines(b"f"), "Zg==");
+        assert_eq!(base64_lines(b"fo"), "Zm8=");
+        assert_eq!(base64_lines(b"foobar"), "Zm9vYmFy");
+        let lines = base64_lines(&[0xFF; 58]);
+        assert_eq!(lines.split('\n').map(str::len).collect::<Vec<_>>(), [76, 4]);
+        assert!(base64_lines(&[0xFF; 57]).find('\n').is_none());
+    }
+}

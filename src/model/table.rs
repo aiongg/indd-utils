@@ -458,4 +458,176 @@ mod tests {
         let reader = Reader::new(&db);
         assert!(reader.table(5).is_err());
     }
+
+    fn le(v: u32) -> Vec<u8> {
+        v.to_le_bytes().to_vec()
+    }
+
+    /// One attribute record: ID, u16 size, u16 value count, then values
+    /// (u32 type 0, u16 length, data).
+    fn record(id: u32, values: &[&[u8]]) -> Vec<u8> {
+        let mut payload = (values.len() as u16).to_le_bytes().to_vec();
+        for v in values {
+            payload.extend(le(0));
+            payload.extend((v.len() as u16).to_le_bytes());
+            payload.extend(*v);
+        }
+        let mut d = le(id);
+        d.extend((payload.len() as u16).to_le_bytes());
+        d.extend(payload);
+        d
+    }
+
+    /// A row or column group list with one group of `count` sharing one
+    /// f64 attribute.
+    fn one_group(count: u32, id: u32, value: f64) -> Vec<u8> {
+        let mut d = le(1);
+        d.extend(le(count));
+        d.extend(0u16.to_le_bytes());
+        d.extend(1u16.to_le_bytes());
+        d.extend(record(id, &[&value.to_le_bytes()]));
+        d.extend([0; 8]);
+        d
+    }
+
+    /// The second value of a cell record: text area width at 32 and
+    /// height at 40.
+    fn geometry(w: f64, h: f64) -> Vec<u8> {
+        let mut g = vec![0; 32];
+        g.extend(w.to_le_bytes());
+        g.extend(h.to_le_bytes());
+        g
+    }
+
+    /// A 2 × 3 table: row 0 has a cell spanning columns 0–1 (its text
+    /// area is wider than one column) and a cell in column 2; row 1 has
+    /// three cells, the first with a cell format.
+    fn table_objects() -> Vec<(u32, u32, Vec<u8>)> {
+        let mut size = Vec::new();
+        for v in [2u32, 3, 1, 0] {
+            size.extend(le(v));
+        }
+        let mut parts = le(1);
+        parts.extend(le(7));
+        parts.extend(le(class::CELL_STRAND_OWNER));
+        let mut strand = 1u16.to_le_bytes().to_vec();
+        strand.extend(le(0));
+        strand.extend(le(8));
+        // Row group: one cell format for one column, then two rows of
+        // positions with their records.
+        let mut g = le(1);
+        g.extend(le(1));
+        g.extend(1u16.to_le_bytes());
+        g.extend(1u16.to_le_bytes());
+        g.extend(record(0xB63E, &[&50.0f64.to_le_bytes()]));
+        g.extend(le(2));
+        g.extend(le(0x11));
+        g.extend(le(2));
+        for row in [[1u32, 2, 3], [4, 5, 6]] {
+            g.extend(le(3));
+            for id in row {
+                g.extend(le(id));
+            }
+        }
+        g.extend(le(2));
+        let cell = |w, h| record(attr::CELL, &[&[], &geometry(w, h)]);
+        let covered = record(attr::COVERED, &[&[], &[]]);
+        g.extend(3u16.to_le_bytes());
+        g.extend(cell(150.0, 15.0));
+        g.extend(covered);
+        g.extend(cell(90.0, 15.0));
+        g.extend(3u16.to_le_bytes());
+        for _ in 0..3 {
+            g.extend(cell(90.0, 15.0));
+        }
+        let mut runs = vec![0; 8];
+        runs.extend(1u16.to_le_bytes());
+        runs.extend(le(g.len() as u32));
+        runs.extend(g);
+        let strand_data = super::super::chunk::STRAND_DATA;
+        let strand_runs = super::super::chunk::STRAND_RUNS;
+        vec![
+            (
+                5,
+                class::TABLE,
+                synthetic::chunks(&[
+                    (chunk::TABLE_SIZE, size),
+                    (chunk::TABLE_PARTS, parts),
+                    (
+                        chunk::TABLE_COLUMNS,
+                        one_group(3, attr::COLUMN_WIDTH, 100.0),
+                    ),
+                    (chunk::TABLE_ROWS, one_group(2, attr::ROW_HEIGHT, 20.0)),
+                    (chunk::TABLE_STYLE, le(0x30)),
+                ]),
+            ),
+            (
+                7,
+                class::CELL_STRAND_OWNER,
+                synthetic::chunks(&[(strand_data, strand)]),
+            ),
+            (8, 0x1, synthetic::chunks(&[(strand_runs, runs)])),
+        ]
+    }
+
+    #[test]
+    fn reads_rows_columns_and_cell_spans() {
+        let objects = table_objects();
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        let t = reader.table(5).unwrap();
+        assert_eq!((t.header_rows, t.footer_rows, t.style), (1, 0, Some(0x30)));
+        assert_eq!(t.columns, [100.0; 3]);
+        assert_eq!(t.rows.len(), 2);
+        assert_eq!(t.rows[1].height, Some(20.0));
+        let cells: Vec<_> = t
+            .cells
+            .iter()
+            .map(|c| (c.id, c.row, c.column, c.row_span, c.column_span))
+            .collect();
+        assert_eq!(
+            cells,
+            [
+                (1, 0, 0, 1, 2),
+                (3, 0, 2, 1, 1),
+                (4, 1, 0, 1, 1),
+                (5, 1, 1, 1, 1),
+                (6, 1, 2, 1, 1)
+            ]
+        );
+        // The cell format applies to the first column of each row.
+        let f = t.cells[0].format.as_ref().unwrap();
+        assert_eq!((f.style_priority, f.style), (2, 0x11));
+        assert_eq!(f.attrs.get(0xB63E), Some(&Value::Double(50.0)));
+        assert!(t.cells[1].format.is_none());
+    }
+
+    #[test]
+    fn cells_without_geometry_span_the_covered_positions() {
+        let pos = |id, size, covered| Position {
+            id,
+            size,
+            covered,
+            format: None,
+        };
+        let grid = vec![vec![
+            pos(1, Some((0.0, 0.0)), false),
+            pos(2, None, true),
+            pos(3, None, true),
+            pos(4, Some((10.0, 30.0)), false),
+        ]];
+        let row = |h| Row {
+            height: Some(h),
+            min_height: None,
+            auto_grow: None,
+        };
+        let cells = cells_from_grid(&grid, &[row(20.0), row(20.0)], &[10.0; 4]);
+        let spans: Vec<_> = cells
+            .iter()
+            .map(|c| (c.id, c.row_span, c.column_span))
+            .collect();
+        // Cell 4 is 30 high: two rows of 20.
+        assert_eq!(spans, [(1, 1, 3), (4, 2, 1)]);
+    }
 }

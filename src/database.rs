@@ -411,6 +411,47 @@ pub(crate) mod synthetic {
         }
     }
 
+    /// An object of class `class` made of chunks (ID, data), in
+    /// `encoding`.
+    pub fn object(
+        uid: u32,
+        class: u32,
+        chunks: &[(u32, Vec<u8>)],
+        encoding: Encoding,
+    ) -> crate::Object {
+        let mut bytes = Vec::new();
+        for (id, data) in chunks {
+            bytes.extend_from_slice(&encoding.u32_bytes(*id));
+            bytes.extend_from_slice(&encoding.u32_bytes(data.len() as u32));
+            bytes.extend_from_slice(data);
+        }
+        crate::Object {
+            uid,
+            class: Some(class),
+            bytes,
+            encoding,
+            recorder: None,
+        }
+    }
+
+    /// A flag byte and an in-object string of single-byte characters, as
+    /// stored in `encoding` (in big-endian data the string tag comes
+    /// before the flag; `docs/format/big-endian.md`).
+    pub fn flagged_string(encoding: Encoding, flag: u8, s: &str) -> Vec<u8> {
+        let tag = encoding.string_tag();
+        let mut out = if encoding.big_endian() {
+            vec![tag, flag, 0]
+        } else {
+            vec![flag, tag, 0]
+        };
+        out.extend_from_slice(&encoding.u16_bytes(s.len() as u16));
+        if !s.is_empty() {
+            out.extend_from_slice(&encoding.u16_bytes(0x4000 | s.len() as u16));
+            out.extend_from_slice(s.as_bytes());
+        }
+        out
+    }
+
     /// Object bytes made of chunks (ID, data).
     pub fn chunks(chunks: &[(u32, Vec<u8>)]) -> Vec<u8> {
         let mut out = Vec::new();

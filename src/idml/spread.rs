@@ -813,3 +813,75 @@ impl Writer<'_> {
         x.finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_wrap_offsets_by_side() {
+        let wrap = TextWrap {
+            mode: wrap_mode::BOUNDING_BOX,
+            offsets: [1.0, 2.0, 3.0, 4.0],
+            flags: 1,
+        };
+        let mut x = Xml::new();
+        Writer::text_wrap_preference(&mut x, Some(&wrap), None);
+        let out = x.finish();
+        assert!(out.contains("TextWrapMode=\"BoundingBoxTextWrap\""));
+        assert!(out.contains("<TextWrapOffset Top=\"2\" Left=\"1\" Bottom=\"4\" Right=\"3\" />"));
+    }
+
+    #[test]
+    fn measures_guides_from_spread_origin() {
+        use crate::model::Page;
+        let page = |uid, tx| Page {
+            uid,
+            bounds: [0.0, 0.0, 612.0, 792.0],
+            transform: Matrix([1.0, 0.0, 0.0, 1.0, tx, -396.0]),
+            master: None,
+            master_transform: Matrix::IDENTITY,
+            margins: None,
+            columns: None,
+            grid: None,
+            settings: Default::default(),
+        };
+        let origin = spread_origin(&[page(1, -612.0), page(2, 0.0)]);
+        assert_eq!(origin, (-612.0, -396.0));
+        let guide = Guide {
+            uid: 0x2299,
+            horizontal: true,
+            position: 339.5,
+            owner: 2,
+            fit_to_page: true,
+            view_threshold: 0.05,
+            color: 6,
+            guide_type: Some(0),
+            layer: 0xcc,
+            locked: false,
+            zone: Some(1.0),
+            overridden: None,
+        };
+        let mut x = Xml::new();
+        Writer::guide(&mut x, &guide, origin, -1);
+        let out = x.finish();
+        assert!(
+            out.contains("Orientation=\"Horizontal\" Location=\"735.5\""),
+            "{out}"
+        );
+        assert!(
+            out.contains("ItemLayer=\"ucc\" GuideType=\"Ruler\""),
+            "{out}"
+        );
+        assert!(out.contains("<GuideColor type=\"enumeration\">Cyan</GuideColor>"));
+        assert!(out.contains("PageIndex=\"-1\" GuideZone=\"1\""), "{out}");
+        let vertical = Guide {
+            horizontal: false,
+            position: 28.0,
+            ..guide
+        };
+        let mut x = Xml::new();
+        Writer::guide(&mut x, &vertical, origin, 1);
+        assert!(x.finish().contains("Location=\"640\""));
+    }
+}

@@ -267,4 +267,14 @@ mod tests {
         x.text("p\u{FFFF}q").end();
         assert!(x.finish().ends_with("<a k=\"x\u{FFFD}y\">pq</a>"));
     }
+
+    #[test]
+    fn splits_cdata_sections() {
+        let mut x = Xml::new();
+        x.start("Contents").cdata("abcde", 2).end();
+        assert!(
+            x.finish()
+                .ends_with("\n<Contents><![CDATA[ab]]><![CDATA[cd]]><![CDATA[e]]></Contents>")
+        );
+    }
 }

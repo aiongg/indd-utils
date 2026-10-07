@@ -166,3 +166,126 @@ impl CjkTable {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::synthetic::{flagged_string, object};
+    use crate::object::Encoding;
+    use crate::{ByteOrder, Version};
+
+    fn big_endian() -> Encoding {
+        Encoding::new(ByteOrder::Big, Version { major: 4, minor: 0 })
+    }
+
+    /// Chunk 0xCB03 of a composite font entry in `enc`: the Kanji entry,
+    /// font family 7, style "W3", a BMP range and a range of surrogate
+    /// pairs, scale option on.
+    fn entry_chunk(enc: Encoding) -> Vec<u8> {
+        let mut d = flagged_string(enc, 1, "Kanji");
+        d.extend(enc.u32_bytes(7));
+        d.extend(flagged_string(enc, 0, "W3"));
+        for f in [100.0, 0.0, 100.0, 100.0] {
+            d.extend(enc.f64_bytes(f));
+        }
+        d.extend(enc.u16_bytes(1));
+        d.extend(enc.u16_bytes(2));
+        // (first, last, first): U+4E00–U+4E01, then U+20000–U+20001.
+        for u in [0x4E00u16, 0x4E01, 0x4E00] {
+            d.extend(enc.u16_bytes(u));
+        }
+        for pair in [[0xD840u16, 0xDC00], [0xD840, 0xDC01], [0xD840, 0xDC00]] {
+            for u in pair {
+                d.extend(enc.u16_bytes(u));
+            }
+        }
+        for _ in 0..4 {
+            d.extend(enc.u16_bytes(1));
+        }
+        d
+    }
+
+    #[test]
+    fn reads_composite_font_entries_in_either_byte_order() {
+        for enc in [Encoding::default(), big_endian()] {
+            let obj = object(
+                0x60,
+                class::COMPOSITE_FONT_ENTRY,
+                &[(chunk::COMPOSITE_FONT_ENTRY, entry_chunk(enc))],
+                enc,
+            );
+            let e = CompositeFontEntry::read(0x60, &obj).unwrap().unwrap();
+            assert_eq!(e.name.idml(), "$ID/Kanji");
+            assert_eq!((e.font_family, e.font_style.idml()), (7, "W3".into()));
+            assert_eq!(e.numbers, [100.0, 0.0, 100.0, 100.0]);
+            assert_eq!(e.ranges, [(0x4E00, 0x4E01), (0x20000, 0x20001)]);
+            assert_eq!(e.scale, [1; 4]);
+            assert_eq!(e.characters(), "\u{4E00}\u{4E01}\u{20000}\u{20001}");
+        }
+    }
+
+    #[test]
+    fn composite_fonts_end_with_their_entry_list() {
+        let enc = Encoding::default();
+        let mut d = flagged_string(enc, 1, "[No composite font]");
+        // Fields not identified, then two entry UIDs.
+        d.extend([9, 9, 9, 9, 9]);
+        d.extend(enc.u16_bytes(2));
+        d.extend(enc.u32_bytes(0x60));
+        d.extend(enc.u32_bytes(0x61));
+        let obj = object(
+            0x5F,
+            class::COMPOSITE_FONT,
+            &[(chunk::COMPOSITE_FONT, d)],
+            enc,
+        );
+        let (name, entries) = CompositeFont::read(&obj).unwrap().unwrap();
+        assert!(name.builtin);
+        assert_eq!(name.name, "[No composite font]");
+        assert_eq!(entries, [0x60, 0x61]);
+    }
+
+    #[test]
+    fn reads_custom_kinsoku_characters() {
+        let enc = Encoding::default();
+        let lists = ["、。", "（", "", "、", "—"];
+        let mut chars = Vec::new();
+        for l in lists {
+            chars.extend(enc.u16_bytes(l.encode_utf16().count() as u16));
+        }
+        for l in lists {
+            for u in l.encode_utf16() {
+                chars.extend(enc.u16_bytes(u));
+            }
+        }
+        let obj = object(
+            0x70,
+            class::CUSTOM_KINSOKU,
+            &[
+                (chunk::TABLE_NAME, flagged_string(enc, 0, "Mine")),
+                (chunk::KINSOKU_CHARS, chars),
+            ],
+            enc,
+        );
+        let t = CjkTable::read(0x70, class::CUSTOM_KINSOKU, &obj)
+            .unwrap()
+            .unwrap();
+        assert!(!t.mojikumi && !t.name.builtin);
+        assert_eq!(t.name.name, "Mine");
+        assert_eq!(t.chars, Some(lists.map(String::from)));
+        // A mojikumi table has no character lists.
+        let obj = object(
+            0x71,
+            class::MOJIKUMI,
+            &[(
+                chunk::TABLE_NAME,
+                flagged_string(enc, 1, "kMojikumiDefaultName1"),
+            )],
+            enc,
+        );
+        let t = CjkTable::read(0x71, class::MOJIKUMI, &obj)
+            .unwrap()
+            .unwrap();
+        assert!(t.mojikumi && t.name.builtin && t.chars.is_none());
+    }
+}

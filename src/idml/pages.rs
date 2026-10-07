@@ -185,3 +185,80 @@ pub(super) fn page_numbers(doc: &Document) -> Vec<u32> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_pages_by_section() {
+        use crate::model::{Page, Section, Spread, numbering};
+        let page = |uid| Page {
+            uid,
+            bounds: [0.0; 4],
+            transform: Matrix::IDENTITY,
+            master: None,
+            master_transform: Matrix::IDENTITY,
+            margins: None,
+            columns: None,
+            grid: None,
+            settings: Default::default(),
+        };
+        let section = |uid, page, continue_numbering, start| Section {
+            uid,
+            page,
+            continue_numbering,
+            start,
+            style: numbering::ARABIC,
+            prefix: String::new(),
+            marker: String::new(),
+            alternate_layout: None,
+        };
+        let doc = Document {
+            spreads: vec![Spread {
+                uid: 1,
+                master_name: None,
+                transform: Matrix::IDENTITY,
+                binding_location: 0,
+                pages: (10..16).map(page).collect(),
+                items: Vec::new(),
+                guides: Vec::new(),
+                shuffle: None,
+                flattener_resolution: None,
+                show_master_items: None,
+            }],
+            // Listed out of page order, as in some samples.
+            sections: vec![
+                section(1, None, true, 1),
+                section(3, Some(14), true, 9),
+                section(2, Some(12), false, 1),
+            ],
+            ..Document::default()
+        };
+        assert_eq!(page_numbers(&doc), [1, 2, 1, 2, 3, 4]);
+        let ranges: Vec<_> = section_ranges(&doc)
+            .iter()
+            .map(|(s, first, len)| (s.uid, *first, *len))
+            .collect();
+        assert_eq!(ranges, [(1, 0, 2), (2, 2, 2), (3, 4, 2)]);
+        let mut doc = doc;
+        doc.sections[0].style = numbering::LOWER_ROMAN;
+        assert_eq!(page_names(&doc), ["i", "ii", "1", "2", "3", "4"]);
+    }
+
+    #[test]
+    fn names_pages_in_lower_roman() {
+        assert_eq!(lower_roman(1), "i");
+        assert_eq!(lower_roman(4), "iv");
+        assert_eq!(lower_roman(12), "xii");
+        assert_eq!(lower_roman(49), "xlix");
+        assert_eq!(lower_roman(1994), "mcmxciv");
+    }
+
+    #[test]
+    fn names_pages_in_kanji_digits() {
+        assert_eq!(kanji_digits(8), "八");
+        assert_eq!(kanji_digits(10), "一〇");
+        assert_eq!(kanji_digits(102), "一〇二");
+    }
+}

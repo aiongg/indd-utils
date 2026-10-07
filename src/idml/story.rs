@@ -429,3 +429,83 @@ impl Writer<'_> {
         x.finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_xml_elements_at_their_markers() {
+        use crate::model::{Attrs, XmlStructure};
+        let element = |name: &str, content, story_content, block| XmlElement {
+            name: name.into(),
+            tag: "t".into(),
+            content,
+            story_content,
+            block,
+        };
+        let (a, b, c, d) = ((9, 2), (9, 5), (9, 6), (9, 7));
+        let markers = [
+            (0, XmlMarker::Hidden),
+            (1, XmlMarker::Start(a)),
+            (2, XmlMarker::Placeholder(b)),
+            (3, XmlMarker::Start(c)),
+            (4, XmlMarker::Placeholder(d)),
+            (5, XmlMarker::End(c)),
+            (6, XmlMarker::End(a)),
+        ];
+        let story = Story {
+            uid: 9,
+            runs: vec![TextRun {
+                start: 0,
+                text: "\u{FEFF}".repeat(8) + "\r",
+                paragraph_style: None,
+                character_style: None,
+                paragraph_attrs: Attrs::default(),
+                character_attrs: Attrs::default(),
+            }],
+            anchors: Default::default(),
+            tables: Default::default(),
+            text_variables: Default::default(),
+            sources: Vec::new(),
+            xml_markers: markers.into_iter().collect(),
+            xml_element: None,
+            orientation: None,
+            toc_style: None,
+        };
+        let doc = Document {
+            xml: XmlStructure {
+                story: Some(story),
+                elements: [
+                    (a, element("di2", None, false, true)),
+                    (b, element("di2i5", Some(0x10), true, false)),
+                    (c, element("di2i6", None, false, false)),
+                    (d, element("di2i6i7", Some(0x20), false, false)),
+                ]
+                .into_iter()
+                .collect(),
+            },
+            ..Document::default()
+        };
+        let w = Writer::for_test(&doc);
+        let out: String = w
+            .backing_story()
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .concat();
+        let csr =
+            "CharacterStyleRange AppliedCharacterStyle=\"CharacterStyle/$ID/[No character style]\"";
+        let el = |name: &str| format!("XMLElement Self=\"{name}\" MarkupTag=\"XMLTag/t\"");
+        let want = format!(
+            "<{csr} /><{a}><{csr}><{b} XMLContent=\"u10\" /></CharacterStyleRange>\
+             <{csr}><{c}><{d} XMLContent=\"u20\" /></XMLElement></CharacterStyleRange>\
+             </XMLElement><{csr}><Content>\u{FEFF}</Content></CharacterStyleRange>",
+            a = el("di2"),
+            b = el("di2i5"),
+            c = el("di2i6"),
+            d = el("di2i6i7"),
+        );
+        assert!(out.contains(&want), "{out}");
+    }
+}

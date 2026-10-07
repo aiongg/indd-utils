@@ -684,3 +684,35 @@ impl Writer<'_> {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_tab_stops() {
+        let stop = |position, alignment, leader: &str| crate::model::attrs::TabStop {
+            position,
+            alignment,
+            leader: leader.into(),
+        };
+        let stops = tab_list(&[stop(12.0, 0, ""), stop(237.5, 2, ".")]).unwrap();
+        assert_eq!(stops[0][0].2, "LeftAlign");
+        assert_eq!(stops[0][3].2, "12");
+        assert_eq!(stops[1][0].2, "RightAlign");
+        assert_eq!(stops[1][2].2, ".");
+        assert_eq!(stops[1][3].2, "237.5");
+        // Unknown alignment code.
+        assert!(tab_list(&[stop(12.0, 1, "")]).is_none());
+    }
+
+    #[test]
+    fn writes_bullet_char() {
+        let Some(PropValue::Attributes(a)) = bullet_char(0, 0x2022) else {
+            panic!("not written");
+        };
+        assert_eq!(a[0].1, "UnicodeOnly");
+        assert_eq!(a[1].1, "8226");
+        assert!(bullet_char(3, 0x2022).is_none());
+    }
+}
