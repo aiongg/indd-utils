@@ -237,9 +237,12 @@ impl<'a> Reader<'a> {
                         strand::PARAGRAPH_STYLE | strand::CHARACTER_STYLE => {
                             let style = rc.u32()?;
                             let n = rc.u16()? as usize;
-                            let attrs =
-                                Attrs::parse_text(&mut rc, n, List::Text, self.db.recorder())
-                                    .unwrap_or_default();
+                            let attrs = self
+                                .attrs_or_warn(
+                                    || format!("story {uid}, text formatting"),
+                                    Attrs::parse_text(&mut rc, n, List::Text, self.db.recorder()),
+                                )
+                                .unwrap_or_default();
                             let list = if kind == strand::PARAGRAPH_STYLE {
                                 &mut para
                             } else {

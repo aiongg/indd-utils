@@ -106,6 +106,33 @@ mod tests {
     }
 
     #[test]
+    fn items_that_cannot_be_read_are_left_out() {
+        // Group 10 holds group 11, whose transform is cut short, and
+        // group 12, whose attribute list is.
+        // Six bytes: a transform needs 48; an attribute list of 5
+        // records needs more.
+        let short = |uid, id| {
+            let chunks = synthetic::chunks(&[(id, vec![5, 0, 0, 0, 0, 0])]);
+            (uid, class::GROUP, chunks)
+        };
+        let objects = [
+            group(10, &[11, 12]),
+            short(11, chunk::ITEM_TRANSFORM),
+            short(12, chunk::ITEM_ATTRS),
+        ];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        let item = reader.page_item(10, None).unwrap().unwrap();
+        assert_eq!(item.children.len(), 1);
+        assert_eq!(item.children[0].uid, 12);
+        let warnings = reader.warnings.borrow();
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert!(warnings[0].starts_with("item 11 left out"));
+        assert!(warnings[1].starts_with("item 12: attribute list left out"));
+    }
+
+    #[test]
     fn style_group_cycles_are_cut() {
         let g = |uid, root, children: &[u32]| {
             (

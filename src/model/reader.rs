@@ -60,6 +60,22 @@ impl<'a> Reader<'a> {
         self.db.encoding().cursor(data)
     }
 
+    /// The attribute list `r`, or `None` with a warning that names the
+    /// list's owner (`what`) if it cannot be parsed.
+    pub(super) fn attrs_or_warn(
+        &self,
+        what: impl FnOnce() -> String,
+        r: Result<Attrs, Error>,
+    ) -> Option<Attrs> {
+        match r {
+            Ok(a) => Some(a),
+            Err(e) => {
+                self.warn(format!("{}: attribute list left out: {e}", what()));
+                None
+            }
+        }
+    }
+
     /// Record a problem that does not stop the conversion.
     pub fn warn(&self, msg: String) {
         self.warnings.borrow_mut().push(msg);

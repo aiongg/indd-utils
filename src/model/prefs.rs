@@ -589,7 +589,10 @@ impl Reader<'_> {
                 Some(d) if d.len() >= 12 => {
                     let n = self.cursor(&d[8..]).u32()? as usize;
                     d.get(12 + 12 * n..).and_then(|rest| {
-                        Attrs::parse(self.enc(), rest, List::Item, self.db.recorder()).ok()
+                        self.attrs_or_warn(
+                            || format!("page item defaults {u}"),
+                            Attrs::parse(self.enc(), rest, List::Item, self.db.recorder()),
+                        )
                     })
                 }
                 _ => None,
@@ -671,7 +674,10 @@ impl Reader<'_> {
         if let Some(d) = get(chunk::STYLE_ATTRS)?.filter(|d| d.len() >= 2) {
             let mut c = self.cursor(&d);
             let n = c.u16()? as usize;
-            text_defaults = Attrs::parse_text(&mut c, n, List::Style, self.db.recorder()).ok();
+            text_defaults = self.attrs_or_warn(
+                || "text defaults".into(),
+                Attrs::parse_text(&mut c, n, List::Style, self.db.recorder()),
+            );
         }
         Ok(Prefs {
             values,

@@ -237,29 +237,48 @@ impl<'a> Reader<'a> {
     }
 
     /// The spreads and master spreads of the document, with the page
-    /// layout of each page resolved.
+    /// layout of each page resolved. A spread that cannot be read is left
+    /// out with a warning.
     fn document_spreads(&self) -> Result<(Vec<Spread>, Vec<Spread>), Error> {
-        let mut spreads = self
-            .uid_list(DOC, chunk::DOC_SPREADS)?
-            .into_iter()
-            .map(|uid| self.spread(uid))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut master_spreads = self
-            .uid_list(DOC, chunk::DOC_MASTER_SPREADS)?
-            .into_iter()
-            .map(|uid| self.spread(uid))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut spreads =
+            self.each_or_warn("spread", chunk::DOC_SPREADS, |u| self.spread(u).map(Some))?;
+        let mut master_spreads =
+            self.each_or_warn("master spread", chunk::DOC_MASTER_SPREADS, |u| {
+                self.spread(u).map(Some)
+            })?;
         resolve_page_layout(&mut spreads, &mut master_spreads);
         Ok((spreads, master_spreads))
     }
 
-    /// The stories the document lists.
+    /// The stories the document lists. A story that cannot be read is
+    /// left out with a warning.
     fn document_stories(&self) -> Result<Vec<Story>, Error> {
-        self.uid_list(DOC, chunk::DOC_STORIES)?
-            .into_iter()
-            .filter(|&uid| self.class(uid) == Some(class::STORY))
-            .map(|uid| self.story(uid))
-            .collect()
+        self.each_or_warn("story", chunk::DOC_STORIES, |uid| {
+            match self.class(uid) == Some(class::STORY) {
+                true => self.story(uid).map(Some),
+                false => Ok(None),
+            }
+        })
+    }
+
+    /// Read each object of the document's UID list `list` with `read`.
+    /// An object that cannot be read is left out with a warning that
+    /// calls it `what`.
+    fn each_or_warn<T>(
+        &self,
+        what: &str,
+        list: u32,
+        read: impl Fn(u32) -> Result<Option<T>, Error>,
+    ) -> Result<Vec<T>, Error> {
+        let mut out = Vec::new();
+        for uid in self.uid_list(DOC, list)? {
+            match read(uid) {
+                Ok(Some(t)) => out.push(t),
+                Ok(None) => {}
+                Err(e) => self.warn(format!("{what} {uid} left out: {e}")),
+            }
+        }
+        Ok(out)
     }
 
     /// The backing story of the XML structure: the document's chunk
@@ -269,7 +288,10 @@ impl<'a> Reader<'a> {
             Some(d) if d.len() >= 4 => {
                 let s = self.cursor(&d).u32()?;
                 match self.class(s) {
-                    Some(class::STORY) => Some(self.story(s)?),
+                    Some(class::STORY) => self
+                        .story(s)
+                        .map_err(|e| self.warn(format!("XML story {s} left out: {e}")))
+                        .ok(),
                     _ => None,
                 }
             }

@@ -504,9 +504,9 @@ impl<'a> Reader<'a> {
         Ok(paths)
     }
 
-    /// A page item and the items it contains. An item that contains
-    /// itself, or one nested more than [`MAX_ITEM_DEPTH`] deep, is left
-    /// out with a warning.
+    /// A page item and the items it contains. An item that cannot be
+    /// read, contains itself or is nested more than [`MAX_ITEM_DEPTH`]
+    /// deep is left out with a warning.
     pub(super) fn page_item(
         &self,
         uid: u32,
@@ -534,7 +534,11 @@ impl<'a> Reader<'a> {
         self.item_path.borrow_mut().push(uid);
         let item = self.page_item_contents(uid, cls, layer);
         self.item_path.borrow_mut().pop();
-        item
+        // An item that cannot be read is left out, like other objects.
+        Ok(item.unwrap_or_else(|e| {
+            self.warn(format!("item {uid} left out: {e}"));
+            None
+        }))
     }
 
     pub(super) fn page_item_contents(
@@ -575,9 +579,12 @@ impl<'a> Reader<'a> {
         }
         let paths = self.paths(uid)?;
         let attrs = match self.chunk(uid, chunk::ITEM_ATTRS)? {
-            Some(d) => {
-                Attrs::parse(self.enc(), &d, List::Item, self.db.recorder()).unwrap_or_default()
-            }
+            Some(d) => self
+                .attrs_or_warn(
+                    || format!("item {uid}"),
+                    Attrs::parse(self.enc(), &d, List::Item, self.db.recorder()),
+                )
+                .unwrap_or_default(),
             None => Attrs::default(),
         };
         let object_style = match self.chunk(uid, chunk::ITEM_OBJECT_STYLE)? {
