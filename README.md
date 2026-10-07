@@ -38,22 +38,39 @@ cargo build --release
 | `indd info <file.indd>...` | Header, master page and container summary |
 | `indd objects <file.indd>` | One line per database object: UID, class, length, first bytes |
 | `indd object <file.indd> <uid>` | One object's bytes, to stdout |
-| `indd dump <file.indd> <uid>...` | The objects' chunks in hex |
+| `indd dump [--full] <file.indd> <uid>...` | The objects' chunks in hex |
+| `indd uids <file.indd>` | One line per object: UID and class, without reading object data |
+| `indd xmp <file.indd>` | The document's XMP packet |
+| `indd audit [--tsv] <file.indd>` | What the converter does not read in the document |
 
 INDT templates are read the same way as INDD files.
 
+As a library:
+
+```rust
+let conversion = indd::convert_file("brochure.indd")?;
+std::fs::write("brochure.idml", &conversion.idml)?;
+for warning in &conversion.warnings {
+    eprintln!("warning: {warning}");
+}
+```
+
+`indd::convert(bytes, name)` converts bytes in memory and
+`indd::convert_into(bytes, name, writer)` writes the package to a
+writer. A conversion keeps no global state, so several documents can be
+converted on different threads at once.
+
 ## Supported versions
 
-| Versions | Byte order | Distinct samples | State |
-|---|---|---|---|
-| InDesign 3.0 and 4.0 | big-endian | 2 | Convert. Some object layouts differ from later versions ([`big-endian.md`](docs/format/big-endian.md)). Document preferences, object style text frame settings, the composite font (3.0) and the page number style (3.0) are left out with warnings. |
-| InDesign 5.0 and 6.0 | — | none | Not known whether they use the old or the new layouts |
-| InDesign 7.0–7.5 | little-endian | 3 | Convert. Document preferences are left out with a warning. |
-| InDesign 8.0–21.6 | little-endian | 247 | Convert. Samples exist for 8.0, 9.2, 11.3–13.1 and 15.0–21.6. Tables from 9.2 are not read. |
+| Versions | Distinct samples (little-endian, big-endian) | State |
+|---|---|---|
+| InDesign 3.0 and 4.0 | 21, 46 | Convert. Some object layouts differ from later versions ([`big-endian.md`](docs/format/big-endian.md)). Document preferences, object style text frame settings, the composite font (3.0) and the page number style (3.0) are left out with warnings. |
+| InDesign 5.0 and 6.0 | 175, 6 | Convert. Document preferences are left out with a warning. |
+| InDesign 7.0–7.5 | 526, 40 | Convert. Document preferences are left out with a warning. |
+| InDesign 8.0–21.6 | 3,368, 70 | Convert. Tables from 9.2 are not read. |
 
 The byte order flag in the header applies to object data only; the
-database pages are little-endian in every file. No sample has another
-combination of version and byte order.
+database pages are little-endian in every file.
 
 ## What converts
 
@@ -64,7 +81,7 @@ Each area below links to the document that holds the evidence.
 | Document structure | Spreads, master spreads, layers, sections (start, length, continued numbering, Arabic and lower-case Roman page numbers), the story list. [`objects.md`](docs/format/objects.md) |
 | Pages and masters | Page bounds, transforms, applied master, margins and columns, page names, ruler guides, master names and prefixes. [`objects.md`](docs/format/objects.md) |
 | Page items and graphics | Text frames (with threading), rectangles, ovals, polygons, graphic lines and groups: transforms, paths, fill and stroke, corners, applied object style, text wrap, frame fitting, anchored objects. Placed images, PDF, EPS and SVG with their bounds, clipping path settings and links; graphics pasted without a link keep their data. Transparency: blending, drop shadow, inner shadow and gradient feather where the samples tell the attributes apart. [`objects.md`](docs/format/objects.md), [`attributes.md`](docs/format/attributes.md), [`transparency.md`](docs/format/transparency.md) |
-| Text and typography | Story text, paragraph and character ranges with their local formatting (86 text attributes, among them font, size, leading, tracking, indents, spacing, tabs, rules, shading, borders, bullets and numbering, nested styles, span columns, languages), text frame settings, text variables and their instances. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
+| Text and typography | Story text, paragraph and character ranges with their local formatting (100 text attributes, among them font, size, leading, tracking, indents, spacing, tabs, rules, shading, borders, bullets and numbering, nested styles, span columns, languages), text frame settings, text variables and their instances. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
 | Styles | Paragraph, character, object, cell and table styles, with style groups, `BasedOn` and `NextStyle`. [`objects.md`](docs/format/objects.md), [`tables.md`](docs/format/tables.md) |
 | Colours and swatches | Process, spot and registration colours, tints, gradients, inks, colour groups, the `None` swatch. [`objects.md`](docs/format/objects.md) |
 | Tables | Tables in stories and in cells: rows, columns, headers and footers, cells with spans, cell text, cell and table formatting, applied styles. [`tables.md`](docs/format/tables.md) |
@@ -72,6 +89,7 @@ Each area below links to the document that holds the evidence.
 | Fonts | Font families and fonts with their names, styles, types and PostScript names; composite font entries. [`fonts.md`](docs/format/fonts.md) |
 | CJK | Kinsoku and mojikumi tables, composite fonts, grid alignment of paragraphs. [`objects.md`](docs/format/objects.md), [`fonts.md`](docs/format/fonts.md) |
 | XML | Tags, the XML structure with elements placed in story text, the backing story. [`xml.md`](docs/format/xml.md) |
+| Document lists | Index sort groups, TOC styles, trap presets, the language list, named grids, document users. [`objects.md`](docs/format/objects.md), [`idml-values.md`](docs/format/idml-values.md) |
 | Preferences | Page size, facing pages, bleed and intent from the INDD. The other preference values, and the values every InDesign export has on the root styles, are written as observed in all reference IDML files. [`idml-values.md`](docs/format/idml-values.md) |
 
 ## What does not convert
@@ -100,87 +118,64 @@ Reasons:
 | Group transforms: most groups have no transform chunk, and the identity transform written differs from the reference for 275 of 289 groups | Not started |
 | Transparency of placed graphics and object styles | Not started |
 | Link metadata other than the URI and state | Not started |
-| Indexing sort options, TOC styles, trap presets, the language list, named grids, document users, text on a path, QR codes | Not started |
+| Text on a path, QR codes | Not started |
 
 ## How fidelity is measured
 
 The local test corpus holds INDD and INDT files made by other people for
-other purposes. It is not redistributed. 78 distinct files come with an
+other purposes. It is not redistributed. 654 distinct files come with an
 IDML that InDesign exported from the same document at the same major
-version.
+version. In 489 of these pairs the IDML shows the same save as the INDD
+(trustworthy pairs); the others were saved again after the export
+([`docs/measurement.md`](docs/measurement.md)).
 
-- `tools/compare.py` converts each of the 78 files and compares the
-  output with InDesign's IDML. Elements are matched by `Self` (the INDD
-  UID), and each attribute value of the reference is counted as equal,
-  different, or missing from the output. Story text and the formatting of
-  each text range are compared too.
+- `tools/compare.py` converts each paired file and compares the output
+  with InDesign's IDML. Elements are matched by `Self` (the INDD UID).
+  The headline is value coverage: the share of the reference's values
+  that the output reproduces.
 - `tools/compare.py --all` also converts the files without a usable IDML.
 - With `--schemas` and `--jing`, every output is validated against the
   IDML RelaxNG schemas with Jing (`tools/validate.sh`).
-- `cargo test` runs smoke tests on the open-licensed samples listed in
-  `tests/fixtures/manifest.json` (fetch them first with
+- `cargo test` runs unit tests, smoke tests on the open-licensed samples
+  listed in `tests/fixtures/manifest.json` (fetch them first with
   `python3 -I tools/fetch_fixtures.py`) and, if `corpus/` exists, tests
   over the corpus.
 
 ## Current numbers
 
-From `tools/compare.py --all` with schema validation, over 251 distinct
-corpus files: 78 with a reference IDML and 173 without. The InDesign 4.0
-fixture, which is not in the corpus, also converts and validates.
+From `tools/compare.py --all` with schema validation, without the
+privately held samples:
 
 | Measure | Result |
 |---|---|
-| Conversion failures | 0 of 251 files |
-| Schema validation failures | 0 of 251 files |
-| Story text | 1,141 of 1,218 stories exact, 0 differ, 77 missing |
-| Attribute values in elements the converter writes | 75.7 % equal, 0.1 % different, 24.2 % missing |
+| Conversion failures | 0 of 654 paired files; 22 of 3,618 other files, all of them not INDD files or truncated |
+| Schema validation failures | 0 |
+| Value coverage, trustworthy pairs | 88.72 % (9,885,604 of 11,142,835 values) |
+| Value coverage, all pairs | 86.81 % |
+| Story text, trustworthy pairs | 18,509 of 18,610 stories exact, 100 differ, 1 missing |
 
-The 77 missing stories have no story object in the INDD file: 72 of their
-UIDs do not exist there, so those IDML files were probably exported from
-another save, and the other 5 are objects without a class.
-
-Elements written, and attribute values that equal the reference:
-
-| Element | Written / in reference | Attribute values equal |
-|---|---|---|
-| `Story` | 1,141 / 1,218 | 75 % |
-| Text ranges (by start offset) | 2,156 / 2,159 | 93 % |
-| `ParagraphStyle` | 499 / 500 | 82 % |
-| `ObjectStyle` | 337 / 340 | 86 % |
-| `TableStyle` | 160 / 160 | 98 % |
-| `TextFrame` | 1,154 / 1,232 | 38 % |
-| `Rectangle` | 761 / 818 | 19 % |
-| `Polygon` | 1,066 / 1,089 | 27 % |
-| `Image` | 235 / 263 | 9 % |
-| `Page` | 325 / 335 | 32 % |
-| `Color` | 1,352 / 1,358 | 62 % |
-| `GradientStop` | 212 / 216 | 100 % |
-| `Cell` | 1,089 / 1,329 | 81 % |
-| `Font` | 2,778 / 2,890 | 91 % |
-| `Hyperlink` | 43 / 45 | 100 % |
-| `CrossReferenceFormat` | 684 / 702 | 100 % |
-| `TextVariable` | 777 / 777 | 100 % |
-
-Low rates for page items come mostly from attributes the converter does
-not write, such as `Visible`, `Name`, `Locked`, layout constraints and
-gradient hilites. Most of them have one value in nearly every sample, so
-their INDD fields cannot be located.
-
-The converter printed 2,622 warnings over the corpus. 2,608 of them are
-hyperlink sources that cross a style range, in 16 versions of one
-template.
+The biggest remaining gaps are elements the converter does not write
+yet (hyperlinks in some documents, page references, footnote options of
+text frames, EPS text, graphic layers) and attributes that have one value
+in nearly every sample, so that their INDD fields cannot be located.
+`compare.py` lists them, and writes per-key tables to `target/compare/`.
 
 ## Development
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): the clean-room rules, the checks
+  to run, and how to add an attribute, element or constant value end to
+  end. Read [`CLEANROOM.md`](CLEANROOM.md) first.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): layers, data flow, module map,
+  and how the generated value files work.
 - `python3 -I tools/fetch_fixtures.py` downloads the test fixtures.
 - `cargo test`, `cargo clippy --all-targets`, `cargo fmt`.
 - `python3 -I tools/compare.py [--all] [--detail TAG --show N]
   [--schemas DIR --jing DIR]` after every change. The schemas and Jing
   are not part of the repository; see `tools/validate.sh`.
+- `python3 -I tools/diff_outputs.py [OLD [NEW]]` compares the output of
+  two revisions over the corpus; a refactoring must change none.
 - `python3 -I tools/inventory.py corpus/` lists each sample's InDesign
   version and whether it has a matching IDML file.
-- Format findings go in `docs/format/`. Read [`CLEANROOM.md`](CLEANROOM.md)
-  before contributing.
 
 ## Licence
 
