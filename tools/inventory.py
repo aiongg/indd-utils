@@ -13,8 +13,8 @@ extension (and without a further `.indd` or `.indt`, as in `a.indt.idml`),
 equals the INDD file's name without the extension, ignoring case:
 
 - In the same folder.
-- Otherwise, if a folder above the INDD file holds a `SOURCE.md` (one
-  downloaded source), anywhere under that folder: the candidate whose
+- Otherwise, if a folder above the INDD file holds a `SOURCE.md` or
+  `SOURCE-*.md` (one downloaded source), anywhere under that folder: the candidate whose
   folder shares the longest path with the INDD file's folder. A candidate
   that sits next to another INDD file of the same name belongs to that file
   and is not used.
@@ -99,11 +99,12 @@ def key(path: Path) -> str:
 
 
 def source_dir(path: Path, root: Path):
-    """The nearest folder above `path` (inside `root`) with a SOURCE.md."""
+    """The nearest folder above `path` (inside `root`) with a SOURCE.md or
+    SOURCE-*.md (a later download that supplements a source)."""
     for d in path.parents:
         if d == root or root not in d.parents:
             return None
-        if (d / "SOURCE.md").is_file():
+        if (d / "SOURCE.md").is_file() or any(d.glob("SOURCE-*.md")):
             return d
 
 

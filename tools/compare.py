@@ -12,6 +12,7 @@ reports story text agreement.
 Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
                                    [--schemas DIR --jing DIR] [--bin PATH]
                                    [--all] [--exclude PREFIX]... [--jobs N]
+                                   [--shortfalls N]
 Run from the repository root after `cargo build --release`. With --schemas
 and --jing, also validates every output with tools/validate.sh. --bin runs
 another converter binary, for example a copy of the previous build.
@@ -21,6 +22,10 @@ version, either byte order, without a usable IDML), validates the output
 if schemas are given, and reports failures for those files separately.
 --exclude leaves out files whose path under corpus/ starts with PREFIX.
 Converter warnings are counted by kind over all converted files.
+
+--shortfalls N lists the N element types and attributes that fall short
+(missing elements; wrong or missing attribute values; differing story
+text) in the most documents.
 
 Embedded file data (`Contents`) is compared by digest, so it is reported as
 `md5:<hex> <length>` rather than as the full text.
@@ -237,8 +242,10 @@ def main():
                     help="leave out files whose path under corpus/ starts with this (repeatable)")
     ap.add_argument("--warnings", type=int, default=15,
                     help="number of warning kinds to list")
+    ap.add_argument("--shortfalls", type=int, default=0,
+                    help="rank the N biggest shortfalls by documents affected")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
-                    help="schema validations run in parallel")
+                    help="conversions and schema validations run in parallel")
     args = ap.parse_args()
     check = bool(args.schemas and args.jing)
 
@@ -247,6 +254,7 @@ def main():
     attr_ok = defaultdict(Counter)
     examples = defaultdict(list)
     story_ok = Counter()
+    short_docs = Counter()  # (kind, tag, attribute) -> documents affected
     failures = []
     warnings = Counter()
     warned_files = Counter()
@@ -256,10 +264,14 @@ def main():
     others = unpaired(args.file, args.exclude, seen, known) if args.all else []
     other_failures = []
     pool = ThreadPoolExecutor(max(1, args.jobs))
-    checks = []  # (name, paired, future of schema errors)
 
     def convert(indd, out):
+        """Convert (and validate) one file; runs in the pool."""
         r = subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
+        errs = validate(out, args) if r.returncode == 0 and check else []
+        return r, errs
+
+    def count_warnings(r):
         kinds = set()
         for line in r.stderr.splitlines():
             if line.startswith("warning: "):
@@ -268,28 +280,39 @@ def main():
                 kinds.add(kind)
         for kind in kinds:
             warned_files[kind] += 1
-        if r.returncode == 0 and check:
-            checks.append((indd.name, pool.submit(validate, out, args)))
-        return r
 
+    other_invalid = []
+    invalid = []
     with tempfile.TemporaryDirectory() as tmp:
+        jobs = [pool.submit(convert, indd, Path(tmp) / f"other{n}.idml")
+                for n, indd in enumerate(others)]
+        jobs += [pool.submit(convert, indd, Path(tmp) / f"pair{n}.idml")
+                 for n, (indd, _) in enumerate(todo)]
         for n, indd in enumerate(others):
-            r = convert(indd, Path(tmp) / f"other{n}.idml")
+            r, errs = jobs[n].result()
+            count_warnings(r)
             if r.returncode != 0:
                 other_failures.append((indd.name, r.stderr.strip()))
-        n_others = len(checks)
+            elif errs:
+                other_invalid.append((indd.name, errs))
+            (Path(tmp) / f"other{n}.idml").unlink(missing_ok=True)
         for n, (indd, idml) in enumerate(todo):
             out = Path(tmp) / f"pair{n}.idml"
-            r = convert(indd, out)
+            r, errs = jobs[len(others) + n].result()
+            count_warnings(r)
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
+            if errs:
+                invalid.append((indd.name, errs))
             ref_el, ref_st, ref_rg = load(idml)
             our_el, our_st, our_rg = load(out)
+            short = set()
             for (tag, s), el in ref_el.items():
                 total[tag] += 1
                 mine = our_el.get((tag, s))
                 if mine is None:
+                    short.add(("element", tag, ""))
                     continue
                 found[tag] += 1
                 ours = props(mine)
@@ -298,10 +321,12 @@ def main():
                         continue
                     if k not in ours:
                         attr_ok[(tag, k)]["missing"] += 1
+                        short.add(("attribute", tag, k))
                     elif norm(ours[k]) == norm(v):
                         attr_ok[(tag, k)]["ok"] += 1
                     else:
                         attr_ok[(tag, k)]["wrong"] += 1
+                        short.add(("attribute", tag, k))
                         if len(examples[(tag, k)]) < args.show:
                             examples[(tag, k)].append((indd.name, s, v, ours[k]))
             for sid, rgs in ref_rg.items():
@@ -311,31 +336,35 @@ def main():
                 for start, attrs in rgs.items():
                     total["TextRange"] += 1
                     if start not in mine:
+                        short.add(("element", "TextRange", ""))
                         continue
                     found["TextRange"] += 1
                     for k, v in attrs.items():
                         o = mine[start].get(k)
                         if o is None:
                             attr_ok[("TextRange", k)]["missing"] += 1
+                            short.add(("attribute", "TextRange", k))
                         elif norm(o) == norm(v):
                             attr_ok[("TextRange", k)]["ok"] += 1
                         else:
                             attr_ok[("TextRange", k)]["wrong"] += 1
+                            short.add(("attribute", "TextRange", k))
                             if len(examples[("TextRange", k)]) < args.show:
                                 examples[("TextRange", k)].append((indd.name, sid, start, v, o))
             for sid, text in ref_st.items():
                 if sid not in our_st:
                     story_ok["missing"] += 1
+                    short.add(("element", "Story", ""))
                 elif our_st[sid] == text:
                     story_ok["ok"] += 1
                 else:
                     story_ok["wrong"] += 1
+                    short.add(("text", "Story", ""))
                     if len(examples[("Story", "text")]) < max(args.show, 3):
                         examples[("Story", "text")].append((indd.name, sid, text[:80], our_st[sid][:80]))
-        invalid = [(name, f.result()) for name, f in checks]
+            short_docs.update(short)
+            out.unlink(missing_ok=True)
         pool.shutdown()
-    other_invalid = [(name, errs) for name, errs in invalid[:n_others] if errs]
-    invalid = [(name, errs) for name, errs in invalid[n_others:] if errs]
 
     print(f"conversion failures: {len(failures)} of {len(todo)} paired files")
     for name, err in failures[:10]:
@@ -361,6 +390,25 @@ def main():
     print("\nelements (produced / in reference):")
     for tag, n in total.most_common():
         print(f"  {tag:34} {found[tag]:6} / {n:6}")
+    if args.shortfalls:
+        n_docs = len(todo) - len(failures)
+        print(f"\nshortfalls by documents affected (of {n_docs}):")
+        def instances(kind, tag, k):
+            """How many elements, values or stories fall short."""
+            if kind == "attribute":
+                return attr_ok[(tag, k)]["wrong"] + attr_ok[(tag, k)]["missing"]
+            if kind == "element":
+                return total[tag] - found[tag]
+            return story_ok["wrong"]
+        ranked = sorted(short_docs.items(), key=lambda kv: (-kv[1], -instances(*kv[0]), kv[0]))
+        for (kind, tag, k), n in ranked[:args.shortfalls]:
+            what = f"{story_ok['wrong']} stories differ"
+            if kind == "attribute":
+                c = attr_ok[(tag, k)]
+                what = f"{c['wrong']} wrong, {c['missing']} missing of {sum(c.values())}"
+            elif kind == "element":
+                what = f"{total[tag] - found[tag]} of {total[tag]} not produced"
+            print(f"  {n:5}  {tag + (' ' + k if k else ''):56} {what}")
     for tag in args.detail:
         print(f"\nattributes of {tag} (ok / wrong / missing):")
         rows = [(k, c) for (t, k), c in attr_ok.items() if t == tag]
