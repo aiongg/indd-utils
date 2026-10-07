@@ -14,7 +14,8 @@ Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
                                    [--all] [--exclude PREFIX]... [--jobs N]
                                    [--shortfalls N]
 Run from the repository root after `cargo build --release`. With --schemas
-and --jing, also validates every output with tools/validate.sh. --bin runs
+and --jing, also validates every output with tools/validate.sh, in batches
+of VALIDATE_BATCH files (one Jing run per schema for a whole batch). --bin runs
 another converter binary, for example a copy of the previous build.
 
 --all also converts every other INDD and INDT file under corpus/ (any
@@ -46,6 +47,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target" / "release" / "indd"
+# Converted files validated together in one tools/validate.sh run.
+VALIDATE_BATCH = 600
 
 
 def inventory():
@@ -107,14 +110,23 @@ def warning_kind(msg):
     return re.sub(r"\b\d+(\.\d+)?\b", "#", msg)
 
 
-def validate(out, args):
-    """Schema errors of an output (empty if valid); runs tools/validate.sh."""
+def validate(outs, args):
+    """Schema errors of outputs, as {path: [messages]} (valid outputs are
+    left out). Runs tools/validate.sh once over all of them; it batches the
+    Jing runs."""
+    errs = defaultdict(list)
+    if not outs:
+        return errs
+    env = dict(os.environ, VALIDATE_JOBS=str(max(1, args.jobs)))
     v = subprocess.run(
-        [ROOT / "tools" / "validate.sh", out, args.schemas, args.jing],
-        capture_output=True, text=True)
-    if v.returncode == 0:
-        return []
-    return v.stdout.strip().splitlines() or [v.stderr.strip()]
+        [ROOT / "tools" / "validate.sh", *map(str, outs), args.schemas, args.jing],
+        capture_output=True, text=True, env=env)
+    for line in v.stdout.splitlines():
+        path, _, msg = line.partition("\t")
+        errs[path].append(msg)
+    if v.returncode not in (0, 1) or v.returncode == 1 and not errs or "jing" in errs:
+        raise SystemExit(f"tools/validate.sh failed: {v.stderr.strip()} {errs.get('jing')}")
+    return errs
 
 
 def text_ranges(story):
@@ -266,10 +278,8 @@ def main():
     pool = ThreadPoolExecutor(max(1, args.jobs))
 
     def convert(indd, out):
-        """Convert (and validate) one file; runs in the pool."""
-        r = subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
-        errs = validate(out, args) if r.returncode == 0 and check else []
-        return r, errs
+        """Convert one file; runs in the pool."""
+        return subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
 
     def count_warnings(r):
         kinds = set()
@@ -288,23 +298,40 @@ def main():
                 for n, indd in enumerate(others)]
         jobs += [pool.submit(convert, indd, Path(tmp) / f"pair{n}.idml")
                  for n, (indd, _) in enumerate(todo)]
+        # Converted files waiting for validation: (output, name, list of
+        # invalid files it belongs to). They are validated in batches, which
+        # bounds the space the unpacked outputs take.
+        to_check = []
+
+        def flush(at_least):
+            if len(to_check) < at_least:
+                return
+            errs = validate([out for out, _, _ in to_check], args)
+            for out, name, bad in to_check:
+                if errs.get(str(out)):
+                    bad.append((name, errs[str(out)]))
+                out.unlink(missing_ok=True)
+            to_check.clear()
         for n, indd in enumerate(others):
-            r, errs = jobs[n].result()
+            r = jobs[n].result()
             count_warnings(r)
+            out = Path(tmp) / f"other{n}.idml"
             if r.returncode != 0:
                 other_failures.append((indd.name, r.stderr.strip()))
-            elif errs:
-                other_invalid.append((indd.name, errs))
-            (Path(tmp) / f"other{n}.idml").unlink(missing_ok=True)
+            elif check:
+                to_check.append((out, indd.name, other_invalid))
+                flush(VALIDATE_BATCH)
+                continue
+            out.unlink(missing_ok=True)
         for n, (indd, idml) in enumerate(todo):
             out = Path(tmp) / f"pair{n}.idml"
-            r, errs = jobs[len(others) + n].result()
+            r = jobs[len(others) + n].result()
             count_warnings(r)
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
-            if errs:
-                invalid.append((indd.name, errs))
+            if check:
+                to_check.append((out, indd.name, invalid))
             ref_el, ref_st, ref_rg = load(idml)
             our_el, our_st, our_rg = load(out)
             short = set()
@@ -363,8 +390,12 @@ def main():
                     if len(examples[("Story", "text")]) < max(args.show, 3):
                         examples[("Story", "text")].append((indd.name, sid, text[:80], our_st[sid][:80]))
             short_docs.update(short)
-            out.unlink(missing_ok=True)
+            if check:
+                flush(VALIDATE_BATCH)
+            else:
+                out.unlink(missing_ok=True)
         pool.shutdown()
+        flush(1)
 
     print(f"conversion failures: {len(failures)} of {len(todo)} paired files")
     for name, err in failures[:10]:
