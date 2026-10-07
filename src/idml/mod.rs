@@ -3732,7 +3732,7 @@ impl Writer<'_> {
                 .attr("NextTextFrame", uref(*next))
                 .attr("ContentType", "TextType");
         } else if let ItemKind::Shape(_) = item.kind {
-            let content = if item.graphics.is_empty() {
+            let content = if item.graphics.is_empty() && !item.props.graphic_frame {
                 "Unassigned"
             } else {
                 "GraphicType"

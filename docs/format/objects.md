@@ -492,6 +492,13 @@ Frames, shapes and lines are all class 0x6201; groups are 0x401.
 | 0x6E03 | Attribute list: local formatting (see `attributes.md`) |
 | 0x1B916 | u32: applied object style |
 
+**Content type.** A rectangle, oval or polygon with a placed graphic is
+`ContentType="GraphicType"`. Without one, chunk 0x1623 (u16) decides: 1
+is `GraphicType` (an empty graphic frame), 0 or no chunk `Unassigned`.
+In 200 of the trustworthy pairs, the 757 empty shapes with
+`GraphicType` all have 1, and the 15,768 with `Unassigned` have 0
+(13,226) or no chunk.
+
 Groups store their matrix in chunk 0x40D when they have no chunk 0x151:
 with it, the `ItemTransform` of all 5,670 groups of the trustworthy
 pairs (8,788 of 8,789 over all pairs) matches; without it, 5,277 of them were

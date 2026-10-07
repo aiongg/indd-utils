@@ -121,6 +121,8 @@ pub mod chunk {
     pub const ITEM_TRANSFORM: u32 = 0x151;
     /// A group's transform when it has no chunk 0x151.
     pub const GROUP_TRANSFORM: u32 = 0x40D;
+    /// u16 1 for a frame meant for a graphic.
+    pub const ITEM_CONTENT: u32 = 0x1623;
     pub const ITEM_PATHS: u32 = 0x162B;
     pub const ITEM_HIERARCHY: u32 = 0x15B;
     pub const COLUMN_FRAME_LIST: u32 = 0x220;
@@ -426,6 +428,9 @@ pub struct ItemProps {
     /// The overridden master page item (0 for none) and the IDs of the
     /// attributes overridden (chunk 0x1424).
     pub overridden: Option<(u32, Vec<u32>)>,
+    /// Chunk 0x1623 is 1: a frame for a graphic (`ContentType`
+    /// `GraphicType` without a graphic).
+    pub graphic_frame: bool,
 }
 
 /// A page item name: a built-in key or a name given by the user.
@@ -2127,6 +2132,9 @@ impl<'a> Reader<'a> {
                 counts(chunk::ITEM_UPDATED_CHANGES)?,
             ],
             overridden,
+            graphic_frame: self
+                .chunk(uid, chunk::ITEM_CONTENT)?
+                .is_some_and(|d| d.len() >= 2 && Cursor::new(&d).u16().ok() == Some(1)),
         })
     }
 
