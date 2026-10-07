@@ -14,6 +14,21 @@ pub struct Matrix(pub [f64; 6]);
 impl Matrix {
     pub const IDENTITY: Matrix = Matrix([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
+    /// This transform followed by `outer` (points are row vectors, as
+    /// in IDML).
+    pub fn then(&self, outer: &Matrix) -> Matrix {
+        let [a, b, c, d, e, f] = self.0;
+        let [p, q, r, s, t, u] = outer.0;
+        Matrix([
+            a * p + b * r,
+            a * q + b * s,
+            c * p + d * r,
+            c * q + d * s,
+            e * p + f * r + t,
+            e * q + f * s + u,
+        ])
+    }
+
     pub(super) fn read(c: &mut Cursor) -> Result<Matrix, Error> {
         let mut m = [0.0; 6];
         for v in &mut m {
@@ -154,13 +169,30 @@ pub enum GraphicKind {
     Svg,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+/// A link (class 0x8C42) and its link resource (class 0x8C41). See
+/// `docs/format/objects.md`, links.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Link {
     pub uid: u32,
     /// `LinkResourceURI`, for example `file:/Users/me/image.jpg`.
     pub uri: String,
     /// The linked file is stored in the document (`StoredState="Embedded"`).
     pub embedded: bool,
+    /// Chunk 0x8C9B, u32 at 12: 0 when the linked file was modified.
+    pub modified: Option<bool>,
+    /// Chunk 0x8C9B, u16 at 20: 1 when the link is shown.
+    pub shown: Option<bool>,
+    /// The import stamp (`file <time> <size>`); `None` when empty.
+    pub stamp: Option<String>,
+    /// The file's modification time and the time it was placed or
+    /// updated, as FILETIME (100 ns since 1601-01-01 UTC).
+    pub times: Option<[u64; 2]>,
+    /// Chunk 0x1B6 of the link.
+    pub pdf_identifier: Option<u32>,
+    /// The file size of the resource: high and low u32.
+    pub size: Option<[u32; 2]>,
+    /// The format name of the resource (`JPEG`, `Photoshop`, ...).
+    pub format: Option<String>,
 }
 
 /// The bytes of a file stored in the document, if there is one.
@@ -182,8 +214,63 @@ pub struct Graphic {
     pub contour_type: Option<u32>,
     /// Clipping path settings (chunk 0x2C1A), if stored.
     pub clipping: Option<ClippingPath>,
-    /// Chunk 0x8C39, u16 at 0: apply the Photoshop clipping path (1 true).
-    pub photoshop_clipping: Option<u16>,
+    /// Name, visibility, change counts and the other page item settings.
+    pub props: ItemProps,
+    /// Chunk 0x1B916.
+    pub object_style: Option<u32>,
+    /// The attribute list (chunk 0x6E03).
+    pub attrs: Attrs,
+    /// Image properties (chunk 0x1708 of an image).
+    pub image: Option<ImageProperties>,
+    /// Colour profile code (chunk 0x7C0F, u32 at 0).
+    pub profile: Option<u32>,
+    /// Grey, RGB, grey again and CMYK vector policy codes of a PDF or EPS
+    /// (chunk 0x7C42, four u32); only the RGB and CMYK codes are known.
+    pub vector_policies: Option<[u32; 4]>,
+    /// PDF placement (chunk 0x251B): page number, transparent background
+    /// byte, crop code.
+    pub pdf: Option<(u32, u8, u32)>,
+    /// Layers of an image, PDF or imported page (chunk 0x177A).
+    pub layers: Option<GraphicLayers>,
+    /// Applied layer comp (chunk 0x9209, i32 at 4).
+    pub layer_comp: Option<i32>,
+    /// Image import options (chunk 0x1714): apply the Photoshop clipping
+    /// path, alpha channel name.
+    pub import: Option<(bool, Name)>,
+}
+
+/// Image properties (chunk 0x1708): u32 count, then records of u32 key,
+/// u32 length *n*, u8, *n* bytes. See `docs/format/objects.md`, image
+/// properties.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImageProperties {
+    /// Key 0x67: 1 grey, 2 RGB, 4 CMYK.
+    pub color_space: Option<u32>,
+    /// Key 0x6F (a colour table) is present.
+    pub indexed: bool,
+    /// Keys 0x6C and 0x6D, 16.16 fixed point.
+    pub resolution: Option<[f64; 2]>,
+}
+
+/// Layers of a placed graphic (chunk 0x177A).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct GraphicLayers {
+    /// The u16 at 0 is 1.
+    pub option: bool,
+    /// In IDML order.
+    pub layers: Vec<GraphicLayer>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphicLayer {
+    pub name: Name,
+    pub id: u32,
+    pub original_visibility: bool,
+    pub current_visibility: bool,
+    /// The parent layer's ID, −1 for a top-level layer.
+    pub parent: i32,
+    /// 0x01 separator, 0x04 effects layer, 0x08 locked.
+    pub flags: u32,
 }
 
 /// Clipping path settings of a graphic (chunk 0x2C1A, 37 bytes): u32 type
@@ -752,11 +839,121 @@ impl<'a> Reader<'a> {
                 }
                 _ => None,
             },
-            photoshop_clipping: match self.chunk(uid, chunk::PHOTOSHOP_CLIPPING)? {
-                Some(d) if d.len() >= 2 => Some(self.cursor(&d).u16()?),
+            props: self.item_props(uid).unwrap_or_else(|e| {
+                self.warn(format!("graphic {uid}: settings left out: {e}"));
+                ItemProps::default()
+            }),
+            object_style: match self.chunk(uid, chunk::ITEM_OBJECT_STYLE)? {
+                Some(d) if d.len() >= 4 => uid_or_none(self.cursor(&d).u32()?),
+                _ => None,
+            },
+            attrs: match self.chunk(uid, chunk::ITEM_ATTRS)? {
+                Some(d) => self
+                    .attrs_or_warn(
+                        || format!("graphic {uid}"),
+                        Attrs::parse(self.enc(), &d, List::Item, self.db.recorder()),
+                    )
+                    .unwrap_or_default(),
+                None => Attrs::default(),
+            },
+            image: match self.chunk(uid, chunk::IMAGE_PROPERTIES)? {
+                Some(d) if kind == GraphicKind::Image => self.image_properties(&d),
+                _ => None,
+            },
+            profile: match self.chunk(uid, chunk::IMAGE_PROFILE)? {
+                Some(d) if d.len() >= 4 => Some(self.cursor(&d).u32()?),
+                _ => None,
+            },
+            vector_policies: match self.chunk(uid, chunk::VECTOR_POLICIES)? {
+                Some(d) if d.len() >= 16 => {
+                    let mut c = self.cursor(&d);
+                    Some([c.u32()?, c.u32()?, c.u32()?, c.u32()?])
+                }
+                _ => None,
+            },
+            pdf: match self.chunk(uid, chunk::PDF_PLACEMENT)? {
+                Some(d) if d.len() >= 12 => {
+                    Some((self.cursor(&d).u32()?, d[6], self.cursor(&d[8..]).u32()?))
+                }
+                _ => None,
+            },
+            layers: match self.chunk(uid, chunk::GRAPHIC_LAYERS)? {
+                Some(d) => self.graphic_layers(&d).unwrap_or_else(|e| {
+                    self.warn(format!("graphic {uid}: layers left out: {e}"));
+                    None
+                }),
+                None => None,
+            },
+            layer_comp: match self.chunk(uid, chunk::LAYER_COMP)? {
+                Some(d) if d.len() >= 8 => Some(self.cursor(&d[4..]).i32()?),
+                _ => None,
+            },
+            import: match self.chunk(uid, chunk::IMAGE_IMPORT)? {
+                Some(d) if d.len() >= 9 => {
+                    let mut c = self.cursor(&d[4..]);
+                    let clipping = c.u16()?;
+                    c.u16()?;
+                    match (clipping, c.name()) {
+                        (0 | 1, Ok(name)) => Some((clipping == 1, name)),
+                        _ => None,
+                    }
+                }
                 _ => None,
             },
         }))
+    }
+
+    /// Image properties from chunk 0x1708; `None` if the record list is
+    /// cut short.
+    fn image_properties(&self, d: &[u8]) -> Option<ImageProperties> {
+        let mut c = self.cursor(d);
+        let n = c.u32().ok()?;
+        let mut p = ImageProperties::default();
+        let mut resolution = [None, None];
+        for _ in 0..n {
+            let key = c.u32().ok()?;
+            let len = c.u32().ok()? as usize;
+            c.u8().ok()?;
+            let data = c.bytes(len).ok()?;
+            let value = || (len >= 4).then(|| self.cursor(data).u32().ok()).flatten();
+            match key {
+                0x67 => p.color_space = value(),
+                0x6C => resolution[0] = value().map(|v| f64::from(v) / 65536.0),
+                0x6D => resolution[1] = value().map(|v| f64::from(v) / 65536.0),
+                0x6F => p.indexed = true,
+                _ => {}
+            }
+        }
+        if let [Some(h), Some(v)] = resolution {
+            p.resolution = Some([h, v]);
+        }
+        Some(p)
+    }
+
+    /// Layers of a placed graphic (chunk 0x177A): u16 option flag, 8
+    /// bytes, u32 count, then per layer a flagged name, u32 ID, u32
+    /// original and current visibility, i32 parent ID and u32 flags.
+    fn graphic_layers(&self, d: &[u8]) -> Result<Option<GraphicLayers>, Error> {
+        let mut c = self.cursor(d);
+        let option = c.u16()? == 1;
+        c.skip(8)?;
+        let n = c.u32()? as usize;
+        if n > d.len() / 20 {
+            return Err(Error::Corrupt(format!("{n} graphic layers")));
+        }
+        let mut layers = Vec::with_capacity(n);
+        for _ in 0..n {
+            let name = c.name()?;
+            layers.push(GraphicLayer {
+                name,
+                id: c.u32()?,
+                original_visibility: c.u32()? == 1,
+                current_visibility: c.u32()? == 1,
+                parent: c.i32()?,
+                flags: c.u32()?,
+            });
+        }
+        Ok(Some(GraphicLayers { option, layers }))
     }
 
     /// The bytes of raw data object `uid` (`None` if `uid` is not one).
@@ -771,7 +968,8 @@ impl<'a> Reader<'a> {
     }
 
     /// A link, the URI of its resource and, for an embedded link, the
-    /// embedded file.
+    /// embedded file. Fields after the URI that are cut short are left
+    /// out (`None`).
     pub(super) fn link(&self, uid: u32) -> Result<Option<(Link, EmbeddedFile)>, Error> {
         if uid == 0 || self.db.object(uid)?.is_none() {
             return Ok(None);
@@ -783,28 +981,78 @@ impl<'a> Reader<'a> {
             return Ok(None);
         }
         let resource = self.cursor(&info[8..]).u32()?;
-        let (uri, data) = match self.chunk(resource, chunk::LINK_RESOURCE_URI)? {
-            Some(d) if d.len() >= 5 => {
-                let mut c = self.cursor(&d);
-                c.u8()?;
-                let n = c.u32()? as usize;
-                let uri = String::from_utf8_lossy(c.bytes(n.min(c.remaining()))?).into_owned();
-                // After the URI: 12 bytes, then the UID of the embedded
-                // file's raw data object (0 for a normal link).
-                let data = if c.remaining() >= 16 {
-                    c.skip(12)?;
-                    self.raw_data(c.u32()?)?
-                } else {
-                    None
-                };
-                (uri, data)
-            }
-            _ => (String::new(), None),
-        };
-        let link = Link {
+        let mut link = Link {
             uid,
-            uri,
-            embedded: data.is_some(),
+            ..Link::default()
+        };
+        let mut data = None;
+        if let Some(d) = self.chunk(resource, chunk::LINK_RESOURCE_URI)?
+            && d.len() >= 5
+        {
+            let mut c = self.cursor(&d);
+            c.u8()?;
+            let n = c.u32()? as usize;
+            link.uri = String::from_utf8_lossy(c.bytes(n.min(c.remaining()))?).into_owned();
+            // After the URI: 12 bytes, then the UID of the embedded
+            // file's raw data object (0 for a normal link).
+            if c.remaining() >= 16 {
+                c.skip(12)?;
+                data = self.raw_data(c.u32()?)?;
+                // Then the stamp, the modification time, the file size,
+                // a byte and the format name.
+                let rest = (|| -> Result<_, Error> {
+                    let n = c.u32()? as usize;
+                    c.segments(n)?;
+                    c.skip(8)?;
+                    let size = [c.u32()?, c.u32()?];
+                    let format = c.name()?.name;
+                    Ok((size, format))
+                })();
+                if let Ok((size, format)) = rest {
+                    link.size = Some(size);
+                    link.format = Some(format);
+                }
+            }
+        }
+        link.embedded = data.is_some();
+        let mut c = self.cursor(&info);
+        let head = (|| -> Result<_, Error> {
+            c.skip(12)?;
+            let modified = c.u32()?;
+            c.skip(4)?;
+            let shown = c.u16()?;
+            c.skip(10)?;
+            Ok((modified, shown))
+        })();
+        if let Ok((modified, shown)) = head {
+            link.modified = match modified {
+                0 => Some(true),
+                1 => Some(false),
+                _ => None,
+            };
+            link.shown = match shown {
+                0 => Some(false),
+                1 => Some(true),
+                _ => None,
+            };
+            let stamp = (|| -> Result<_, Error> {
+                let n = c.u32()? as usize;
+                let stamp = c.segments(n)?;
+                let mut time = || -> Result<u64, Error> {
+                    let high = c.u32()?;
+                    Ok(u64::from(high) << 32 | u64::from(c.u32()?))
+                };
+                let times = [time()?, time()?];
+                Ok((stamp, times))
+            })();
+            if let Ok((stamp, times)) = stamp {
+                link.stamp = (!stamp.is_empty()).then_some(stamp);
+                link.times = Some(times);
+            }
+        }
+        link.pdf_identifier = match self.chunk(uid, chunk::LINK_PDF_IDENTIFIER)? {
+            Some(d) if d.len() >= 4 => Some(self.cursor(&d).u32()?),
+            _ => None,
         };
         Ok(Some((link, data)))
     }

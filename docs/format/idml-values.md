@@ -141,10 +141,31 @@ All 496 `Image` elements in the 240 corpus IDML files (119 files) have
 `ClippingPathSettings` with `InvertPath="false"`,
 `IncludeInsideEdges="false"`, `RestrictToFrame="false"` and
 `AppliedPathName="$ID/"`, and `ImageIOPreference` with
-`AllowAutoEmbedding="true"` and `AlphaChannelName="$ID/"`. The 386 PDF
-and 49 EPS graphics with `ClippingPathSettings` have the same four
-values. The converter writes them (`objects.md`, clipping path
-settings).
+`AllowAutoEmbedding="true"`. The 386 PDF and 49 EPS graphics with
+`ClippingPathSettings` have the same four values. The converter writes
+them (`objects.md`, clipping path settings).
+
+Over the 5,131 graphics of the trustworthy pairs, every graphic has
+`LocalDisplaySetting="Default"`; every image (3,607)
+`ImageRenderingIntent="UseColorSettings"`; every PDF and EPS (1,339)
+`GrayVectorPolicy="IgnoreAll"`; every SVG (146) `UseSVGAs="EmbedCode"`.
+From DOM 21 every image, PDF and SVG has `FlexItemWidthMode="FlexFixed"`
+and `FlexItemHeightMode="FlexFixed"` (81 of 81), and SVG graphics from
+21.2 have `IsMathMLObject="false"` (4 of 4). The constant values of
+graphic layers are in `objects.md` (graphic layers). The converter
+writes all of these.
+
+## Links
+
+These `Link` values are the same in all 4,699 links of the trustworthy
+pairs, and the converter writes them on every link: `AssetURL="$ID/"`,
+`AssetID="$ID/"`, `LinkClassID="35906"` (0x8C42, the class of links),
+`LinkClientID="257"` (the u32 at offset 4 of chunk 0x8C9B is 0x101 in
+every link), `LinkObjectModified="false"`, `CanEmbed="true"`,
+`CanUnembed="true"`, `CanPackage="true"`, `ImportPolicy="NoAutoImport"`
+and `ExportPolicy="NoAutoExport"`. `RenditionData="Actual"` is on every
+link from DOM 13 on (3,043 of 3,043) and on none before (1,656 of
+1,656); the converter writes it from version 13.
 
 ## Object styles other than the root
 

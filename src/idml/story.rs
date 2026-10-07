@@ -304,7 +304,7 @@ impl Writer<'_> {
                 '\u{FFFC}' if story.anchors.contains_key(&pos) => {
                     flush(x, &mut buf);
                     for item in &story.anchors[&pos] {
-                        self.page_item(x, item, false);
+                        self.page_item(x, item, false, &Matrix::IDENTITY);
                     }
                 }
                 '\u{16}' if story.tables.contains_key(&pos) => {

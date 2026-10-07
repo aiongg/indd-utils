@@ -175,6 +175,8 @@ pub mod chunk {
     pub const GRAPHIC_LINK: u32 = 0x8CBC;
     pub const LINK_INFO: u32 = 0x8C9B;
     pub const LINK_RESOURCE_URI: u32 = 0x8C92;
+    /// u32 PDF identifier of a link.
+    pub const LINK_PDF_IDENTIFIER: u32 = 0x1B6;
     /// Pasted image without a link: u32 raw data object.
     pub const IMAGE_DATA: u32 = 0x8C23;
     /// Pasted PDF without a link: u32 raw data object.
@@ -183,7 +185,20 @@ pub mod chunk {
     pub const TEXT_WRAP: u32 = 0x3703;
     pub const CONTOUR_OPTION: u32 = 0x373D;
     pub const CLIPPING_PATH: u32 = 0x2C1A;
-    pub const PHOTOSHOP_CLIPPING: u32 = 0x8C39;
+    /// Image properties: record list (pixels, colour space, resolution).
+    pub const IMAGE_PROPERTIES: u32 = 0x1708;
+    /// Colour profile of an image: u32 code, then a name.
+    pub const IMAGE_PROFILE: u32 = 0x7C0F;
+    /// Image import options: clipping path flag, alpha channel name.
+    pub const IMAGE_IMPORT: u32 = 0x1714;
+    /// Vector colour policies of a PDF or EPS: four u32.
+    pub const VECTOR_POLICIES: u32 = 0x7C42;
+    /// PDF placement: page number, transparent background, crop.
+    pub const PDF_PLACEMENT: u32 = 0x251B;
+    /// Layers of an image, PDF or imported page.
+    pub const GRAPHIC_LAYERS: u32 = 0x177A;
+    /// Applied layer comp of an image (i32 at 4).
+    pub const LAYER_COMP: u32 = 0x9209;
     /// Frame fitting attributes of an object style (u16 count, records).
     pub const OBJECT_STYLE_FITTING: u32 = 0x1B956;
     /// Page item attributes of an object style (u16 count, records).

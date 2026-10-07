@@ -3,6 +3,7 @@
 //! follow the IDML specification; they hold no INDD facts.
 
 use super::*;
+use crate::model::xmp::{XmpDate, civil_from_days, day_of_year};
 
 /// The IDML name of an XML tag colour (red, green, blue fractions);
 /// `None` for colours without evidence. See `docs/format/objects.md`.
@@ -189,6 +190,31 @@ fn significant_digits(text: &str) -> usize {
     } else {
         digits.trim_end_matches('0').len()
     }
+}
+
+/// A link time (FILETIME: 100 ns intervals since 1601-01-01 UTC) as IDML
+/// writes it, `YYYY-MM-DDTHH:MM:SS` in the local time of the computer that
+/// exported the IDML. The INDD does not store that time zone; the offset
+/// is taken from the XMP date nearest in day of the year (ties: the
+/// latest date), or UTC without XMP dates. See `docs/format/objects.md`,
+/// link times.
+pub(super) fn link_time(filetime: u64, dates: &[XmpDate]) -> String {
+    let utc = (filetime / 10_000_000) as i64 - 11_644_473_600;
+    let day = day_of_year(utc);
+    let distance = |d: &XmpDate| (day_of_year(d.utc) - day).abs();
+    let offset = dates
+        .iter()
+        .min_by(|a, b| distance(a).cmp(&distance(b)).then(b.utc.cmp(&a.utc)))
+        .map_or(0, |d| d.offset);
+    let local = utc + offset;
+    let (year, month, day) = civil_from_days(local.div_euclid(86_400));
+    let secs = local.rem_euclid(86_400);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
+        secs / 3600,
+        secs / 60 % 60,
+        secs % 60
+    )
 }
 
 /// Round away binary noise from scaled values (0.8 * 100 = 80.00000000000001).

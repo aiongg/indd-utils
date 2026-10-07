@@ -199,7 +199,11 @@ fn convert_with(
     if let Some(r) = recorder {
         db.set_recorder(r);
     }
-    let doc = model::Reader::new(&db).document(container.header.version)?;
+    let mut doc = model::Reader::new(&db).document(container.header.version)?;
+    // A damaged XMP packet only loses the time zone of link times.
+    if let Ok(Some(packet)) = container.xmp() {
+        doc.xmp_dates = model::xmp::dates(packet);
+    }
     let mut warnings = doc.warnings.clone();
     warnings.extend(idml::write(&doc, name, out)?);
     Ok(warnings

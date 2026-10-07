@@ -25,6 +25,7 @@ mod style;
 pub mod table;
 pub mod variable;
 pub mod xml;
+pub mod xmp;
 pub mod xref;
 
 pub use document::*;

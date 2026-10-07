@@ -11,6 +11,7 @@ mod attrs;
 mod designmap;
 mod export;
 mod format;
+mod graphic;
 mod kind;
 mod pages;
 mod resources;
@@ -34,10 +35,11 @@ use std::collections::BTreeMap;
 
 use crate::model::prefs::PrefProp;
 use crate::model::{
-    Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Orientation, Page, PageItem,
-    Path, Section, Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun,
-    TextVariable, TextWrap, UiColorRef, Value, XmlElement, XmlMarker, hyperlink::DestinationKind,
-    numbering, root_kind, variable::Instance, wrap_mode, xml::Key as XmlKey,
+    Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, ItemProps, Link, Matrix, Orientation,
+    Page, PageItem, Path, Section, Shape, Spread, Story, Style, StyleGroup, Table,
+    TextFramePreferences, TextRun, TextVariable, TextWrap, UiColorRef, Value, XmlElement,
+    XmlMarker, hyperlink::DestinationKind, numbering, root_kind, variable::Instance, wrap_mode,
+    xml::Key as XmlKey,
 };
 
 use crate::object::builtin_key;

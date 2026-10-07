@@ -810,11 +810,21 @@ identified field. All 496 images, 386 PDF and 49 EPS graphics with the
 element in the corpus IDML files have these values, and the converter
 writes them (`idml-values.md`).
 
-**ImageIOPreference.** Chunk 0x8C39 of an image, u16 at 0:
-`ApplyPhotoshopClippingPath` (1 true, 0 false); 235 of 235 images (293
-of 293 with the older-version pairs, 11 of them false).
-`AllowAutoEmbedding="true"` and `AlphaChannelName="$ID/"` are in all 496
-images of the corpus IDML files and are written from that observation.
+**ImageIOPreference.** Chunk 0x1714 of an image:
+
+| Offset | Size | IDML `ImageIOPreference` |
+|---|---|---|
+| 0 | u32 | 72 in all 1,300 images with the chunk |
+| 4 | u16 | `ApplyPhotoshopClippingPath`: 1 `true`, 0 `false` |
+| 6 | u16 | 1 in all (`AllowAutoEmbedding="true"` in all IDML) |
+| 8 | flagged string | `AlphaChannelName` (an empty key is `$ID/`) |
+
+Without the chunk, IDML has `ApplyPhotoshopClippingPath="true"` and
+`AlphaChannelName="$ID/"`. Evidence: 3,607 of 3,607 images of the
+trustworthy pairs for both attributes (14 `false`, 92 `$ID/kNoneName`,
+2 plain names). Chunk 0x8C39 (u16 at 0), which looked like the clipping
+flag in fewer samples, gives the wrong value in 6 images and is missing
+in 549. `AllowAutoEmbedding="true"` is written from observation.
 
 ## Placed graphics
 
@@ -827,11 +837,36 @@ of a frame (in its 0x15B list) and share these chunks:
 | 0x1633 | Four f64: `GraphicBounds` left, top, right, bottom |
 | 0x8CBC | u32, u32, u32 link UID |
 
-**Links (0x8C42).** Chunk 0x8C9B: u32 0, u32, u32 link resource UID, u32,
-u32 graphic UID, fields, then the import stamp as a u32 length and text
-segments, then two 8-byte timestamps. **Link resources (0x8C41)**: chunk
-0x8C92 is a flag byte, u32 length, then the URI as bytes
-(`LinkResourceURI`; 335/340 match, the rest were relinked after export).
+**Links (0x8C42).** Chunk 0x8C9B:
+
+| Offset | Size | Contents | IDML `Link` |
+|---|---|---|---|
+| 0 | 4 | 0 in all links | |
+| 4 | 4 | 0x101 in all links | (`LinkClientID="257"`) |
+| 8 | 4 | UID of the link resource (class 0x8C41) | |
+| 12 | 4 | 1 or 0 | `LinkResourceModified`: 1 `false`, 0 `true` |
+| 16 | 4 | UID of the graphic | |
+| 20 | 2 | 1 or 0 | `ShowInUI`: 1 `true`, 0 `false` |
+| 22 | 6 | three u16, 1 in all links | |
+| 28 | 4 | 0 in all links | |
+| 32 | 4 + text | import stamp: u32 length, then text segments | `LinkImportStamp` |
+| then | 8 | modification time of the file (FILETIME) | `LinkImportModificationTime` |
+| then | 8 | time the file was placed or updated (FILETIME) | `LinkImportTime` |
+
+A FILETIME here is the count of 100 ns intervals since 1601-01-01 UTC,
+stored as two u32: the high half first, then the low half (each in the
+file's byte order). Evidence: the stamp text is `file <n> <size>`, and
+`<n>` equals the first time value in 4,686 of 4,686 links with a stamp.
+A link with an empty stamp (length 0) has neither `LinkImportStamp` nor
+`LinkImportModificationTime` in IDML, but has `LinkImportTime` (13 of
+13).
+
+Chunk 0x1B6 of a link (u32, on 59 links) is `PDFIdentifier`, which IDML
+writes from DOM 21 on; links without the chunk have `PDFIdentifier="0"`
+(81 of 81 DOM 21 links).
+
+**Link resources (0x8C41)**: chunk 0x8C92 is a flag byte, u32 length,
+then the URI as bytes (`LinkResourceURI`).
 
 After the URI, chunk 0x8C92 continues:
 
@@ -841,6 +876,63 @@ After the URI, chunk 0x8C92 continues:
 | 4 | u32 0 or 1, not identified |
 | 8 | u32 0, 2 or 3 |
 | 12 | u32 UID of a raw data object (class 0x129), or 0 |
+| 16 | stamp: u32 length, text segments (as in the link) |
+| then | modification time (FILETIME, as in the link) |
+| then | file size: u32 high half, u32 low half; `LinkResourceSize` is `<high>~<low>` in lower-case hexadecimal without leading zeros (`0~42ebd`) |
+| then | u8, 1 in all resources |
+| then | in-object string: the format name; `LinkResourceFormat` is `$ID/` and the name, and the graphic's `ImageTypeName` is the same |
+
+Evidence over the 4,699 links of the trustworthy pairs (4,697 with a
+resource object), with the converter's output compared with the
+reference:
+
+| IDML | Equal |
+|---|---|
+| `LinkResourceModified` | all 4,699 (5 with 0 = `true`) |
+| `ShowInUI` | all 4,699 (2 with 0 = `false`) |
+| `LinkImportStamp` | 4,105 of 4,105 links with the same URI in the INDD and the IDML |
+| `LinkResourceSize`, `LinkResourceFormat` | 4,118 of 4,118 links with the same URI |
+| `PDFIdentifier` | 81 of 81 |
+
+The resource's stamp differs from the link's in 184 links; IDML then has
+the link's stamp and the resource's size. All 63,470 link chunks and
+their resource chunks in the distinct little-endian corpus files parse
+with this layout.
+
+**Links resolved to another file at export.** In 19 trustworthy
+documents, 529 links differ from the INDD: the IDML names the same file
+in another folder (344) or a newer file (185). InDesign wrote the
+location and state of the file it found on the exporting computer; the
+INDD keeps the state of its last save. These values cannot come from the
+INDD, and `compare.py` leaves such links out (`docs/measurement.md`).
+
+**Link times.** IDML writes `LinkImportTime` and
+`LinkImportModificationTime` as `YYYY-MM-DDTHH:MM:SS` (seconds
+truncated) in the local time of the computer that exported the IDML:
+
+- IDML equals the INDD's UTC time plus a whole number of hours in 9,009
+  of 9,385 time values; the other 376 belong to links resolved to
+  another file at export or have no stamp.
+- The offset differs between documents (−8 to +13 hours) and, in 71 of
+  284 documents, between links of the same document in step with the
+  season (for example 1 and 2 hours, −5 and −4, +10 and +11), with the
+  larger offset on summer dates of that hemisphere: the daylight-saving
+  rule of the exporting computer's time zone, which the INDD does not
+  store.
+
+The converter estimates the offset from the dates of the XMP packet that
+have a UTC offset (`xmp:CreateDate`, `xmp:MetadataDate`,
+`xmp:ModifyDate`, every `stEvt:when`): it takes the offset of the date
+nearest to the link time in day of the year (difference of the days of
+the year, not wrapping at the year end; ties: the latest date), and UTC
+when there is no such date. Over the trustworthy pairs this gives
+`LinkImportTime` for 3,886 of 4,446 links and
+`LinkImportModificationTime` for 3,316 of 4,434 (links with the same URI:
+3,748 of 4,118 and 3,019 of 4,105). Other rules give less: UTC about
+155 values of 9,385, the offset of `xmp:ModifyDate` 6,488, the same rule
+with the day difference wrapping at the year end 3,840 import times.
+`compare.py` leaves both times out of the value coverage
+(`docs/measurement.md`).
 
 **Embedded links.** A link is embedded (`StoredState="Embedded"`) when its
 resource names a raw data object at offset 12. That object holds the
@@ -857,6 +949,132 @@ Evidence:
 - For all 12 embedded links, the raw data object's bytes equal the
   base64-decoded `Contents` of the IDML graphic (JPEG, PNG, PDF, EPS and
   SVG files, 2 KB to 11 MB).
+
+**Settings shared with page items.** Images, PDF, EPS and SVG graphics
+carry the page item setting chunks (page item settings, above): 0x2C10
+name, 0x2C32 visibility, 0x21D4E, 0x21D50 and 0x21D53 change counts,
+0x1424 overridden properties, 0x22228 layout constraints, and 0x1B916
+object style (`AppliedObjectStyle`). Many graphics (2,396 images) lack
+0x2C10 and 0x2C32; the defaults of the page item table then apply.
+Graphics never have `Locked`. Evidence over the 5,131 graphics of the
+trustworthy pairs: `Visible`, `Name` and `AppliedObjectStyle` 5,131 of
+5,131; the change counts, `OverriddenPageItemProps` and both layout
+constraints 5,079 of 5,079 from DOM 8 on, and absent in all 52 DOM 7
+graphics. Images also have the five fill gradient attributes
+(`GradientFillStart`, `…Length`, `…Angle`, `…HiliteLength`,
+`…HiliteAngle`) from their attribute list (chunk 0x6E03) with the
+defaults of page items, and `FillColor` when the list has attribute
+0x6E68 (77 of 77 images; no image without it has `FillColor`). PDF, EPS
+and SVG graphics have no gradient attributes.
+
+**`ImageTypeName`** is `$ID/` and the format name of the link resource
+(links, above), on graphics with a link only: 4,696 of 4,699 linked
+graphics; no graphic without a link has it (308 images, 111 PDF, 12
+EPS).
+
+**Image properties (chunk 0x1708 of an image).** u32 count, then per
+record u32 key, u32 data length *n*, a u8 (meaning unknown), *n* bytes;
+then 4 zero bytes:
+
+| Key | Data | Meaning |
+|---|---|---|
+| 0x64 | u32 | width in pixels |
+| 0x65 | u32 | height in pixels |
+| 0x67 | u32 | colour space: 1 grey, 2 RGB, 4 CMYK |
+| 0x6C | u32, 16.16 fixed point | horizontal resolution (ppi) |
+| 0x6D | u32, 16.16 fixed point | vertical resolution |
+| 0x6F | colour table | present only for indexed colour |
+
+In all 3,607 images of the trustworthy pairs, `GraphicBounds` width and
+height equal pixels × 72 / resolution. All 29,055 image property chunks
+of the distinct little-endian corpus files parse. IDML writes these
+values only on images with a link (3,299 of 3,299; no image without a
+link has them):
+
+| IDML | Rule | Equal |
+|---|---|---|
+| `Space` | 1 `$ID/#Links_Grayscale`, 2 `$ID/#Links_RGB`, 2 with key 0x6F `$ID/#Links_Indexed RGB`, 4 `$ID/#Links_CMYK` | 3,299 of 3,299 |
+| `ActualPpi` | both resolutions rounded half up to integers (72.009 → 72) | 3,299 of 3,299 |
+| `EffectivePpi` | each `ActualPpi` value divided by the image's scale on the spread, rounded half up | 3,299 of 3,299 |
+
+The scale on the spread: multiply the `ItemTransform` of the image with
+those of all its ancestors (frames, groups, the spread; for an item
+anchored in text, its own chain only) to get *a b c d tx ty*. The
+horizontal scale is √(a² + b²); the vertical scale is |ad − bc| divided
+by the horizontal scale. Using √(c² + d²) for the vertical scale fails on
+87 skewed images; rounding half to even fails on one image whose value
+is exactly 76.5 (IDML: 77).
+
+**Profile** (`Properties/Profile` of `Image`, chunk 0x7C0F): u32 at 0 is
+3 → `$ID/Embedded`, 1 → `$ID/Use Document Default`; 0 or no chunk →
+`$ID/None`. A profile name follows as an in-object string. 3,607 of
+3,607 images (751, 1,652 and 1,204).
+
+**Vector colour policies of PDF and EPS graphics (chunk 0x7C42).** 16
+bytes, four u32. Offset 4 is `RGBVectorPolicy`, offset 12
+`CMYKVectorPolicy`: 1 `IgnoreAll`, 3 `HonorAllProfiles`. Offset 0 is 1
+and offset 8 is 3 in all 334 graphics with the chunk. Without the chunk
+the policies follow the document's colour policies (chunk 0x7C44 of the
+preferences, `preferences.md`): `RGBVectorPolicy` is `IgnoreAll` when
+`RGBPolicy` is `ColorPolicyOff`, else `HonorAllProfiles`;
+`CMYKVectorPolicy` is `IgnoreAll` for `ColorPolicyOff` and
+`CombinationOfPreserveAndSafeCmyk`, `HonorAllProfiles` for
+`PreserveEmbeddedProfiles` and `ConvertToWorkingSpace`. Evidence: with
+the chunk 334 of 334 graphics; without it 1,005 of 1,005 graphics in 128
+documents (5 combinations of document policies).
+
+**PDF placement (chunk 0x251B of a PDF).**
+
+| Offset | Size | IDML `PDFAttribute` |
+|---|---|---|
+| 0 | u32 | `PageNumber` |
+| 6 | u8 | `TransparentBackground`: 1 `true`, 0 `false` |
+| 8 | u32 | `PDFCrop`: 0 `CropContentVisibleLayers`, 2 `CropArt`, 3 `CropPDF`, 4 `CropTrim`, 6 `CropMedia`, 7 `CropContentAllLayers` |
+
+Evidence: 492 of 492 PDFs with the chunk (28 bytes in 486, 64 in 6),
+all three fields. Without the chunk, IDML has `PageNumber="1"`,
+`TransparentBackground="true"` and `PDFCrop="CropContentVisibleLayers"`
+in 507 of 509 PDFs; the other 2 (one document) have `CropArt`, not
+explained. Every PDF has `PDFAttribute` (1,001 of 1,001).
+
+**Graphic layers (chunk 0x177A of images, PDFs and imported pages).**
+
+| Offset | Size | Contents |
+|---|---|---|
+| 0 | 2 | 1 if an image has a `GraphicLayerOption` |
+| 2 | 8 | unknown |
+| 10 | 4 | layer count *n* |
+| 14 | | *n* layer records, in IDML order |
+
+A layer record is a flagged string (`Name`; a key is written with
+`$ID/`), u32 layer ID (`Id`), u32 original and u32 current visibility (1
+= visible: `OriginalVisibility`, `CurrentVisibility`), i32 ID of the
+parent layer (−1 for a top-level layer), and u32 flags: 0x01
+`SeparatorLayer`, 0x04 `FXLayer`, 0x08 `Locked`. A layer whose parent
+ID is *p* is a child element of the `GraphicLayer` with `Id` *p*.
+`Self` is the graphic's `Self`, `GraphicLayerOption1`, and `i` and the
+layer ID in hexadecimal for each layer from the top level down
+(`u5dbcGraphicLayerOption1i92i8e` is layer 0x8E inside layer 0x92).
+
+Evidence: all 1,064 `GraphicLayer` elements of the trustworthy pairs
+(679 PDF, 291 image and 94 imported page layers, 262 of them nested):
+name, `Id`, `Self`, both visibilities and nesting 1,064 of 1,064; flag
+0x04 ↔ `FXLayer="true"` 11 of 11; flag 0x08 ↔ `Locked="true"` 37 of 37;
+flag 0x01 ↔ `SeparatorLayer="true"` 1 of 1. Flags 0x400 (10 group
+layers) and 0x800 (5) have no IDML counterpart. `AdjustmentLayer`,
+`HasViewState`, `ViewState`, `HasExportState`, `ExportState`,
+`HasPrintState` and `PrintState` are `false` in all 1,064.
+`GraphicLayerOption` with `UpdateLinkOption="KeepOverrides"` is on every
+PDF and imported page (1,039 of 1,039, also when the layer count is 0)
+and on the images whose chunk has 1 at offset 0 (11 of 11; the 1,212
+images with 0 there have no element). All 38,087 layer chunks of the
+distinct little-endian corpus files from InDesign 4.0 on parse; 172 in
+InDesign 3.0 files do not, and the converter leaves their layers out
+with a warning.
+
+**Layer comps.** Images with a `GraphicLayerOption` also have
+`LayerCompOption AppliedLayerComp`: chunk 0x9209 of the image, i32 at
+offset 4 (−1, −2 or a comp number). 11 of 11.
 
 ## Graphics pasted without a link
 

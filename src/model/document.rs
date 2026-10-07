@@ -83,6 +83,9 @@ pub struct Document {
     /// XML tags (class 0xBF19).
     pub xml_tags: Vec<XmlTag>,
     pub xml: XmlStructure,
+    /// The dates of the XMP packet that have a UTC offset; link times are
+    /// written with their offsets (`objects.md`, link times).
+    pub xmp_dates: Vec<super::xmp::XmpDate>,
 }
 
 /// An XML tag: its name and colour (red, green, blue).
@@ -231,6 +234,7 @@ impl<'a> Reader<'a> {
             bullets,
             xml_tags: objects.xml_tags,
             xml,
+            xmp_dates: Vec::new(),
             // Last, so that it holds every warning of the model.
             warnings: self.warnings.borrow().clone(),
         })

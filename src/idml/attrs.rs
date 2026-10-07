@@ -671,10 +671,16 @@ impl Writer<'_> {
                 })
                 .collect();
         }
+        Self::gradient_values(&item.attrs)
+    }
+
+    /// The gradient attributes of an attribute list, with the defaults
+    /// for those it lacks.
+    pub(super) fn gradient_values(attrs: &Attrs) -> Vec<(&'static str, String)> {
         GRADIENT_ATTRS
             .iter()
             .map(|&(id, name, default)| {
-                let v = match item.attrs.get(id) {
+                let v = match attrs.get(id) {
                     Some(Value::Point(x, y)) => Some(nums(&[*x, *y])),
                     Some(v) => v.as_f64().map(num),
                     None => None,

@@ -180,117 +180,23 @@ impl Writer<'_> {
         x.end();
     }
 
-    /// `ClippingPathSettings` of an image, PDF or EPS graphic, and
-    /// `ImageIOPreference` of an image. Values without an INDD field are
-    /// those every exported IDML has, and a graphic without chunk 0x2C1A
-    /// has the values every such graphic has in IDML. See
-    /// `docs/format/objects.md`.
-    pub(super) fn clipping(x: &mut Xml, g: &Graphic) {
-        let (high_resolution, threshold, tolerance, inset, index) = match &g.clipping {
-            Some(c) if c.kind == 0 => (
-                match c.high_resolution {
-                    2 => Some("true"),
-                    0 => Some("false"),
-                    _ => None,
-                },
-                c.threshold.to_string(),
-                num(c.tolerance),
-                num(c.inset),
-                c.index.to_string(),
-            ),
-            Some(_) => return,
-            None => (
-                Some("true"),
-                "25".into(),
-                "2".into(),
-                "0".into(),
-                "-1".into(),
-            ),
-        };
-        x.start("ClippingPathSettings")
-            .attr("ClippingType", "None")
-            .attr("InvertPath", "false")
-            .attr("IncludeInsideEdges", "false")
-            .attr("RestrictToFrame", "false");
-        if let Some(h) = high_resolution {
-            x.attr("UseHighResolutionImage", h);
-        }
-        x.attr("Threshold", threshold)
-            .attr("Tolerance", tolerance)
-            .attr("InsetFrame", inset)
-            .attr("AppliedPathName", "$ID/")
-            .attr("Index", index);
-        x.end();
-        if g.kind != GraphicKind::Image {
-            return;
-        }
-        x.start("ImageIOPreference");
-        match g.photoshop_clipping {
-            Some(1) => {
-                x.attr("ApplyPhotoshopClippingPath", "true");
-            }
-            Some(0) => {
-                x.attr("ApplyPhotoshopClippingPath", "false");
-            }
-            _ => {}
-        }
-        x.attr("AllowAutoEmbedding", "true")
-            .attr("AlphaChannelName", "$ID/");
-        x.end();
-    }
-
-    pub(super) fn placed_graphic(x: &mut Xml, g: &Graphic) {
-        let tag = match g.kind {
-            GraphicKind::Image => "Image",
-            GraphicKind::Pdf => "PDF",
-            GraphicKind::Eps => "EPS",
-            GraphicKind::Svg => "SVG",
-        };
-        let [left, top, right, bottom] = g.bounds;
-        x.start(tag)
-            .attr("Self", uref(Some(g.uid)))
-            .attr("ItemTransform", matrix(&g.transform));
-        x.start("Properties");
-        if let Some(data) = &g.contents {
-            x.start("Contents")
-                .cdata(&base64_lines(data), CDATA_SECTION)
-                .end();
-        }
-        x.empty(
-            "GraphicBounds",
-            &[
-                ("Left", num(left)),
-                ("Top", num(top)),
-                ("Right", num(right)),
-                ("Bottom", num(bottom)),
-            ],
-        );
-        x.end();
-        if g.kind != GraphicKind::Svg {
-            Self::clipping(x, g);
-        }
-        Self::text_wrap_preference(x, g.text_wrap.as_ref(), g.contour_type);
-        if let Some(link) = &g.link {
-            x.empty(
-                "Link",
-                &[
-                    ("Self", uref(Some(link.uid))),
-                    ("LinkResourceURI", link.uri.clone()),
-                    (
-                        "StoredState",
-                        if link.embedded { "Embedded" } else { "Normal" }.into(),
-                    ),
-                ],
-            );
-        }
-        x.end();
-    }
-
     /// The name, visibility, lock and the other settings every page item
     /// has; `nested` for an item inside another page item, which IDML
     /// writes without `Locked`. See `docs/format/objects.md`.
     pub(super) fn item_settings(&self, x: &mut Xml, item: &PageItem, nested: bool) {
-        let p = &item.props;
+        let locked = (!nested).then_some(item.props.locked);
+        self.settings(x, &item.props, locked);
+        for (name, v) in Self::gradients(item) {
+            if !x.has_attr(name) {
+                x.attr(name, v);
+            }
+        }
+    }
+
+    /// The settings of `ItemProps` (page items and placed graphics):
+    /// `Locked` only when `locked` is given. See `docs/format/objects.md`,
+    /// page item settings.
+    pub(super) fn settings(&self, x: &mut Xml, p: &ItemProps, locked: Option<bool>) {
         let name = match &p.name {
             Some(n) if n.builtin => builtin_key(&n.name),
             Some(n) => n.name.clone(),
@@ -298,8 +204,8 @@ impl Writer<'_> {
         };
         x.attr("Name", name)
             .attr("Visible", (!p.hidden).to_string());
-        if !nested {
-            x.attr("Locked", p.locked.to_string());
+        if let Some(l) = locked {
+            x.attr("Locked", l.to_string());
         }
         if self.doc.version.major >= 8 {
             for (name, counts) in [
@@ -322,15 +228,23 @@ impl Writer<'_> {
                     .attr("VerticalLayoutConstraints", v);
             }
         }
-        for (name, v) in Self::gradients(item) {
-            if !x.has_attr(name) {
-                x.attr(name, v);
-            }
-        }
     }
 
-    /// `nested` for an item inside another page item.
-    pub(super) fn page_item(&self, x: &mut Xml, item: &PageItem, nested: bool) {
+    /// The `AppliedObjectStyle` reference of an object style UID.
+    pub(super) fn object_style_ref(&self, uid: u32) -> Option<String> {
+        let os = self.doc.object_styles.get(&uid)?;
+        let name = if os.builtin {
+            builtin_key(&os.name)
+        } else {
+            os.name.clone()
+        };
+        Some(format!("ObjectStyle/{}", self_name(&name)))
+    }
+
+    /// `nested` for an item inside another page item; `outer` is the
+    /// transform from the item's parent to the spread (for anchored items,
+    /// to the anchor).
+    pub(super) fn page_item(&self, x: &mut Xml, item: &PageItem, nested: bool, outer: &Matrix) {
         let tag = match &item.kind {
             ItemKind::TextFrame { .. } => "TextFrame",
             ItemKind::Group => "Group",
@@ -372,16 +286,8 @@ impl Writer<'_> {
         {
             x.attr("StrokeWeight", "1");
         }
-        if let Some(os) = style {
-            let name = if os.builtin {
-                builtin_key(&os.name)
-            } else {
-                os.name.clone()
-            };
-            x.attr(
-                "AppliedObjectStyle",
-                format!("ObjectStyle/{}", self_name(&name)),
-            );
+        if let Some(r) = item.object_style.and_then(|u| self.object_style_ref(u)) {
+            x.attr("AppliedObjectStyle", r);
         }
         if let Some(layer) = item.layer {
             x.attr("ItemLayer", uref(Some(layer)));
@@ -441,10 +347,10 @@ impl Writer<'_> {
             ));
         }
         for child in &item.children {
-            self.page_item(x, child, true);
+            self.page_item(x, child, true, &item.transform.then(outer));
         }
         for g in &item.graphics {
-            Self::placed_graphic(x, g);
+            self.placed_graphic(x, g, &item.transform.then(outer));
         }
         x.end();
     }
@@ -795,7 +701,7 @@ impl Writer<'_> {
             x.end();
         }
         for item in &s.items {
-            self.page_item(&mut x, item, false);
+            self.page_item(&mut x, item, false, &s.transform);
         }
         x.end();
         x.finish()
