@@ -40,8 +40,6 @@ use crate::model::{
 use values::Node;
 use xml::Xml;
 
-use crate::object::{Cursor, f64_from, u16_from};
-
 const PACKAGING_NS: &str = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging";
 const MIMETYPE: &str = "application/vnd.adobe.indesign-idml-package";
 

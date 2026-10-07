@@ -61,10 +61,10 @@ pub struct ObjectStyle {
     pub fitting: Attrs,
     /// Page item attributes (chunk 0x1B92B): fill, stroke, corners.
     pub attrs: Attrs,
-    /// Text frame settings (chunk 0x1B924); see `docs/format/objects.md`.
-    pub frame: Option<Vec<u8>>,
+    /// Text frame settings (chunk 0x1B924).
+    pub frame: Option<ObjectStyleFrame>,
     /// Story settings (chunk 0x285B).
-    pub story: Option<Vec<u8>>,
+    pub story: Option<StorySettings>,
     /// Story direction (chunk 0x50F28, u16).
     pub direction: Option<u16>,
     /// Text wrap (chunk 0x3776, the layout of chunk 0x3703).
@@ -76,7 +76,7 @@ pub struct ObjectStyle {
     /// Paragraph style applied to text frames (chunk 0x1B946).
     pub paragraph_style: Option<u32>,
     /// Anchored object settings (chunk 0x2800).
-    pub anchor: Option<Vec<u8>>,
+    pub anchor: Option<AnchorSettings>,
 }
 
 /// Style groups nested deeper than this are left out, with a warning.
@@ -312,9 +312,11 @@ impl<'a> Reader<'a> {
                     ));
                     None
                 }
-                d => d,
+                d => d.as_deref().map(ObjectStyleFrame::read),
             },
-            story: self.chunk(uid, chunk::OBJECT_STYLE_STORY)?,
+            story: self
+                .chunk(uid, chunk::OBJECT_STYLE_STORY)?
+                .and_then(|d| StorySettings::read(&d)),
             direction: match self.chunk(uid, chunk::OBJECT_STYLE_DIRECTION)? {
                 Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
                 _ => None,
@@ -326,7 +328,85 @@ impl<'a> Reader<'a> {
                 None => None,
             },
             paragraph_style: u32_chunk(chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?,
-            anchor: self.chunk(uid, chunk::ANCHOR_SETTINGS)?,
+            anchor: self
+                .chunk(uid, chunk::ANCHOR_SETTINGS)?
+                .map(|d| AnchorSettings::read(&d)),
         }))
+    }
+}
+
+/// Anchored object settings (chunk 0x2800, of an anchor, an object style
+/// or the preferences). See `docs/format/objects.md`, anchored objects.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AnchorSettings {
+    /// f64 `AnchorYoffset` at 0 and u16 vertical alignment at 52, if the
+    /// chunk has 54 bytes.
+    pub offset: Option<(f64, u16)>,
+    /// The u16 at 46, 50 and 56 (anchor point and pin position) and at
+    /// 40 and 48 (anchored position and horizontal alignment), if the
+    /// chunk has 58 bytes. Each group changes together in every sample.
+    pub fields: Option<([u16; 3], [u16; 2])>,
+}
+
+impl AnchorSettings {
+    pub(super) fn read(d: &[u8]) -> AnchorSettings {
+        let u = |o: usize| u16_at(d, o).unwrap_or_default();
+        AnchorSettings {
+            offset: (d.len() >= 54).then(|| (f64_at(d, 0).unwrap_or_default(), u(52))),
+            fields: (d.len() >= 58).then(|| ([u(46), u(50), u(56)], [u(40), u(48)])),
+        }
+    }
+}
+
+/// Text frame settings of an object style (chunk 0x1B924), at the
+/// offsets known for its sizes (106, 142, 162 and 222 bytes). Each field
+/// is `None` if the chunk is too short for it. See
+/// `docs/format/objects.md`, object styles.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ObjectStyleFrame {
+    /// f64 at 0.
+    pub column_fixed_width: Option<f64>,
+    /// f64 at 8.
+    pub column_gutter: Option<f64>,
+    /// f64 insets at 34, 42, 50 and 58.
+    pub insets: Option<[f64; 4]>,
+    /// u32 at 66.
+    pub column_count: Option<u32>,
+    /// Footnotes: u16 span across columns at 144, f64 minimum spacing at
+    /// 146 and f64 space between at 154.
+    pub footnotes: Option<(u16, f64, f64)>,
+    /// Column rule: f64 stroke width at 190, u32 colour at 198 (0 for
+    /// none) and f64 tint at 210.
+    pub column_rule: Option<(f64, u32, f64)>,
+}
+
+impl ObjectStyleFrame {
+    pub(super) fn read(d: &[u8]) -> ObjectStyleFrame {
+        let f = |o: usize| f64_at(d, o);
+        ObjectStyleFrame {
+            column_fixed_width: f(0),
+            column_gutter: f(8),
+            insets: (|| Some([f(34)?, f(42)?, f(50)?, f(58)?]))(),
+            column_count: u32_at(d, 66),
+            footnotes: (|| Some((u16_at(d, 144)?, f(146)?, f(154)?)))(),
+            column_rule: (|| Some((f(190)?, u32_at(d, 198)?, f(210)?)))(),
+        }
+    }
+}
+
+/// Story settings of an object style (chunk 0x285B), if the chunk has 16
+/// bytes: u16 story orientation at 0 and u16 frame type at 14.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StorySettings {
+    pub orientation: u16,
+    pub frame_type: u16,
+}
+
+impl StorySettings {
+    pub(super) fn read(d: &[u8]) -> Option<StorySettings> {
+        Some(StorySettings {
+            orientation: u16_at(d, 0)?,
+            frame_type: u16_at(d, 14)?,
+        })
     }
 }

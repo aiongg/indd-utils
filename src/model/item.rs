@@ -79,7 +79,7 @@ pub struct PageItem {
     pub text_wrap: Option<TextWrap>,
     /// Anchored object settings (chunk 0x2800 of the anchor), for an item
     /// anchored in text.
-    pub anchor: Option<Vec<u8>>,
+    pub anchor: Option<AnchorSettings>,
     pub props: ItemProps,
 }
 

@@ -1,12 +1,14 @@
 //! Attribute tables: which IDML attribute or property each INDD attribute
-//! ID of a text, page item, cell or table attribute list becomes, the kind
-//! of its value, and the decoders for values stored as raw bytes (tab
-//! lists, nested styles, bullet characters, anchored object settings).
+//! ID of a text, page item, cell or table attribute list becomes, and the
+//! kind of its value; and the IDML form of structured values the model
+//! decodes (tab lists, nested styles, bullet characters, anchored object
+//! settings).
 //!
 //! Evidence: `docs/format/attributes.md`, `tables.md` (cell and table
 //! attributes) and `objects.md` (anchored object settings).
 
 use super::*;
+use crate::model::AnchorSettings;
 use crate::model::attrs::{Delimiter, NestedStyle, TabStop};
 
 #[derive(Clone, Copy)]
@@ -54,17 +56,15 @@ pub(super) fn fitting_value(id: u32, v: &Value) -> Option<String> {
     }
 }
 
-/// Anchored object settings from chunk 0x2800 (of an anchor, an object
-/// style or the preferences): f64 `AnchorYoffset` at 0, u16
-/// `VerticalAlignment` at 52, and two groups of u16 fields that change
-/// together. See `docs/format/objects.md`.
-pub(super) fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
+/// IDML attributes of anchored object settings: `VerticalAlignment`,
+/// `AnchorYoffset`, and the combinations of the other fields observed in
+/// every sample. See `docs/format/objects.md`.
+pub(super) fn anchored_settings(a: &AnchorSettings) -> Vec<(&'static str, String)> {
     let mut out = Vec::new();
-    if d.len() < 54 {
+    let Some((y, align)) = a.offset else {
         return out;
-    }
-    let y = f64_from(d[0..8].try_into().unwrap());
-    let align = match u16_from([d[52], d[53]]) {
+    };
+    let align = match align {
         0 => Some("TopAlign"),
         1 => Some("CenterAlign"),
         2 => Some("BottomAlign"),
@@ -74,27 +74,24 @@ pub(super) fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
         out.push(("VerticalAlignment", a.to_string()));
     }
     out.push(("AnchorYoffset", num(y)));
-    if d.len() >= 58 {
-        let u = |o: usize| u16_from([d[o], d[o + 1]]);
-        // Fields that change together in every sample: only the observed
-        // combinations are written.
-        match (u(46), u(50), u(56)) {
-            (0, 2, 1) => {
+    if let Some((point, position)) = a.fields {
+        match point {
+            [0, 2, 1] => {
                 out.push(("AnchorPoint", "BottomRightAnchor".into()));
                 out.push(("PinPosition", "true".into()));
             }
-            (2, 0, 0) => {
+            [2, 0, 0] => {
                 out.push(("AnchorPoint", "TopLeftAnchor".into()));
                 out.push(("PinPosition", "false".into()));
             }
             _ => {}
         }
-        match (u(40), u(48)) {
-            (0, 2) => {
+        match position {
+            [0, 2] => {
                 out.push(("AnchoredPosition", "InlinePosition".into()));
                 out.push(("HorizontalAlignment", "LeftAlign".into()));
             }
-            (2, 1) => {
+            [2, 1] => {
                 out.push(("AnchoredPosition", "AboveLine".into()));
                 out.push(("HorizontalAlignment", "CenterAlign".into()));
             }

@@ -464,34 +464,19 @@ impl Writer<'_> {
         for (tag, on) in effects {
             node.set(&[tag], vec![("EnableTransparency", on.to_string())]);
         }
-        if let Some(d) = &os.frame {
-            let f = |o: usize| {
-                (d.len() >= o + 8)
-                    .then(|| Cursor::new(&d[o..]).f64().ok())
-                    .flatten()
-            };
-            let u = |o: usize| {
-                (d.len() >= o + 4)
-                    .then(|| Cursor::new(&d[o..]).u32().ok())
-                    .flatten()
-            };
-            let h = |o: usize| {
-                (d.len() >= o + 2)
-                    .then(|| Cursor::new(&d[o..]).u16().ok())
-                    .flatten()
-            };
+        if let Some(fr) = &os.frame {
             let mut tf = Vec::new();
-            if let Some(n) = u(66) {
+            if let Some(n) = fr.column_count {
                 tf.push(("TextColumnCount", n.to_string()));
             }
-            if let Some(v) = f(8) {
+            if let Some(v) = fr.column_gutter {
                 tf.push(("TextColumnGutter", num(v)));
             }
-            if let Some(v) = f(0) {
+            if let Some(v) = fr.column_fixed_width {
                 tf.push(("TextColumnFixedWidth", num(v)));
             }
             let mut footnote = Vec::new();
-            if let (Some(span), Some(min), Some(between)) = (h(144), f(146), f(154))
+            if let Some((span, min, between)) = fr.footnotes
                 && span <= 1
             {
                 let span = (span == 1).to_string();
@@ -504,7 +489,7 @@ impl Writer<'_> {
                     ("SpaceBetweenFootnotes", num(between)),
                 ];
             }
-            if let (Some(width), Some(color), Some(tint)) = (f(190), u(198), f(210)) {
+            if let Some((width, color, tint)) = fr.column_rule {
                 let color = match color {
                     0 => Some("n".to_string()),
                     c => self.doc.swatches.get(&c).cloned(),
@@ -518,7 +503,7 @@ impl Writer<'_> {
             node.set(&["TextFramePreference"], tf);
             // Only the top inset is shown apart from the others; the list is
             // written when all four are equal.
-            if let (Some(a), Some(b), Some(c), Some(e)) = (f(34), f(42), f(50), f(58))
+            if let Some([a, b, c, e]) = fr.insets
                 && a == b
                 && b == c
                 && c == e
@@ -550,17 +535,14 @@ impl Writer<'_> {
             }
         }
         let mut story = Vec::new();
-        if let Some(d) = &os.story
-            && d.len() >= 16
-        {
-            let h = |o: usize| u16_from([d[o], d[o + 1]]);
-            match h(14) {
+        if let Some(st) = &os.story {
+            match st.frame_type {
                 0 => story.push(("FrameType", "Unknown".to_string())),
                 1 => story.push(("FrameType", "TextFrameType".to_string())),
                 2 => story.push(("FrameType", "FrameGridType".to_string())),
                 _ => {}
             }
-            match h(0) {
+            match st.orientation {
                 0 => story.push(("StoryOrientation", "Unknown".to_string())),
                 1 => story.push(("StoryOrientation", "Horizontal".to_string())),
                 _ => {}

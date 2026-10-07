@@ -439,7 +439,7 @@ impl Writer<'_> {
             let style = item
                 .object_style
                 .and_then(|u| self.doc.object_styles.get(&u))
-                .and_then(|s| s.anchor.as_deref());
+                .and_then(|s| s.anchor.as_ref());
             let attrs: Vec<_> = anchored_settings(d)
                 .into_iter()
                 .filter(|a| style.is_none_or(|s| !anchored_settings(s).contains(a)))

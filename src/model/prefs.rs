@@ -28,7 +28,7 @@ pub struct Prefs {
     pub text_defaults: Option<Attrs>,
     /// Default anchored object settings (chunk 0x2800, as object styles
     /// have).
-    pub anchor: Option<Vec<u8>>,
+    pub anchor: Option<super::AnchorSettings>,
     /// Page item defaults (class 0x6E07), a page item attribute list.
     pub item_defaults: Option<Attrs>,
     /// `Properties` children: element, name, value.
@@ -675,7 +675,7 @@ impl Reader<'_> {
             values,
             colors,
             text_defaults,
-            anchor,
+            anchor: anchor.as_deref().map(super::AnchorSettings::read),
             item_defaults,
             props,
             print_records,
