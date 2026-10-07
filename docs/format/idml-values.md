@@ -83,6 +83,12 @@ converter reads no attributes of these styles from the INDD yet. The cell
 and table root styles are written as new elements in
 `RootCellStyleGroup` and `RootTableStyleGroup`.
 
+## Document attributes
+
+`AccurateLABSpots="false"` is on the `Document` element of all 654
+corpus pairs' IDML files. The converter writes it. The colour settings
+next to it are read from the INDD (`preferences.md`).
+
 ## Default numbering list
 
 The root paragraph style refers to `NumberingList/$ID/[Default]`. All 240

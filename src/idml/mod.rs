@@ -123,6 +123,54 @@ fn ui_color_name(rgb: [f64; 3]) -> Option<&'static str> {
         .map(|(_, n)| *n)
 }
 
+/// Preference elements of `Resources/Preferences.xml` that `model::prefs`
+/// supplies values for.
+const PREFERENCE_TAGS: &[&str] = &[
+    "ViewPreference",
+    "GridPreference",
+    "GuidePreference",
+    "DocumentPreference",
+    "TextPreference",
+];
+
+/// A `Properties` child as a values node.
+fn prop_node(p: &Property) -> Node {
+    let (name, ty, value) = p;
+    let mut n = Node {
+        tag: name.to_string(),
+        ..Node::default()
+    };
+    if !ty.is_empty() {
+        n.attrs.push(("type".into(), ty.to_string()));
+    }
+    match value {
+        PropValue::Text(t) => n.text = Some(t.clone()),
+        PropValue::Attributes(a) => {
+            n.attrs
+                .extend(a.iter().map(|(k, v)| (k.to_string(), v.clone())));
+        }
+        PropValue::List(items) => {
+            for item in items {
+                n.children.push(Node {
+                    tag: "ListItem".into(),
+                    attrs: vec![("type".into(), "record".into())],
+                    children: item
+                        .iter()
+                        .map(|(f, t, text)| Node {
+                            tag: f.to_string(),
+                            attrs: vec![("type".into(), t.to_string())],
+                            text: Some(text.clone()),
+                            children: Vec::new(),
+                        })
+                        .collect(),
+                    text: None,
+                });
+            }
+        }
+    }
+    n
+}
+
 /// A `Properties` child for an interface colour: its name as an
 /// enumeration, or, for a colour of whole 255ths without a name, the three
 /// numbers as a list. `None` for other colours.
@@ -1178,6 +1226,12 @@ impl Writer<'_> {
         if let Some(l) = doc.active_layer {
             x.attr("ActiveLayer", uref(Some(l)));
         }
+        // Colour settings (`model::prefs`).
+        for v in doc.prefs.values.iter().filter(|v| v.element == "Document") {
+            x.attr(v.name, &v.value);
+        }
+        // `false` in every corpus IDML (docs/format/idml-values.md).
+        x.attr("AccurateLABSpots", "false");
         self.languages(&mut x);
         x.empty("idPkg:Graphic", &[("src", "Resources/Graphic.xml".into())]);
         x.empty("idPkg:Fonts", &[("src", "Resources/Fonts.xml".into())]);
@@ -1218,7 +1272,30 @@ impl Writer<'_> {
         // all have (idml-values.md), in the order of the IDML files.
         let singleton = |x: &mut Xml, tag: &str| {
             if let Some(n) = values::present(&format!("Document/{tag}"), major) {
-                n.write(x);
+                // Values read from the INDD (`model::prefs`) first.
+                let mut ours = Node {
+                    tag: n.tag.clone(),
+                    ..Node::default()
+                };
+                for v in doc.prefs.values.iter().filter(|v| v.element == tag) {
+                    ours.attrs.push((v.name.to_string(), v.value.clone()));
+                }
+                let colors: Vec<Node> = doc
+                    .prefs
+                    .colors
+                    .iter()
+                    .filter(|c| c.0 == tag)
+                    .filter_map(|&(_, name, rgb)| ui_color_property(name, rgb))
+                    .collect();
+                if !colors.is_empty() {
+                    ours.children.push(Node {
+                        tag: "Properties".into(),
+                        children: colors,
+                        ..Node::default()
+                    });
+                }
+                ours.merge(&n);
+                ours.write(x);
             }
         };
         // Named grids. Their grid settings are those all document pages
@@ -2532,6 +2609,54 @@ impl Writer<'_> {
             "ViewPreference",
             vec![("RulerOrigin", "SpreadOrigin".into())],
         );
+        // Values read from the preferences object (`model::prefs`).
+        let prefs = &self.doc.prefs;
+        let mut ours: Vec<Node> = Vec::new();
+        fn ours_of(ours: &mut Vec<Node>, tag: &str) -> usize {
+            match ours.iter().position(|n| n.tag == tag) {
+                Some(i) => i,
+                None => {
+                    ours.push(Node {
+                        tag: tag.to_string(),
+                        ..Node::default()
+                    });
+                    ours.len() - 1
+                }
+            }
+        }
+        for v in prefs
+            .values
+            .iter()
+            .filter(|v| PREFERENCE_TAGS.contains(&v.element))
+        {
+            let i = ours_of(&mut ours, v.element);
+            ours[i].attrs.push((v.name.to_string(), v.value.clone()));
+        }
+        if let Some(a) = &prefs.text_defaults {
+            let (mut plain, props) = self.text_attrs(a);
+            // The schema allows KerningValue on character styles only.
+            plain.retain(|(k, _)| *k != "KerningValue");
+            let i = ours_of(&mut ours, "TextDefault");
+            ours[i]
+                .attrs
+                .extend(plain.into_iter().map(|(k, v)| (k.to_string(), v)));
+            if !props.is_empty() {
+                ours[i].children.push(Node {
+                    tag: "Properties".into(),
+                    children: props.iter().map(prop_node).collect(),
+                    ..Node::default()
+                });
+            }
+        }
+        for mut n in ours {
+            match nodes.iter_mut().find(|m| m.tag == n.tag) {
+                Some(m) => {
+                    n.merge(m);
+                    *m = n;
+                }
+                None => nodes.push(n),
+            }
+        }
         for (tag, attr) in drop {
             if let Some(n) = nodes.iter_mut().find(|n| n.tag == tag) {
                 n.attrs.retain(|(k, _)| k != attr);

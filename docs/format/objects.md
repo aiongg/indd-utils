@@ -1150,10 +1150,9 @@ such sections.
 
 One object of class 0x2202 holds document-wide preferences. Chunk 0x533
 (`DocumentPreference`): f64 page width at 0, f64 page height at 8, byte 58
-2 for facing pages and 1 otherwise, four f64 bleeds from offset 70, u32
-intent at 142 (0 print, 1 web, 2 mobile). All values match the 75 pairs.
-The four bleeds are equal in every sample, so their order (written as top,
-bottom, inside, outside) is not verified. Files from InDesign 3.0 to 7.5
+2 for facing pages and 1 otherwise, four f64 bleeds from offset 70 (inside,
+top, outside, bottom; `preferences.md`), u32 intent at 142 (0 print, 1
+web, 2 mobile). All values match the 75 pairs. Files from InDesign 3.0 to 7.5
 have a shorter chunk with another layout; the converter leaves it out
 with a warning (`big-endian.md`).
 

@@ -6,6 +6,7 @@ pub mod cjk;
 pub mod color;
 pub mod font;
 pub mod hyperlink;
+pub mod prefs;
 pub mod table;
 pub mod variable;
 pub mod xml;
@@ -70,6 +71,8 @@ pub mod class {
     pub const XML_TAG: u32 = 0xBF19;
     /// A colour used in the interface (XML tags).
     pub const UI_COLOR: u32 = 0x1F11;
+    /// A colour profile: its name (chunk 0x13C).
+    pub const COLOR_PROFILE: u32 = 0x7D03;
 }
 
 /// Chunk IDs.
@@ -728,6 +731,8 @@ pub struct Document {
     /// Problems that did not stop the conversion (content left out).
     pub warnings: Vec<String>,
     pub preferences: Option<DocumentPreferences>,
+    /// Other preference values (`prefs.rs`).
+    pub prefs: prefs::Prefs,
     pub composite_fonts: Vec<CompositeFont>,
     /// Kinsoku and mojikumi tables, in UID order.
     pub cjk_tables: Vec<CjkTable>,
@@ -748,7 +753,7 @@ pub struct DocumentPreferences {
     pub page_width: f64,
     pub page_height: f64,
     pub facing_pages: bool,
-    /// Top, bottom, inside, outside (order not verified: equal in all samples).
+    /// Top, bottom, inside, outside (stored as inside, top, outside, bottom).
     pub bleed: [f64; 4],
     /// 0 print, 1 web, 2 mobile.
     pub intent: u32,
@@ -1378,6 +1383,7 @@ impl<'a> Reader<'a> {
             }
         }
         let preferences = self.document_preferences()?;
+        let prefs = self.prefs(version.major)?;
         Ok(Document {
             version,
             layers,
@@ -1433,6 +1439,7 @@ impl<'a> Reader<'a> {
             cross_reference_formats,
             warnings: self.warnings.borrow().clone(),
             preferences,
+            prefs,
             composite_fonts: composite_fonts
                 .into_iter()
                 .map(|(uid, name, entries)| CompositeFont {
@@ -1584,7 +1591,7 @@ impl<'a> Reader<'a> {
             page_width: f(0)?,
             page_height: f(8)?,
             facing_pages: d[58] == 2,
-            bleed: [f(70)?, f(78)?, f(86)?, f(94)?],
+            bleed: [f(78)?, f(94)?, f(70)?, f(86)?],
             intent: u(142)?,
             page_binding: binding,
         }))
