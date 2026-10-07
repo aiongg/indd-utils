@@ -31,6 +31,9 @@ pub struct Prefs {
     pub anchor: Option<super::AnchorSettings>,
     /// Page item defaults (class 0x6E07), a page item attribute list.
     pub item_defaults: Option<Attrs>,
+    /// The entries of the two tables around that list: class, UID, UID
+    /// (`objects.md`, page item defaults).
+    pub item_default_entries: Vec<(u32, u32, u32)>,
     /// `Properties` children: element, name, value.
     pub props: Vec<(&'static str, &'static str, PrefProp)>,
     /// Print records (element, bytes), written in base64 as `PrintRecord`.
@@ -577,8 +580,10 @@ impl Reader<'_> {
                 }
             }
         }
-        // Page item defaults: u32, u32, u32 n, n 12-byte entries, then a
-        // page item attribute list.
+        // Page item defaults: a table (u32, u32, u32 n, n 12-byte
+        // entries), a page item attribute list, and a second table of the
+        // same layout (objects.md, page item defaults).
+        let mut item_default_entries = Vec::new();
         let item_defaults = match self
             .db
             .classes()
@@ -586,16 +591,33 @@ impl Reader<'_> {
             .find(|(_, c)| *c == class::ITEM_DEFAULTS)
         {
             Some(&(u, _)) => match self.chunk(u, id::ITEM_DEFAULTS)? {
-                Some(d) if d.len() >= 12 => {
-                    let n = self.cursor(&d[8..]).u32()? as usize;
-                    d.get(12 + 12 * n..).and_then(|rest| {
-                        self.attrs_or_warn(
-                            || format!("page item defaults {u}"),
-                            Attrs::parse(self.enc(), rest, List::Item, self.db.recorder()),
-                        )
-                    })
+                Some(d) => {
+                    let mut c = self.cursor(&d);
+                    let mut table = |c: &mut crate::object::Cursor| -> Result<(), Error> {
+                        c.skip(8)?;
+                        let n = c.u32()? as usize;
+                        for _ in 0..n {
+                            item_default_entries.push((c.u32()?, c.u32()?, c.u32()?));
+                        }
+                        Ok(())
+                    };
+                    match table(&mut c) {
+                        Ok(()) => {
+                            let attrs = self.attrs_or_warn(
+                                || format!("page item defaults {u}"),
+                                Attrs::parse_at(&mut c, List::Item, self.db.recorder()),
+                            );
+                            if attrs.is_some() && c.remaining() > 0 && table(&mut c).is_err() {
+                                self.warn(format!(
+                                    "page item defaults {u}: the second table is not complete"
+                                ));
+                            }
+                            attrs
+                        }
+                        Err(_) => None,
+                    }
                 }
-                _ => None,
+                None => None,
             },
             None => None,
         };
@@ -687,6 +709,7 @@ impl Reader<'_> {
                 .as_deref()
                 .map(|d| super::AnchorSettings::read(self.enc(), d)),
             item_defaults,
+            item_default_entries,
             props,
             print_records,
         })

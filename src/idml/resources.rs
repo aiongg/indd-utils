@@ -39,10 +39,48 @@ impl Writer<'_> {
         out
     }
 
-    pub(super) fn graphic(&self) -> String {
+    /// `Resources/Graphic.xml`. `refs` are the references to unnamed
+    /// colours and gradients in the other parts of the package: IDML
+    /// writes an unnamed colour or gradient only when something refers to
+    /// it or the page item defaults name it (`docs/format/objects.md`,
+    /// colours).
+    pub(super) fn graphic(&self, refs: &std::collections::HashSet<String>) -> String {
+        use crate::model::color::class;
         let mut x = Xml::new();
         self.package_root(&mut x, "Graphic");
         let groups = self.group_swatches();
+        let named = |class_id: u32| -> std::collections::HashSet<u32> {
+            self.doc
+                .prefs
+                .item_default_entries
+                .iter()
+                .filter(|e| e.0 == class_id)
+                .flat_map(|e| [e.1, e.2])
+                .collect()
+        };
+        let gradients: Vec<_> = {
+            let named = named(class::GRADIENT);
+            self.doc
+                .gradients
+                .iter()
+                .filter(|g| {
+                    !g.name.is_empty() || named.contains(&g.uid) || refs.contains(&g.reference())
+                })
+                .collect()
+        };
+        // Colours that the stops of any gradient, written or not, and the
+        // tints refer to.
+        let mut used: std::collections::HashSet<u32> = named(class::COLOR);
+        used.extend(
+            self.doc
+                .gradients
+                .iter()
+                .flat_map(|g| g.stops.iter().map(|s| s.color)),
+        );
+        used.extend(self.doc.tints.iter().map(|(t, ..)| t.base));
+        let colors = self.doc.colors.iter().filter(|c| {
+            !c.name.is_empty() || used.contains(&c.uid) || refs.contains(&c.reference())
+        });
         // IDML names the colour group swatch of every swatch from DOM 12
         // on (`n` for none).
         let group_ref = |x: &mut Xml, reference: &str| {
@@ -53,7 +91,7 @@ impl Writer<'_> {
                 );
             }
         };
-        for c in &self.doc.colors {
+        for c in colors {
             let name = c.idml_name();
             let mut attrs = vec![("Self", c.reference())];
             if let Some(model) = c.model_name() {
@@ -160,7 +198,7 @@ impl Writer<'_> {
         x.attrs_missing(self.observed("Swatch").iter());
         x.end();
         // The schema requires gradients after the swatches.
-        for g in &self.doc.gradients {
+        for g in gradients {
             x.start("Gradient")
                 .attr("Self", g.reference())
                 .attr("Type", if g.kind == 2 { "Radial" } else { "Linear" })

@@ -210,6 +210,17 @@ impl Attrs {
         Attrs::records(&mut c, n, decode, list, recorder)
     }
 
+    /// A page item attribute list (u32 count, records) at the cursor,
+    /// which is left after the list.
+    pub fn parse_at(
+        c: &mut Cursor,
+        list: List,
+        recorder: Option<&Recorder>,
+    ) -> Result<Attrs, Error> {
+        let n = c.u32()? as usize;
+        Attrs::records(c, n, decode, list, recorder)
+    }
+
     /// A page item attribute list with a u16 count, as object styles hold.
     pub fn parse_short(
         enc: Encoding,

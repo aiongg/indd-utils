@@ -132,7 +132,6 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">\n\t<rootfiles>\n\t\t<rootfile full-path=\"designmap.xml\" media-type=\"text/xml\">\n\t\t</rootfile>\n\t</rootfiles>\n</container>".into(),
     );
     files.insert("designmap.xml".into(), w.designmap(name));
-    files.insert("Resources/Graphic.xml".into(), w.graphic());
     files.insert("Resources/Fonts.xml".into(), w.fonts());
     files.insert("Resources/Styles.xml".into(), w.styles());
     files.insert("Resources/Preferences.xml".into(), w.preferences());
@@ -156,6 +155,11 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
     for s in &doc.stories {
         files.insert(format!("Stories/Story_u{:x}.xml", s.uid), w.story(s));
     }
+    // Unnamed colours and gradients are written only where the other
+    // parts refer to them (objects.md, colours), so the graphic part is
+    // written last.
+    let refs = swatch_refs(files.values().map(String::as_str));
+    files.insert("Resources/Graphic.xml".into(), w.graphic(&refs));
     let mut z = zip::ZipWriter::new(out);
     z.add("mimetype", MIMETYPE.as_bytes())?;
     for (path, content) in &files {
@@ -163,6 +167,27 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
     }
     z.finish()?;
     Ok(w.warnings.into_inner())
+}
+
+/// The `Color/u…` and `Gradient/u…` references in the package parts: an
+/// attribute value or element text that is such a reference.
+fn swatch_refs<'a>(parts: impl Iterator<Item = &'a str>) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    for part in parts {
+        for prefix in ["Color/u", "Gradient/u"] {
+            for (i, _) in part.match_indices(prefix) {
+                if i == 0 || !matches!(part.as_bytes()[i - 1], b'"' | b'>') {
+                    continue;
+                }
+                let rest = &part[i + prefix.len()..];
+                let hex = rest.bytes().take_while(u8::is_ascii_hexdigit).count();
+                if hex > 0 && matches!(rest.as_bytes().get(hex), Some(b'"' | b'<')) {
+                    out.insert(part[i..i + prefix.len() + hex].to_string());
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -180,5 +205,19 @@ impl<'a> Writer<'a> {
             page_layouts: Vec::new(),
             page_sections: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::swatch_refs;
+
+    #[test]
+    fn finds_unnamed_swatch_references() {
+        let part = r#"<A FillColor="Color/u1f" B="Color/u2x" C="Gradient/uab"><P>Color/u9</P><Q>xColor/u8</Q></A>"#;
+        let refs = swatch_refs([part].into_iter());
+        let mut v: Vec<_> = refs.into_iter().collect();
+        v.sort();
+        assert_eq!(v, ["Color/u1f", "Color/u9", "Gradient/uab"]);
     }
 }

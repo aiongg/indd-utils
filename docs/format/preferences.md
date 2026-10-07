@@ -217,7 +217,12 @@ The 601 files without it have `true`.
 
 The object of class 0x6E07 has a chunk 0x6E07: u32, u32, u32 *n*, *n*
 12-byte entries, then a page item attribute list (u32 count, records;
-`attributes.md`) and more data. The list has the attribute IDs of page
+`attributes.md`), then u32, u32, u32 *m* and *m* entries of the same
+layout. An entry is u32 class, u32 UID, u32 UID. In every sample the
+first table has entries for classes 0x1F05 (colour), 0x5503 (gradient),
+0x5533, 0x6E0B (`None`) and 0x6E11. The entries name the unnamed colours
+and gradients that IDML writes though nothing refers to them
+(`objects.md`, colours). The list has the attribute IDs of page
 items. Written with the page item attribute table, it gives
 `PageItemDefault` `StrokeWeight` in 628 of 628 files in which an
 analysis script found the list; over all pairs the converter reproduces

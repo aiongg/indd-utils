@@ -1778,6 +1778,29 @@ Unnamed colours are referenced by UID (`Color/u93`). All 1,296 colours in
 the pairs match on `Model`, `Space`, `ColorValue`, `ColorOverride`,
 `Name` and the three flags.
 
+**Which unnamed colours IDML writes.** A colour without a name is in the
+IDML only if a value written in the package refers to it (an attribute
+or element text `Color/u…`; a tint counts), if a stop of any gradient
+refers to it, even of an unnamed gradient that IDML leaves out (below),
+or if an entry of class 0x1F05 in one of the two tables of the
+page item defaults (`preferences.md`) names it with either UID. Over the
+489 trustworthy pairs, of the unnamed colours the converter wrote:
+
+| | In the IDML | Not in the IDML |
+|---|---:|---:|
+| Referenced by the output | 2,309 | 0 |
+| Not referenced, named in a page item defaults table | 564 | 0 |
+| Neither | 10 | 8,684 |
+
+All colours, written or not, are in the swatch list of the preferences
+object (class 0x2202, chunk 0x1F02), and the colour objects of the two
+groups have the same chunks and flags, so neither decides it. Named
+colours are always written. Unnamed gradients follow the same rule with
+class 0x5503: 457 unnamed gradients are referenced nowhere and named in
+no table, and none is in the IDML; 526 of the 548 unnamed gradients
+IDML writes meet the rule (the other 22 are open). Their stops go with
+them.
+
 **Model codes.** The 250 distinct little-endian files hold 13,067
 colours with chunk 0x1F09: 12,814 with code 0, 250 with code 2 (one
 `Registration` colour per file) and 3 with code 1. Two of the three are
