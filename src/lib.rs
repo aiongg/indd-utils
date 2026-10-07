@@ -40,7 +40,7 @@ pub mod object;
 pub use container::{Container, ContigObject, MasterPage};
 pub use database::{Database, Entry};
 pub use header::{ByteOrder, Header, Version};
-pub use object::{Chunk, Cursor, Encoding, Object};
+pub use object::{Chunk, Cursor, Encoding, Name, Object};
 
 #[derive(Debug)]
 pub enum Error {

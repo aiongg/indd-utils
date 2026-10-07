@@ -204,7 +204,7 @@ pub(super) fn uref(uid: Option<u32>) -> String {
 /// Name as used in a style's `Self` and in references: `$ID/` for built-ins.
 pub(super) fn style_name(s: &Style) -> String {
     if s.builtin {
-        format!("$ID/{}", s.name)
+        builtin_key(&s.name)
     } else {
         s.name.clone()
     }

@@ -5,7 +5,7 @@
 use super::{Attrs, Reader, chunk, class};
 use crate::Error;
 use crate::audit::List;
-use crate::object::{Cursor, Encoding};
+use crate::object::{Cursor, Encoding, builtin_key};
 
 /// A value for an element of `Resources/Preferences.xml` or a document
 /// setting in `designmap.xml`.
@@ -105,7 +105,7 @@ fn print_prefs(
     set("PrintTo", to.to_string());
     set("PrintToDisk", (to == 2).to_string());
     let file = if ppd_file.0 == 1 {
-        format!("$ID/{}", ppd_file.1)
+        builtin_key(&ppd_file.1)
     } else {
         ppd_file.1
     };

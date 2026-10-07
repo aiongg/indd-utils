@@ -292,7 +292,7 @@ impl Writer<'_> {
     pub(super) fn item_settings(&self, x: &mut Xml, item: &PageItem, nested: bool) {
         let p = &item.props;
         let name = match &p.name {
-            Some(n) if n.builtin => format!("$ID/{}", n.name),
+            Some(n) if n.builtin => builtin_key(&n.name),
             Some(n) => n.name.clone(),
             None => "$ID/".into(),
         };
@@ -374,7 +374,7 @@ impl Writer<'_> {
         }
         if let Some(os) = style {
             let name = if os.builtin {
-                format!("$ID/{}", os.name)
+                builtin_key(&os.name)
             } else {
                 os.name.clone()
             };

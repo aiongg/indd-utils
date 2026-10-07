@@ -39,6 +39,7 @@ pub use style::*;
 
 use std::collections::{BTreeMap, HashMap};
 
+pub use crate::object::Name;
 pub use attrs::{Attrs, Value};
 pub use cjk::{CjkTable, CompositeFont, CompositeFontEntry};
 pub use color::{Color, ColorGroup, Gradient, Ink, Tint};

@@ -53,8 +53,7 @@ pub struct Bullet {
     pub kind: u32,
     pub value: u32,
     pub font: u32,
-    /// The IDML font style, with `$ID/` for a built-in name.
-    pub font_style: String,
+    pub font_style: Name,
 }
 
 impl<'a> Reader<'a> {
@@ -82,8 +81,7 @@ impl<'a> Reader<'a> {
             let kind = c.u32()?;
             let value = c.u32()?;
             let font = c.u32()?;
-            let builtin = c.flag()? == 1;
-            let style = c.string()?;
+            let font_style = c.name()?;
             // 0, or 1 and four bytes of unknown meaning (objects.md).
             match c.u8()? {
                 0 => {}
@@ -99,11 +97,7 @@ impl<'a> Reader<'a> {
                 kind,
                 value,
                 font,
-                font_style: if builtin {
-                    format!("$ID/{style}")
-                } else {
-                    style
-                },
+                font_style,
             });
         }
         Ok(out)

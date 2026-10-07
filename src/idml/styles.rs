@@ -138,7 +138,7 @@ impl Writer<'_> {
         let (attrs, props, children) = self.root_values(tag, &[], &[]);
         x.start(tag)
             .attr("Self", format!("{tag}/$ID/{name}"))
-            .attr("Name", format!("$ID/{name}"));
+            .attr("Name", builtin_key(name));
         for (k, v) in &attrs {
             x.attr(k, v);
         }
@@ -156,7 +156,7 @@ impl Writer<'_> {
 
     pub(super) fn table_style_name(s: &crate::model::TableStyle) -> String {
         if s.builtin {
-            format!("$ID/{}", s.name)
+            builtin_key(&s.name)
         } else {
             s.name.clone()
         }
@@ -262,7 +262,7 @@ impl Writer<'_> {
         );
         for os in doc.object_styles.values() {
             let name = if os.builtin {
-                format!("$ID/{}", os.name)
+                builtin_key(&os.name)
             } else {
                 os.name.clone()
             };
@@ -279,7 +279,7 @@ impl Writer<'_> {
                 .map_or(Vec::new(), |p| p.children.clone());
             if !root && let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
                 let base_name = if base.builtin {
-                    format!("$ID/{}", base.name)
+                    builtin_key(&base.name)
                 } else {
                     base.name.clone()
                 };
@@ -594,7 +594,7 @@ impl Writer<'_> {
                         "Self",
                         format!("{sub_tag}/$ID/{}", self_name(&path.join(":"))),
                     )
-                    .attr("Name", format!("$ID/{}", sub.name));
+                    .attr("Name", builtin_key(&sub.name));
                 self.style_group_children(x, sub, tag, sub_tag, written);
                 x.end();
             } else if let Some(s) = self.doc.styles.get(&c) {

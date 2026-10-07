@@ -145,6 +145,31 @@ impl Object {
     }
 }
 
+/// A name stored as a flag byte and an in-object string. A flag of 1
+/// marks an InDesign built-in key, which IDML writes with `$ID/` before
+/// it (`docs/format/objects.md`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Name {
+    pub builtin: bool,
+    pub name: String,
+}
+
+impl Name {
+    /// The name as IDML writes it.
+    pub fn idml(&self) -> String {
+        if self.builtin {
+            builtin_key(&self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
+/// How IDML writes the InDesign built-in key `key`: `$ID/key`.
+pub fn builtin_key(key: &str) -> String {
+    format!("$ID/{key}")
+}
+
 /// Cursor over object data in one [`Encoding`]. Make one with
 /// [`Encoding::cursor`] or [`Object::cursor`].
 #[derive(Debug, Clone)]
@@ -279,6 +304,16 @@ impl<'a> Cursor<'a> {
             return Ok(self.data[self.pos - 1]);
         }
         self.u8()
+    }
+
+    /// A flag byte (see [`Cursor::flag`]), 1 for a built-in key, and a
+    /// string.
+    pub fn name(&mut self) -> Result<Name, Error> {
+        let builtin = self.flag()? == 1;
+        Ok(Name {
+            builtin,
+            name: self.string()?,
+        })
     }
 
     /// A string stored inside object data: u8 2 (1 in files from InDesign

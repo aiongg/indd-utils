@@ -1,7 +1,7 @@
 //! Font families (class 0x3E03). See `docs/format/fonts.md`.
 
 use crate::Error;
-use crate::object::{Encoding, Object};
+use crate::object::{Encoding, Name, Object};
 
 pub mod chunk {
     /// Family name and font records.
@@ -30,8 +30,8 @@ pub struct Font {
     /// Font type code (see [`Font::type_name`]).
     pub font_type: u32,
     pub version: String,
-    /// IDML `TypekitID`; `$ID/` when the font has none.
-    pub typekit_id: String,
+    /// IDML `TypekitID`; the empty built-in key when the font has none.
+    pub typekit_id: Name,
 }
 
 impl Font {
@@ -124,7 +124,10 @@ fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFam
             full_name_native,
             font_type,
             version,
-            typekit_id: "$ID/".into(),
+            typekit_id: Name {
+                builtin: true,
+                name: String::new(),
+            },
         });
     }
     let writing_script = c.u32()?;
@@ -141,16 +144,10 @@ fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFam
 
 /// Chunk 0x3EEB: u32 count, then per font a flag byte (1 = `$ID/` key)
 /// and a string.
-fn typekit_ids(enc: Encoding, data: &[u8]) -> Result<Vec<String>, Error> {
+fn typekit_ids(enc: Encoding, data: &[u8]) -> Result<Vec<Name>, Error> {
     let mut c = enc.cursor(data);
     let n = c.u32()?;
-    let mut out = Vec::new();
-    for _ in 0..n {
-        let key = c.flag()? == 1;
-        let s = c.string()?;
-        out.push(if key { format!("$ID/{s}") } else { s });
-    }
-    Ok(out)
+    (0..n).map(|_| c.name()).collect()
 }
 
 #[cfg(test)]
@@ -212,7 +209,11 @@ mod tests {
         d.push(0);
         d.extend(string("TkD-1-ab"));
         assert_eq!(
-            typekit_ids(crate::object::Encoding::default(), &d).unwrap(),
+            typekit_ids(crate::object::Encoding::default(), &d)
+                .unwrap()
+                .iter()
+                .map(Name::idml)
+                .collect::<Vec<_>>(),
             ["$ID/", "TkD-1-ab"]
         );
     }

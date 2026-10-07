@@ -89,8 +89,8 @@ impl Writer<'_> {
         // The schema puts inks after the colours.
         for i in &self.doc.inks {
             let mut attrs = vec![
-                ("Self", format!("Ink/{}", self_name(&i.name))),
-                ("Name", i.name.clone()),
+                ("Self", format!("Ink/{}", self_name(&i.name.idml()))),
+                ("Name", i.name.idml()),
                 ("Angle", num(i.angle)),
                 // These three are the same in every Ink of the corpus
                 // IDML files (idml-values.md).
@@ -123,7 +123,7 @@ impl Writer<'_> {
                 .attr("ContentsType", "ConstantShade");
             if let Some((builtin, name)) = &shade.name {
                 let name = if *builtin {
-                    format!("$ID/{name}")
+                    builtin_key(name)
                 } else {
                     name.clone()
                 };
@@ -193,7 +193,7 @@ impl Writer<'_> {
                 "StrokeStyle",
                 &[
                     ("Self", format!("StrokeStyle/$ID/{name}")),
-                    ("Name", format!("$ID/{name}")),
+                    ("Name", builtin_key(name)),
                 ],
             );
         }
@@ -233,7 +233,7 @@ impl Writer<'_> {
                     .attr("Version", &font.version);
                 // IDML from InDesign 7 has no TypekitID.
                 if self.doc.version.major >= 12 {
-                    x.attr("TypekitID", &font.typekit_id);
+                    x.attr("TypekitID", font.typekit_id.idml());
                 }
                 x.end();
             }
@@ -244,25 +244,26 @@ impl Writer<'_> {
             .doc
             .composite_fonts
             .iter()
-            .filter(|c| c.name == "$ID/[No composite font]")
+            .filter(|c| c.name.builtin && c.name.name == "[No composite font]")
         {
+            let name = cf.name.idml();
             x.start("CompositeFont")
-                .attr("Self", format!("CompositeFont/{}", self_name(&cf.name)))
-                .attr("Name", &cf.name);
+                .attr("Self", format!("CompositeFont/{}", self_name(&name)))
+                .attr("Name", &name);
             for e in &cf.entries {
                 // The four numbers are the same in every sample.
                 let usual = e.numbers == [100.0, 0.0, 100.0, 100.0];
                 x.start("CompositeFontEntry")
                     .attr("Self", uref(Some(e.uid)))
-                    .attr("Name", &e.name)
-                    .attr("FontStyle", &e.font_style);
+                    .attr("Name", e.name.idml())
+                    .attr("FontStyle", e.font_style.idml());
                 if usual {
                     x.attr("RelativeSize", "100")
                         .attr("HorizontalScale", "100")
                         .attr("VerticalScale", "100");
                 }
                 // IDML gives no characters for the Kanji entry.
-                if e.name != "$ID/Kanji" {
+                if !(e.name.builtin && e.name.name == "Kanji") {
                     x.attr("CustomCharacters", e.characters());
                 }
                 // In every CompositeFontEntry of the corpus IDML files.
@@ -313,7 +314,7 @@ impl Writer<'_> {
             .values()
             .map(|os| {
                 let name = if os.builtin {
-                    format!("$ID/{}", os.name)
+                    builtin_key(&os.name)
                 } else {
                     os.name.clone()
                 };
@@ -430,7 +431,7 @@ impl Writer<'_> {
             let i = ours_of(&mut ours, tag);
             ours[i]
                 .attrs
-                .push(("PrintRecord".into(), format!("$ID/{text}")));
+                .push(("PrintRecord".into(), builtin_key(&text)));
         }
         for (tag, name, value) in &prefs.props {
             let mut n = Node {

@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::Error;
-use crate::object::{Cursor, Encoding, Object};
+use crate::object::{Encoding, Object};
 
 pub mod class {
     pub const HYPERLINK: u32 = 0x13501;
@@ -115,12 +115,6 @@ pub struct Bookmark {
     pub destination: u32,
 }
 
-/// A flag byte, then an in-object string.
-fn flagged_string(c: &mut Cursor) -> Result<String, Error> {
-    c.u8()?;
-    c.string()
-}
-
 /// Values of the unidentified hyperlink fields in the corpus pairs:
 /// chunk 0x13553, and the three u32 at offset 12 of chunk 0x13502.
 const SAMPLE_APPEARANCE: &[[u8; 18]] = &[
@@ -140,7 +134,7 @@ impl Hyperlink {
         let hidden = c.u16()? != 0;
         let key = c.u32()?;
         let (a, b, k) = (c.u32()?, c.u32()?, c.u32()?);
-        let name = flagged_string(&mut c)?;
+        let name = c.name()?.name;
         let appearance = obj.chunk(chunk::HYPERLINK_APPEARANCE);
         let as_in_samples = matches!(a, 2001 | 2017)
             && b == 2007
@@ -166,7 +160,7 @@ impl TextSource {
         let mut c = enc.cursor(d);
         let hidden = c.u8()? != 0;
         c.skip(5)?;
-        let name = flagged_string(&mut c)?;
+        let name = c.name()?.name;
         let character_style = match obj.chunk(chunk::TEXT_SOURCE_RANGE) {
             Some(r) => {
                 let mut c = enc.cursor(r);
@@ -199,7 +193,7 @@ impl Destination {
         let mut c = enc.cursor(d);
         let hidden = c.u8()? != 0;
         c.skip(1)?;
-        let name = flagged_string(&mut c)?;
+        let name = c.name()?.name;
         let key = c.u32()?;
         let kind = if class == class::PAGE_DESTINATION {
             let Some(v) = obj.chunk(chunk::PAGE_DESTINATION_VIEW) else {
@@ -212,7 +206,7 @@ impl Destination {
             DestinationKind::Page { page, zoom, view }
         } else {
             let url = match obj.chunk(chunk::URL) {
-                Some(u) => flagged_string(&mut enc.cursor(u))?,
+                Some(u) => enc.cursor(u).name()?.name,
                 None => name.clone(),
             };
             DestinationKind::Url { url }
@@ -234,7 +228,7 @@ impl Bookmark {
             return Ok(None);
         };
         let mut c = enc.cursor(d);
-        let name = flagged_string(&mut c)?;
+        let name = c.name()?.name;
         c.skip(4)?;
         let parent = c.u32()?;
         let children = c.u32_list()?;

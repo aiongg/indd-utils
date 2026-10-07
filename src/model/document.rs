@@ -111,7 +111,7 @@ struct ClassObjects {
     bookmarks: BTreeMap<u32, Bookmark>,
     cross_reference_formats: BTreeMap<u32, CrossReferenceFormat>,
     /// Composite fonts: UID, name and entry UIDs.
-    composite_fonts: Vec<(u32, String, Vec<u32>)>,
+    composite_fonts: Vec<(u32, Name, Vec<u32>)>,
     composite_entries: HashMap<u32, CompositeFontEntry>,
     cjk_tables: Vec<CjkTable>,
     xml_tags: Vec<XmlTag>,

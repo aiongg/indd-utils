@@ -2,7 +2,7 @@
 //! `docs/format/cross-references.md`.
 
 use crate::Error;
-use crate::object::{Cursor, Encoding, Object};
+use crate::object::{Encoding, Name, Object};
 
 pub const CLASS: u32 = 0x1355E;
 pub const CHUNK: u32 = 0x13593;
@@ -31,21 +31,14 @@ pub struct BuildingBlock {
     pub kind: u32,
     /// The 10 bytes after the type are all 0, as in every sample.
     pub zero_fields: bool,
-    /// `CustomText`, with `$ID/` for a built-in key.
-    pub text: String,
+    /// `CustomText`.
+    pub text: Name,
 }
 
 impl BuildingBlock {
     pub fn type_name(&self) -> Option<&'static str> {
         BLOCK_TYPES.iter().find(|t| t.0 == self.kind).map(|t| t.1)
     }
-}
-
-/// A flag byte (1 = built-in key, written with `$ID/`), then a string.
-fn keyed_string(c: &mut Cursor) -> Result<String, Error> {
-    let key = c.flag()? == 1;
-    let s = c.string()?;
-    Ok(if key { format!("$ID/{s}") } else { s })
 }
 
 impl CrossReferenceFormat {
@@ -70,7 +63,7 @@ fn parse(enc: Encoding, uid: u32, data: &[u8]) -> Result<CrossReferenceFormat, E
     for _ in 0..n {
         let kind = c.u32()?;
         let zero_fields = c.bytes(10)?.iter().all(|&b| b == 0);
-        let text = keyed_string(&mut c)?;
+        let text = c.name()?;
         blocks.push(BuildingBlock {
             kind,
             zero_fields,
@@ -117,9 +110,9 @@ mod tests {
         let f = parse(crate::object::Encoding::default(), 0xA7, &d).unwrap();
         assert_eq!(f.name, "Page Number");
         assert_eq!(f.blocks.len(), 2);
-        assert_eq!(f.blocks[0].text, "page ");
+        assert_eq!(f.blocks[0].text.idml(), "page ");
         assert_eq!(f.blocks[1].type_name(), Some("PageNumberBuildingBlock"));
-        assert_eq!(f.blocks[1].text, "$ID/");
+        assert_eq!(f.blocks[1].text.idml(), "$ID/");
         assert!(f.blocks[1].zero_fields);
     }
 }

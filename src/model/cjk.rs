@@ -2,7 +2,7 @@
 //! See `docs/format/fonts.md` and `docs/format/objects.md`.
 
 use crate::Error;
-use crate::object::Cursor;
+use crate::object::{Cursor, Name};
 
 pub mod class {
     pub const COMPOSITE_FONT: u32 = 0xCB02;
@@ -23,19 +23,10 @@ pub mod chunk {
     pub const KINSOKU_CHARS: u32 = 0x4214;
 }
 
-/// A name stored as a flag byte (1 = built-in key, `$ID/` in IDML) and an
-/// in-object string.
-fn flagged_name(c: &mut Cursor) -> Result<String, Error> {
-    let builtin = c.flag()? == 1;
-    let name = c.string()?;
-    Ok(if builtin { format!("$ID/{name}") } else { name })
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompositeFont {
     pub uid: u32,
-    /// The IDML name, with `$ID/` for a built-in name.
-    pub name: String,
+    pub name: Name,
     /// Entries, in IDML order.
     pub entries: Vec<CompositeFontEntry>,
 }
@@ -43,9 +34,9 @@ pub struct CompositeFont {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompositeFontEntry {
     pub uid: u32,
-    pub name: String,
+    pub name: Name,
     pub font_family: u32,
-    pub font_style: String,
+    pub font_style: Name,
     /// Four f64; (100, 0, 100, 100) in every sample, the 0 being the
     /// baseline shift.
     pub numbers: [f64; 4],
@@ -76,9 +67,9 @@ impl CompositeFontEntry {
             return Ok(None);
         };
         let mut c = enc.cursor(d);
-        let name = flagged_name(&mut c)?;
+        let name = c.name()?;
         let font_family = c.u32()?;
-        let font_style = flagged_name(&mut c)?;
+        let font_style = c.name()?;
         let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
         c.u16()?;
         let n = c.u16()?;
@@ -114,13 +105,13 @@ impl CompositeFont {
     /// Chunk 0xCB02: the name, fields not identified, then a u16 count and
     /// the entry UIDs, which end the chunk. Returns the name and the
     /// entry UIDs.
-    pub fn read(obj: &crate::Object) -> Result<Option<(String, Vec<u32>)>, Error> {
+    pub fn read(obj: &crate::Object) -> Result<Option<(Name, Vec<u32>)>, Error> {
         let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::COMPOSITE_FONT) else {
             return Ok(None);
         };
         let mut c = enc.cursor(d);
-        let name = flagged_name(&mut c)?;
+        let name = c.name()?;
         let start = c.pos();
         let Some(p) = (start..d.len().saturating_sub(1)).find(|&p| {
             let n = enc.u16_from([d[p], d[p + 1]]) as usize;
@@ -140,7 +131,7 @@ impl CompositeFont {
 pub struct CjkTable {
     pub uid: u32,
     pub mojikumi: bool,
-    pub name: String,
+    pub name: Name,
     /// The character lists of a custom kinsoku table: cannot begin a line,
     /// cannot end a line, (not identified), hanging punctuation, cannot be
     /// separated.
@@ -153,7 +144,7 @@ impl CjkTable {
         let Some(d) = obj.chunk(chunk::TABLE_NAME) else {
             return Ok(None);
         };
-        let name = flagged_name(&mut enc.cursor(d))?;
+        let name = enc.cursor(d).name()?;
         let chars = match obj.chunk(chunk::KINSOKU_CHARS) {
             Some(d) if cls == class::CUSTOM_KINSOKU => {
                 let mut c = enc.cursor(d);

@@ -92,12 +92,12 @@ impl Kind {
 /// Built-in kinsoku and mojikumi tables observed in the corpus
 /// (`docs/format/attributes.md`): table name and IDML enumeration value.
 const BUILTIN_CJK_TABLES: [(&str, &str); 6] = [
-    ("$ID/kHardKinsokuName", "HardKinsoku"),
-    ("$ID/kSoftKinsokuName", "SoftKinsoku"),
-    ("$ID/kKoreanKinsokuName", "KoreanKinsoku"),
-    ("$ID/kSimpChineseKinsokuName", "SimplifiedChineseKinsoku"),
-    ("$ID/kMojikumiDefaultName1", "LineEndAllOneHalfEmEnum"),
-    ("$ID/kMojikumiDefaultName16", "SimpChineseDefault"),
+    ("kHardKinsokuName", "HardKinsoku"),
+    ("kSoftKinsokuName", "SoftKinsoku"),
+    ("kKoreanKinsokuName", "KoreanKinsoku"),
+    ("kSimpChineseKinsokuName", "SimplifiedChineseKinsoku"),
+    ("kMojikumiDefaultName1", "LineEndAllOneHalfEmEnum"),
+    ("kMojikumiDefaultName16", "SimpChineseDefault"),
 ];
 
 fn text(ty: &'static str, s: String) -> (&'static str, PropValue) {
@@ -202,7 +202,7 @@ impl Writer<'_> {
             Kind::Language => v
                 .as_u32()
                 .and_then(|u| self.doc.languages.get(&u))
-                .map(|l| text("string", format!("$ID/{l}"))),
+                .map(|l| text("string", builtin_key(l))),
             Kind::CharacterStyle => v
                 .as_u32()
                 .map(|u| text("object", self.style_ref(Some(u).filter(|&u| u != 0), false))),
@@ -220,15 +220,18 @@ impl Writer<'_> {
                     return Some(text("enumeration", "Nothing".into()));
                 }
                 let t = self.doc.cjk_tables.iter().find(|t| t.uid == u)?;
-                if let Some((_, e)) = BUILTIN_CJK_TABLES.iter().find(|(k, _)| *k == t.name) {
-                    return Some(text("enumeration", e.to_string()));
+                if t.name.builtin {
+                    return BUILTIN_CJK_TABLES
+                        .iter()
+                        .find(|(k, _)| *k == t.name.name)
+                        .map(|(_, e)| text("enumeration", e.to_string()));
                 }
-                if t.name.starts_with("$ID/") || t.mojikumi {
+                if t.mojikumi {
                     return None;
                 }
                 Some(text(
                     "object",
-                    format!("KinsokuTable/{}", self_name(&t.name)),
+                    format!("KinsokuTable/{}", self_name(&t.name.name)),
                 ))
             }
             Kind::TabList => match v {

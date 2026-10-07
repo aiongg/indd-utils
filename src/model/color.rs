@@ -1,6 +1,7 @@
 //! Colours and swatches. See `docs/format/objects.md`.
 
 use crate::Error;
+use crate::object::{Name, builtin_key};
 
 pub mod class {
     pub const COLOR: u32 = 0x1F05;
@@ -79,7 +80,7 @@ impl Gradient {
 
     pub fn idml_name(&self) -> String {
         if self.builtin_name {
-            format!("$ID/{}", self.name)
+            builtin_key(&self.name)
         } else {
             self.name.clone()
         }
@@ -259,7 +260,7 @@ impl Color {
     /// The `Name` attribute.
     pub fn idml_name(&self) -> String {
         if self.builtin_name {
-            format!("$ID/{}", self.name)
+            builtin_key(&self.name)
         } else {
             self.name.clone()
         }
@@ -385,8 +386,7 @@ impl Color {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ink {
     pub uid: u32,
-    /// The IDML name, with `$ID/` for a built-in name.
-    pub name: String,
+    pub name: Name,
     /// `None` when the stored value is outside the 0.001–10 the IDML
     /// schema allows (−1 in some files; `objects.md`).
     pub neutral_density: Option<f64>,
@@ -402,8 +402,7 @@ impl Ink {
             return Ok(None);
         };
         let mut c = enc.cursor(d);
-        let builtin = c.flag()? == 1;
-        let name = c.string()?;
+        let name = c.name()?;
         let end = c.pos();
         if d.len() < end + 48 {
             return Ok(None);
@@ -411,7 +410,7 @@ impl Ink {
         let f = |o: usize| enc.cursor(&d[end + o..]).f64();
         Ok(Some(Ink {
             uid,
-            name: if builtin { format!("$ID/{name}") } else { name },
+            name,
             neutral_density: Some(f(14)?).filter(|v| (0.001..=10.0).contains(v)),
             trap_order: enc.cursor(&d[end + 26..]).u32()? + 1,
             frequency: f(32)?,

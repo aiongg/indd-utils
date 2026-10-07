@@ -25,9 +25,8 @@ pub(super) fn find_flagged_string(
             return None;
         }
         let mut c = enc.cursor(&data[i..]);
-        let builtin = c.flag().ok()? == 1;
-        let s = c.string().ok()?;
-        accept(&s).then_some((i, builtin, s))
+        let n = c.name().ok()?;
+        accept(&n.name).then_some((i, n.builtin, n.name))
     })
 }
 

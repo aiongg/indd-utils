@@ -45,7 +45,7 @@ pub(super) fn section_ranges(doc: &Document) -> Vec<(&Section, usize, usize)> {
 /// a built-in key.
 pub(super) fn alternate_layout_name(s: &Section) -> Option<String> {
     s.alternate_layout.as_ref().map(|(flag, name)| match flag {
-        1 => format!("$ID/{name}"),
+        1 => builtin_key(name),
         _ => name.clone(),
     })
 }

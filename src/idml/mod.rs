@@ -39,6 +39,7 @@ use crate::model::{
     numbering, root_kind, variable::Instance, wrap_mode, xml::Key as XmlKey,
 };
 
+use crate::object::builtin_key;
 use values::Node;
 use xml::Xml;
 

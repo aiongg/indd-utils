@@ -72,9 +72,10 @@ impl Writer<'_> {
                 } else {
                     "KinsokuTable"
                 };
+                let name = t.name.idml();
                 x.start(tag)
-                    .attr("Self", format!("{tag}/{}", self_name(&t.name)))
-                    .attr("Name", &t.name);
+                    .attr("Self", format!("{tag}/{}", self_name(&name)))
+                    .attr("Name", &name);
                 if let Some([begin, end, _, hanging, together]) = &t.chars {
                     x.attr("CantBeginLineChars", begin)
                         .attr("CantEndLineChars", end)
@@ -138,7 +139,7 @@ impl Writer<'_> {
         let grid = grids.first().filter(|g| grids.iter().all(|h| h == *g));
         for (builtin, name) in &doc.named_grids {
             let name = if *builtin {
-                format!("$ID/{name}")
+                builtin_key(name)
             } else {
                 name.clone()
             };
@@ -288,7 +289,7 @@ impl Writer<'_> {
                 &mut x,
                 &[
                     ("BulletsFont", "string", font.into()),
-                    ("BulletsFontStyle", "string", b.font_style.clone().into()),
+                    ("BulletsFontStyle", "string", b.font_style.idml().into()),
                 ],
             );
             x.end();
@@ -298,7 +299,7 @@ impl Writer<'_> {
         for (i, (name, include, variant)) in doc.index_groups.iter().enumerate() {
             x.start("IndexingSortOption")
                 .attr("Self", format!("dIndexingSortOptionn{name}"))
-                .attr("Name", format!("$ID/{name}"))
+                .attr("Name", builtin_key(name))
                 .attr("Include", include.to_string())
                 .attr("Priority", i.to_string());
             if let Some(h) = index_header_type(name, *variant) {
@@ -322,7 +323,7 @@ impl Writer<'_> {
     /// The IDML reference of a TOC style.
     pub(super) fn toc_style_ref(t: &crate::model::TocStyle) -> String {
         let name = if t.builtin {
-            format!("$ID/{}", t.name)
+            builtin_key(&t.name)
         } else {
             t.name.clone()
         };
@@ -334,7 +335,7 @@ impl Writer<'_> {
     pub(super) fn toc_styles(&self, x: &mut Xml) {
         for t in &self.doc.toc_styles {
             let name = if t.builtin {
-                format!("$ID/{}", t.name)
+                builtin_key(&t.name)
             } else {
                 t.name.clone()
             };
@@ -385,7 +386,7 @@ impl Writer<'_> {
                 if neutral {
                     "$ID/[No Language]".to_string()
                 } else {
-                    format!("$ID/{s}")
+                    builtin_key(s)
                 }
             };
             let full = name(&l.name);
@@ -457,7 +458,7 @@ impl Writer<'_> {
                 if b.zero_fields {
                     x.attr("AppliedCharacterStyle", "n");
                 }
-                x.attr("CustomText", &b.text);
+                x.attr("CustomText", b.text.idml());
                 if b.zero_fields {
                     x.attr("AppliedDelimiter", "$ID/")
                         .attr("IncludeDelimiter", "false");
