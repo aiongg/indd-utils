@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""Find the values that every corpus IDML has on its root styles.
+"""Find the values that every corpus IDML has on its root styles and in
+its preferences.
 
-Reads Resources/Styles.xml of every IDML in the corpus pairs (distinct
-files only) and collects each attribute, Properties child and child
-element attribute of the root styles. A value is kept when it is the same
-in every IDML from some DOM version on and present in all of them; the
+Reads Resources/Styles.xml and Resources/Preferences.xml of every IDML in
+the corpus pairs (distinct files only) and collects each attribute,
+Properties child and child element attribute of the root styles and of
+the top-level preference elements. A value is kept when it is the same in
+every IDML from some DOM version on and present in all of them; the
 earliest such version is its minimum version. Attributes the converter
 reads from the INDD (the TEXT_ATTRS table in src/idml/mod.rs) are left
-out for the paragraph and character root styles.
+out for the paragraph and character root styles, and the document setup
+it reads is left out of the preferences. Preference values that refer to
+a style other than a root style are left out, since the package need not
+have that style.
 
 Usage: python3 -I tools/root_values.py [--write]
 Prints the evidence counts. With --write, regenerates
-src/idml/root_values.xml. See docs/format/idml-values.md.
+src/idml/root_values.xml and src/idml/preference_values.xml. See
+docs/format/idml-values.md.
 """
 
 import hashlib
@@ -25,6 +31,38 @@ from xml.sax.saxutils import quoteattr
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "src" / "idml" / "root_values.xml"
+PREF_OUT = ROOT / "src" / "idml" / "preference_values.xml"
+
+# Preference attributes the converter reads from the INDD.
+PREF_SKIP = {
+    ("DocumentPreference", "PageHeight"), ("DocumentPreference", "PageWidth"),
+    ("DocumentPreference", "FacingPages"), ("DocumentPreference", "Intent"),
+    ("DocumentPreference", "DocumentBleedTopOffset"),
+    ("DocumentPreference", "DocumentBleedBottomOffset"),
+    ("DocumentPreference", "DocumentBleedInsideOrLeftOffset"),
+    ("DocumentPreference", "DocumentBleedOutsideOrRightOffset"),
+    ("ViewPreference", "RulerOrigin"),
+}
+# Styles a preference value may refer to: those every package has.
+ROOT_STYLES = {
+    "ParagraphStyle/$ID/[No paragraph style]",
+    "CharacterStyle/$ID/[No character style]",
+    "ObjectStyle/$ID/[None]",
+}
+# A preference value first seen in a later version is kept only when at
+# least this many files show it.
+MIN_FILES = 10
+STYLE_REF = re.compile(r"(?:>|^)(Paragraph|Character|Object|Cell|Table)Style/[^<]*")
+
+PREF_HEADER = """<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Values that every IDML exported by InDesign in the corpus has in
+Resources/Preferences.xml. The converter writes them; values it reads
+from the INDD take precedence. Values in a block with MinimumVersion are
+written only for documents of that InDesign version or later. Generated
+by tools/root_values.py; evidence in docs/format/idml-values.md.
+-->
+"""
 
 TARGETS = OrderedDict([
     ("ParagraphStyle", "ParagraphStyle/$ID/[No paragraph style]"),
@@ -123,6 +161,83 @@ def analyse():
     return pairs, idmls, doms, kept, left_out, order
 
 
+def since_of(by_file, doms):
+    """The first DOM version from which every file has the same value, and
+    the number of those files; None if there is none."""
+    for m in sorted({doms[i] for i in by_file}):
+        files = [i for i, d in enumerate(doms) if d >= m]
+        if all(i in by_file for i in files):
+            if len({by_file[i] for i in files}) == 1:
+                return (m, len(files))
+            return None
+    return None
+
+
+def style_ref(v):
+    m = STYLE_REF.search(v)
+    return m and m.group(0).lstrip(">") not in ROOT_STYLES
+
+
+def analyse_preferences(idmls, doms):
+    values = defaultdict(dict)
+    order = defaultdict(dict)
+    tags = OrderedDict()
+    for i, (_dom, idml) in enumerate(idmls):
+        root = ET.fromstring(zipfile.ZipFile(idml).read("Resources/Preferences.xml"))
+        for el in root:
+            tags.setdefault(el.tag, len(tags))
+            out = {}
+            leaves(el, (), out, order[el.tag])
+            for k, v in out.items():
+                values[(el.tag, k)][i] = v
+    kept = defaultdict(list)
+    left_out = defaultdict(lambda: defaultdict(list))
+    for (tag, key), by_file in values.items():
+        path, name = key
+        plain = name.split("/", 1)[1] if name.startswith("P/") else name[1:]
+        if not path and (tag, plain) in PREF_SKIP:
+            left_out[tag]["read from the INDD"].append(plain)
+            continue
+        since = since_of(by_file, doms)
+        if since is None:
+            left_out[tag]["varies"].append("/".join(path + (plain,)))
+            continue
+        if since[1] < MIN_FILES:
+            left_out[tag][f"in fewer than {MIN_FILES} files"].append("/".join(path + (plain,)))
+            continue
+        value = next(iter(by_file.values()))
+        if style_ref(value):
+            left_out[tag]["refers to a style"].append("/".join(path + (plain,)))
+            continue
+        kept[tag].append((key, value, since))
+    return tags, kept, left_out, order
+
+
+def write_preferences(tags, kept, order, first):
+    blocks = []
+    for since in sorted({s for items in kept.values() for _, _, (s, _) in items}):
+        gate = "" if since == first else f' MinimumVersion="{since}"'
+        s = f"\t<Values{gate}>\n"
+        for tag in tags:
+            items = sorted((it for it in kept[tag] if it[2][0] == since),
+                           key=lambda it: order[tag][it[0]])
+            if not items:
+                continue
+            tree = {"attrs": [], "props": [], "children": OrderedDict()}
+            for (path, name), v, _ in items:
+                node = tree
+                for p in path:
+                    node = node["children"].setdefault(
+                        p, {"attrs": [], "props": [], "children": OrderedDict()})
+                if name.startswith("@"):
+                    node["attrs"].append((name[1:], v))
+                else:
+                    node["props"].append(v)
+            s += element(tag, tree, "\t\t")
+        blocks.append(s + "\t</Values>\n")
+    PREF_OUT.write_text(PREF_HEADER + "<PreferenceValues>\n" + "".join(blocks) + "</PreferenceValues>\n")
+
+
 def element(tag, node, indent):
     attrs = "".join(f" {k}={quoteattr(v)}" for k, v in node["attrs"])
     if not node["props"] and not node["children"]:
@@ -174,9 +289,24 @@ def main():
             print(f"  {k:4} values, the same in {n} of {n} IDML files with DOM >= {since}")
         for why, names in left_out[tag].items():
             print(f"  {len(names):4} left out ({why}): {', '.join(sorted(names))}")
+    tags, pkept, pleft, porder = analyse_preferences(idmls, doms)
+    print("\nPreferences:")
+    total = defaultdict(int)
+    for tag in tags:
+        for _, _, since in pkept[tag]:
+            total[since] += 1
+    for (since, n), k in sorted(total.items()):
+        print(f"  {k:4} values, the same in {n} of {n} IDML files with DOM >= {since}")
+    for tag in tags:
+        counts = {why: len(names) for why, names in pleft[tag].items()}
+        print(f"  {tag}: {len(pkept[tag])} kept, left out {counts}")
+        if pleft[tag].get("refers to a style") or pleft[tag].get("read from the INDD"):
+            print(f"      {pleft[tag].get('refers to a style', [])} {pleft[tag].get('read from the INDD', [])}")
     if "--write" in sys.argv:
         write(kept, order, min(doms))
         print(f"\nwrote {OUT.relative_to(ROOT)}")
+        write_preferences(tags, pkept, porder, min(doms))
+        print(f"wrote {PREF_OUT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 # Values written from IDML observation
 
 Some values the converter writes do not come from the INDD file. They are
-values that every IDML exported by InDesign in the corpus has. They are
+values that every IDML exported by InDesign in the corpus has, on the
+root styles and in the preferences. They are
 facts about InDesign's IDML output, not about the INDD format, and the
 evidence is the corpus IDML files alone.
 
@@ -100,10 +101,43 @@ element in the package.
 `PlatformName` is `$ID/` in all 4,464 `Font` elements of the corpus IDML
 files (`fonts.md`). The converter writes that value on every font.
 
-## Not yet written
+## Preferences
 
-`Resources/Preferences.xml` has more elements that every corpus IDML has
-(`TextDefault`, `TextPreference`, `PageItemDefault`, `StoryPreference`,
-`FootnoteOption` and others). Many of their attributes are the same in
-all 88 files (for example 196 of the 276 attributes of `TextDefault`),
-but others vary and may be stored in the INDD. They are not written yet.
+`Resources/Preferences.xml` of every corpus IDML has the same 41
+top-level elements (`TextDefault`, `TextPreference`,
+`TextFramePreference`, `PageItemDefault`, `StoryPreference`,
+`FootnoteOption`, `TransparencyDefaultContainerObject` and others; the
+DOM 7 file lacks `EPubFixedLayoutExportPreference`). `tools/root_values.py`
+collects each attribute, `Properties` child and child element attribute
+of these elements with the same rule as for the root styles, and writes
+the kept values to `src/idml/preference_values.xml`. The converter writes
+those elements in the order the IDML files list them.
+
+| Values | Same in | Written for version |
+|---|---|---|
+| 1,041 | 88 of 88 files | all |
+| 66 | 87 of 87 files with DOM 12 or later | 12 and later |
+| 46 | 80 of 80 files with DOM 15 or later | 15 and later |
+
+For example `TextDefault` keeps 264 of its 317 values,
+`TransparencyDefaultContainerObject` all 352 and `TextFramePreference`
+32 of 34.
+
+**Left out:**
+
+- 230 values that vary between files, for example the page size,
+  margins and grid settings, 53 values of `TextDefault` (among them the
+  font and point size) and 12 of `TextPreference`.
+- The document setup the converter reads from the INDD (`objects.md`):
+  `PageHeight`, `PageWidth`, `FacingPages`, `Intent` and the four bleed
+  offsets of `DocumentPreference`. The converter writes its own values
+  for these and adds the observed values for the rest of the element.
+  `ViewPreference` gets `RulerOrigin="SpreadOrigin"`, as before.
+- 3 values that name a style other than a root style, which the package
+  need not contain: `AppliedTextObjectStyle` and `AppliedGridObjectStyle`
+  of `PageItemDefault`, `FootnoteTextStyle` of `FootnoteOption`.
+- 20 values that only the 2 files with DOM 20 have. A value first seen
+  in a later version is kept only when at least 10 files show it.
+
+Some of these values are probably stored in the INDD and may differ in a
+document outside the corpus; none of them is read from the INDD yet.

@@ -1676,25 +1676,53 @@ impl Writer<'_> {
     fn preferences(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Preferences");
+        // Values every exported IDML has (docs/format/idml-values.md);
+        // values read from the INDD take precedence.
+        let mut nodes = values::preferences(self.doc.version.major);
+        let mut set = |tag: &str, ours: Vec<(&str, String)>| {
+            let i = match nodes.iter().position(|n| n.tag == tag) {
+                Some(i) => i,
+                None => {
+                    nodes.push(Node {
+                        tag: tag.to_string(),
+                        ..Node::default()
+                    });
+                    nodes.len() - 1
+                }
+            };
+            let node = &mut nodes[i];
+            node.attrs
+                .retain(|(k, _)| !ours.iter().any(|(o, _)| o == k));
+            let rest = std::mem::take(&mut node.attrs);
+            node.attrs = ours.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+            node.attrs.extend(rest);
+        };
         if let Some(p) = &self.doc.preferences {
             const INTENT: [&str; 3] = ["PrintIntent", "WebIntent", "MobileIntent"];
             let [top, bottom, inside, outside] = p.bleed;
-            x.start("DocumentPreference")
-                .attr("PageHeight", num(p.page_height))
-                .attr("PageWidth", num(p.page_width))
-                .attr("FacingPages", p.facing_pages.to_string())
-                .attr("DocumentBleedTopOffset", num(top))
-                .attr("DocumentBleedBottomOffset", num(bottom))
-                .attr("DocumentBleedInsideOrLeftOffset", num(inside))
-                .attr("DocumentBleedOutsideOrRightOffset", num(outside));
+            let mut ours = vec![
+                ("PageHeight", num(p.page_height)),
+                ("PageWidth", num(p.page_width)),
+                ("FacingPages", p.facing_pages.to_string()),
+                ("DocumentBleedTopOffset", num(top)),
+                ("DocumentBleedBottomOffset", num(bottom)),
+                ("DocumentBleedInsideOrLeftOffset", num(inside)),
+                ("DocumentBleedOutsideOrRightOffset", num(outside)),
+            ];
             if let Some(i) = INTENT.get(p.intent as usize) {
-                x.attr("Intent", *i);
+                ours.push(("Intent", i.to_string()));
             }
-            x.end();
+            set("DocumentPreference", ours);
         }
         // Guide locations are written measured from the spread (see
         // `guide`), so the ruler origin is stated rather than read.
-        x.empty("ViewPreference", &[("RulerOrigin", "SpreadOrigin".into())]);
+        set(
+            "ViewPreference",
+            vec![("RulerOrigin", "SpreadOrigin".into())],
+        );
+        for n in &nodes {
+            n.write(&mut x);
+        }
         x.end();
         x.finish()
     }
