@@ -190,6 +190,12 @@ exporting computer:
   and not in others, and the strings occur in no INDD file). Family names
   (`FontFamily` `Name`, `Font` `FontFamily`, `AppliedFont`,
   `BulletsFont`) are compared with that suffix removed from both values.
+  A `Font` element is matched by its `Self`, which contains the family
+  name (`…FontnMinion Pro (OTF) Regular`), and its `Name` starts with
+  it: the suffix is removed from the family name in both before the
+  fonts are matched and compared. Otherwise each such font counted as
+  missing and its counterpart in the output as extra (12,743 extra
+  values in the trustworthy pairs before this rule).
 
 A value enters this list only with a reason of this kind. Values that are
 hard to decode, or that the converter does not write yet, stay in the

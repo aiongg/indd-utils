@@ -246,6 +246,8 @@ def load(path):
         for el in root.iter():
             s = el.get("Self")
             if s is not None:
+                if el.tag == "Font":
+                    s = font_self(el, s)
                 elements.setdefault((el.tag, s), el)
                 # Children without Self (TextFramePreference, ...) are
                 # compared as "<parent tag>/<child tag>" of the parent.
@@ -348,13 +350,27 @@ RELINKED = re.compile(r"LinkResource.*|LinkImport.*")
 FONT_SUFFIX = re.compile(r" \((OTF|TT|T1)\)$")
 
 
-def font_name(tag, key, v):
+def font_name(tag, key, v, family=None):
     """A value with the font technology suffix removed if it names a font
-    family: FontFamily Name, Font FontFamily, AppliedFont and BulletsFont."""
+    family: FontFamily Name, Font FontFamily, AppliedFont and BulletsFont.
+    A Font's Name starts with its family (passed as family)."""
     if (tag, key) in (("FontFamily", "Name"), ("Font", "FontFamily")) or \
             key.endswith(("P.AppliedFont", "P.BulletsFont")):
         return FONT_SUFFIX.sub("", v)
+    if (tag, key) == ("Font", "Name") and family and v.startswith(family):
+        return FONT_SUFFIX.sub("", family) + v[len(family):]
     return v
+
+
+def font_self(el, s):
+    """A Font's Self with the technology suffix removed from the family
+    name it contains, so that fonts match whether or not the exporting
+    computer added the suffix."""
+    family = el.get("FontFamily") or ""
+    base = FONT_SUFFIX.sub("", family)
+    if base != family:
+        return s.replace("Fontn" + family, "Fontn" + base, 1)
+    return s
 
 
 @functools.cache
@@ -550,7 +566,8 @@ def value_coverage(p, ref, ours):
             o = mine.get(k)
             if o is None:
                 missing[key] += 1
-            elif norm(font_name(tag, k, o)) != norm(font_name(tag, k, v)):
+            elif norm(font_name(tag, k, o, mine.get("FontFamily"))) != \
+                    norm(font_name(tag, k, v, theirs.get("FontFamily"))):
                 wrong[key] += 1
         for k in mine.keys() - theirs.keys():
             extra[(tag, k)] += 1
