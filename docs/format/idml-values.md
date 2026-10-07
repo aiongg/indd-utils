@@ -204,6 +204,21 @@ column, inset, footnote and column rule values of
 many of these from the INDD. Values that only the 2 files with DOM 20
 have (18) are left out as for the preferences.
 
+The `TextFramePreference` values that the file lists from DOM 12
+(`UseFlexibleColumnWidth="false"`, `TextColumnMaxWidth="0"`,
+`UseNoLineBreaksForAutoSizing="false"` and the auto-sizing values) are
+on every object style from DOM 8: 607 of 607 styles of DOM 8 to 11 in
+the trustworthy pairs, `[None]` included, and none of the 28 of DOM 7
+(the file's source had no DOM 8 to 11 files). The converter writes them
+from DOM 8; the auto-sizing values it reads from the INDD take
+precedence.
+
+`TextFramePreference` `FootnotesEnableOverrides="false"` is on every
+object style, `[None]` included, from InDesign 13.1 (INDD header
+version): 1,392 of 1,392 styles of the trustworthy pairs, none before.
+The value file has it only from DOM 15, since it is generated per major
+version; the converter writes it from 13.1.
+
 ## Composite font entries
 
 `Locked="true"` is in all 1,440 `CompositeFontEntry` elements of the

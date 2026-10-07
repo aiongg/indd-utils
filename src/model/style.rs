@@ -61,6 +61,8 @@ pub struct ObjectStyle {
     pub fitting: Attrs,
     /// Page item attributes (chunk 0x1B92B): fill, stroke, corners.
     pub attrs: Attrs,
+    /// Transparency attributes (chunk 0x1B92C), the IDs of page items.
+    pub transparency: Attrs,
     /// Text frame settings (chunk 0x1B924).
     pub frame: Option<ObjectStyleFrame>,
     /// Story settings (chunk 0x285B).
@@ -321,6 +323,20 @@ impl<'a> Reader<'a> {
                     .unwrap_or_default(),
                 None => Attrs::default(),
             },
+            transparency: match self.chunk(uid, chunk::OBJECT_STYLE_TRANSPARENCY)? {
+                Some(d) => self
+                    .attrs_or_warn(
+                        || format!("object style {uid}, transparency"),
+                        Attrs::parse_short(
+                            self.enc(),
+                            &d,
+                            List::ObjectStyleTransparency,
+                            self.db.recorder(),
+                        ),
+                    )
+                    .unwrap_or_default(),
+                None => Attrs::default(),
+            },
             // The layout is known for these sizes only
             // (`docs/format/big-endian.md`).
             frame: match self.chunk(uid, chunk::OBJECT_STYLE_FRAME)? {
@@ -397,11 +413,30 @@ pub struct ObjectStyleFrame {
     /// Column rule: f64 stroke width at 190, u32 colour at 198 (0 for
     /// none) and f64 tint at 210.
     pub column_rule: Option<(f64, u32, f64)>,
+    /// u16 at 76: first baseline offset code, as for frames (the 106-byte
+    /// layout too).
+    pub first_baseline_offset: Option<u16>,
+    /// The fields below are read from the 142-, 162- and 222-byte layouts.
+    /// u16 at 32, 1 = true.
+    pub vertical_balance_columns: Option<bool>,
+    /// u16 at 70, 1 = true.
+    pub use_fixed_width: Option<bool>,
+    /// u16 at 74: vertical justification code, as for frames.
+    pub vertical_justification: Option<u16>,
+    /// u16 at 116 and 118: auto-sizing type and reference point codes, as
+    /// for frames.
+    pub auto_sizing: Option<(u16, u16)>,
+    /// u16 at 120 and f64 at 122 (minimum height), u16 at 130 and f64 at
+    /// 132 (minimum width).
+    pub minimum_sizes: Option<([bool; 2], [f64; 2])>,
 }
 
 impl ObjectStyleFrame {
     pub(super) fn read(enc: Encoding, d: &[u8]) -> ObjectStyleFrame {
         let f = |o: usize| enc.f64_at(d, o);
+        let long = d.len() >= 142;
+        let flag = |o: usize| enc.u16_at(d, o).filter(|_| long).map(|v| v == 1);
+        let code = |o: usize| enc.u16_at(d, o).filter(|_| long);
         ObjectStyleFrame {
             column_fixed_width: f(0),
             column_gutter: f(8),
@@ -409,6 +444,12 @@ impl ObjectStyleFrame {
             column_count: enc.u32_at(d, 66),
             footnotes: (|| Some((enc.u16_at(d, 144)?, f(146)?, f(154)?)))(),
             column_rule: (|| Some((f(190)?, enc.u32_at(d, 198)?, f(210)?)))(),
+            first_baseline_offset: enc.u16_at(d, 76),
+            vertical_balance_columns: flag(32),
+            use_fixed_width: flag(70),
+            vertical_justification: code(74),
+            auto_sizing: (|| Some((code(116)?, code(118)?)))(),
+            minimum_sizes: (|| Some(([flag(120)?, flag(130)?], [f(122)?, f(132)?])))(),
         }
     }
 }

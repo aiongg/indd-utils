@@ -1328,14 +1328,50 @@ leaves it out with a warning (`big-endian.md`).
 |---|---|---|
 | 0 | f64 | `TextColumnFixedWidth` |
 | 8 | f64 | `TextColumnGutter` |
+| 32 | u16, 1 = true | `VerticalBalanceColumns` |
 | 34, 42, 50, 58 | four f64, inset spacing | `InsetSpacing` (below) |
 | 66 | u32 | `TextColumnCount` |
+| 70 | u16, 1 = true | `UseFixedColumnWidth` |
+| 74 | u16, codes as for frames | `VerticalJustification` |
+| 76 | u16, codes as for frames, and 4 `XHeight` | `FirstBaselineOffset` |
+| 116 | u16, codes as for frames | `AutoSizingType` |
+| 118 | u16, codes as for frames | `AutoSizingReferencePoint` |
+| 120, 122 | u16 1 = true, f64 | `UseMinimumHeightForAutoSizing`, `MinimumHeightForAutoSizing` |
+| 130, 132 | u16 1 = true, f64 | `UseMinimumWidthForAutoSizing`, `MinimumWidthForAutoSizing` |
 | 144 | u16, 1 = true | `FootnotesSpanAcrossColumns`, `SpanFootnotesAcross` |
 | 146 | f64 | `FootnotesMinimumSpacing`, `MinimumSpacingOption` |
 | 154 | f64 | `FootnotesSpaceBetween`, `SpaceBetweenFootnotes` |
 | 190 | f64 | `ColumnRuleStrokeWidth` |
 | 198 | u32 swatch, 0 = `n` | `ColumnRuleStrokeColor` |
 | 210 | f64 | `ColumnRuleStrokeTint` |
+
+The fields from offset 32 to 132 were found by testing every offset
+against the IDML style, over the 2,155 object styles of the trustworthy
+pairs that match an IDML style by name (1,000 with 222 bytes, 607 with
+142 and 520 with 162). Each is the only offset that matches all styles
+of the 222- and 142-byte layouts:
+
+| Offset | Values seen (222 / 142 bytes) |
+|---|---|
+| 32 | 1 true in each layout, all match |
+| 70 | 142: 1 true; 222: all false |
+| 74 | 222: 4 `CenterAlign`; 142: 3 `CenterAlign`, 2 `BottomAlign` |
+| 76 | 222: 952 `AscentOffset`, 42 `EmboxHeight`, 6 `XHeight`; 142: 584, 1 and 22; 162: 516 `AscentOffset`, 4 `EmboxHeight` |
+| 116 | 3 distinct values in each layout |
+| 118 | 142: 5 distinct values |
+| 120, 122 | 142: 6 true, 6 distinct heights |
+| 130, 132 | 142: 2 true, 3 distinct widths |
+
+In the 162-byte layout the justification and auto-sizing fields have one
+value in every style, and in the 106-byte layout (28 styles) every field
+but offset 76 does; the converter assumes the offsets of the larger
+layouts for 162 bytes and reads only offset 76 from 106 bytes.
+`IgnoreWrap`, `MinimumFirstBaselineOffset`, `VerticalThreshold`,
+`UseFlexibleColumnWidth`, `TextColumnMaxWidth` and
+`UseNoLineBreaksForAutoSizing` have one value in every style (false or
+0), so no field can be shown for them; the converter writes the observed
+value (`idml-values.md`). Code 4 of `FirstBaselineOffset` is shown only
+in styles; the converter reads it in frames too.
 
 Footnote and column rule values: 305 of 305 styles whose chunk has them.
 The column rule colour maps one to one over 41 (file, UID) pairs. Only
@@ -1528,7 +1564,7 @@ From the frame's multi-column frame object (class 0x263):
 | 0x2D1 | u32 0 | `TextColumnCount` (1,052/1,052) |
 | 0x2D1 | f64 4 | `TextColumnGutter` (93/93) |
 | 0x2D1 | f64 14 | `TextColumnFixedWidth` (1,045/1,045) |
-| 0x2CE | u16 0 | `FirstBaselineOffset`: 0 LeadingOffset, 1 AscentOffset, 2 CapHeight, 3 EmboxHeight (below) |
+| 0x2CE | u16 0 | `FirstBaselineOffset`: 0 LeadingOffset, 1 AscentOffset, 2 CapHeight, 3 EmboxHeight, 4 XHeight (below) |
 | 0x2CE | u16 2 | `VerticalJustification`: 0 Top, 1 Center, 2 Bottom, 3 Justify (350/350) |
 | 0x2CE | u16 20 | `VerticalBalanceColumns` (18/18) |
 | 0x2CE | u16 22 | `AutoSizingType`: 0 Off, 1 HeightOnly, 2 WidthOnly, 3 HeightAndWidth (61/61) |
@@ -1566,6 +1602,44 @@ number instead of a list (the first f64 of chunk 0x3723 in most of
 them); what decides this was not found, and the converter writes the
 list for every frame from DOM 11 on. DOM 7 to 10 files give most frames
 no `InsetSpacing` at all, and the converter writes none for them.
+
+**Values written on frames.** IDML writes an attribute of a frame's
+`TextFramePreference` when its category is off in the frame's object
+style (the category ID is not in the style's list, chunk 0x1B92E, also
+for `[None]`), or when the frame's value differs from the style's
+value. The style's values are its own, or, if it has no text frame
+settings, those of the style it is based on, then `[None]`'s.
+
+| Category | ID | Attributes |
+|---|---|---|
+| General | 0x1B93E | `TextColumnCount`, `TextColumnGutter`, `TextColumnFixedWidth`, `UseFixedColumnWidth`, `UseFlexibleColumnWidth`, `TextColumnMaxWidth`, `VerticalJustification`, `VerticalThreshold`, `IgnoreWrap`, `VerticalBalanceColumns`, `InsetSpacing` |
+| Baseline | 0xADC8 | `FirstBaselineOffset`, `MinimumFirstBaselineOffset` |
+| Auto-sizing | 0xADC9 | the seven auto-sizing attributes |
+| Footnotes | 0xADCA | the four `Footnotes…` attributes |
+| Column rules | 0xADCB | the ten `ColumnRule…` attributes |
+
+Evidence over the 489 trustworthy pairs. Frames with style `[None]`
+write a whole category in a document if and only if `[None]`'s list
+lacks the ID (counting documents with such frames):
+
+| Category | ID missing | ID present |
+|---|---|---|
+| Auto-sizing (DOM 8 on) | written in 28 of 28 documents | written in 0 of 224 (one more has frames whose values differ) |
+| Footnotes (13.1 on) | 21 of 21 | 0 of 153 |
+| Column rules (DOM 15 on) | 35 of 35 | 0 of 64 |
+| General, baseline | (ID present in all 254) | 0 of 254 |
+
+Exceptions: `TextColumnMaxWidth` is on every frame from DOM 8 (22,775 of
+22,775), `TextColumnCount` on every frame from DOM 10 (18,679 of 18,680;
+before, it follows the rule: absent in 4,006 frames where it equals the
+style), and `InsetSpacing` on every frame from DOM 11. The footnote
+values are on no frame before 13.1: none of the 3 documents of 13.0 has
+them, though one has frames whose style has the category off.
+
+Applied to the converter's frame values and the reference styles'
+values, the rule leaves out 379,953 values that the IDML does not have,
+keeps the 200,434 it has, and leaves out one value that the IDML has (a
+`TextColumnFixedWidth` equal to its style's).
 
 `ColumnRuleOverride`: chunk 0x2265A is all zero in the frames of the
 pairs except one, whose IDML has `true`; the converter writes `false`

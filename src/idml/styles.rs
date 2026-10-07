@@ -4,6 +4,7 @@
 //! Evidence: `docs/format/objects.md` (styles and style groups),
 //! `attributes.md`, `tables.md` and `idml-values.md`.
 
+use super::spread::{FIRST_BASELINE, JUSTIFY, POINTS, SIZING};
 use super::*;
 
 /// `KeyboardShortcut` and `ExtendedKeyboardShortcut` of a style, from its
@@ -453,6 +454,42 @@ impl Writer<'_> {
             if let Some(v) = fr.column_fixed_width {
                 tf.push(("TextColumnFixedWidth", num(v)));
             }
+            // Fields of the text frame settings that use the frame codes
+            // (objects.md, object style settings).
+            if let Some(v) = fr.vertical_balance_columns {
+                tf.push(("VerticalBalanceColumns", v.to_string()));
+            }
+            if let Some(v) = fr.use_fixed_width {
+                tf.push(("UseFixedColumnWidth", v.to_string()));
+            }
+            if let Some(v) = fr
+                .vertical_justification
+                .and_then(|c| JUSTIFY.get(c as usize))
+            {
+                tf.push(("VerticalJustification", v.to_string()));
+            }
+            if let Some(v) = fr
+                .first_baseline_offset
+                .and_then(|c| FIRST_BASELINE.get(c as usize))
+            {
+                tf.push(("FirstBaselineOffset", v.to_string()));
+            }
+            if major >= 8
+                && let Some((ty, point)) = fr.auto_sizing
+                && let (Some(ty), Some(point)) =
+                    (SIZING.get(ty as usize), POINTS.get(point as usize))
+            {
+                tf.push(("AutoSizingType", ty.to_string()));
+                tf.push(("AutoSizingReferencePoint", point.to_string()));
+            }
+            if major >= 8
+                && let Some(([use_height, use_width], [height, width])) = fr.minimum_sizes
+            {
+                tf.push(("UseMinimumHeightForAutoSizing", use_height.to_string()));
+                tf.push(("MinimumHeightForAutoSizing", num(height)));
+                tf.push(("UseMinimumWidthForAutoSizing", use_width.to_string()));
+                tf.push(("MinimumWidthForAutoSizing", num(width)));
+            }
             let mut footnote = Vec::new();
             if let Some((span, min, between)) = fr.footnotes
                 && span <= 1
@@ -515,6 +552,34 @@ impl Writer<'_> {
             if !footnote.is_empty() && node.child("TextFrameFootnoteOptionsObject").is_some() {
                 node.set(&["TextFrameFootnoteOptionsObject"], footnote);
             }
+        }
+        // The text frame values every object style has from DOM 12 hold
+        // from DOM 8 (idml-values.md, object styles other than the root).
+        if (8..12).contains(&major)
+            && let Some(t) = values::object_style(12).child("TextFramePreference")
+        {
+            node.merge(&Node {
+                tag: "ObjectStyle".into(),
+                children: vec![Node {
+                    tag: "TextFramePreference".into(),
+                    attrs: t.attrs.clone(),
+                    ..Node::default()
+                }],
+                ..Node::default()
+            });
+        }
+        // Every object style has it from 13.1 (idml-values.md, object
+        // styles other than the root).
+        if version >= (13, 1) {
+            node.merge(&Node {
+                tag: "ObjectStyle".into(),
+                children: vec![Node {
+                    tag: "TextFramePreference".into(),
+                    attrs: vec![("FootnotesEnableOverrides".into(), "false".into())],
+                    ..Node::default()
+                }],
+                ..Node::default()
+            });
         }
         let mut story = Vec::new();
         if let Some(st) = &os.story {

@@ -19,6 +19,91 @@ pub(super) fn spread_origin(pages: &[Page]) -> (f64, f64) {
         .unwrap_or((0.0, 0.0))
 }
 
+/// Page item attributes that IDML writes only when they differ from the
+/// applied object style (attributes.md, page item attributes).
+const STYLE_COMPARED: &[&str] = &[
+    "FillColor",
+    "FillTint",
+    "StrokeColor",
+    "StrokeWeight",
+    "MiterLimit",
+    "CornerOption",
+    "CornerRadius",
+    "TopLeftCornerRadius",
+    "TopRightCornerRadius",
+    "BottomLeftCornerRadius",
+    "BottomRightCornerRadius",
+    "TopLeftCornerOption",
+    "TopRightCornerOption",
+    "BottomLeftCornerOption",
+    "BottomRightCornerOption",
+];
+
+/// The category of a `TextFramePreference` attribute: the ID that turns
+/// it on in an object style's category list (objects.md, text frame
+/// preferences).
+fn frame_category(name: &str) -> Option<u32> {
+    Some(match name {
+        "TextColumnCount"
+        | "TextColumnGutter"
+        | "TextColumnFixedWidth"
+        | "UseFixedColumnWidth"
+        | "UseFlexibleColumnWidth"
+        | "TextColumnMaxWidth"
+        | "VerticalJustification"
+        | "VerticalThreshold"
+        | "IgnoreWrap"
+        | "VerticalBalanceColumns" => 0x1B93E,
+        "FirstBaselineOffset" | "MinimumFirstBaselineOffset" => 0xADC8,
+        n if n.starts_with("Footnotes") => 0xADCA,
+        n if n.starts_with("ColumnRule") => 0xADCB,
+        n if n.contains("AutoSizing") => 0xADC9,
+        _ => return None,
+    })
+}
+
+/// `TextFramePreference` attributes that IDML writes on every frame of
+/// the version, whatever the object style (objects.md, text frame
+/// preferences). `InsetSpacing` (DOM 11 on) is written separately.
+fn frame_always(name: &str, major: u32) -> bool {
+    match name {
+        "TextColumnMaxWidth" => major >= 8,
+        "TextColumnCount" => major >= 10,
+        _ => false,
+    }
+}
+
+/// `AutoSizingReferencePoint` codes of frames and object styles.
+pub(super) const POINTS: [&str; 9] = [
+    "TopLeftPoint",
+    "TopCenterPoint",
+    "TopRightPoint",
+    "LeftCenterPoint",
+    "CenterPoint",
+    "RightCenterPoint",
+    "BottomLeftPoint",
+    "BottomCenterPoint",
+    "BottomRightPoint",
+];
+/// `VerticalJustification` codes.
+pub(super) const JUSTIFY: [&str; 4] = ["TopAlign", "CenterAlign", "BottomAlign", "JustifyAlign"];
+/// `FirstBaselineOffset` codes (objects.md, text frame preferences).
+pub(super) const FIRST_BASELINE: [&str; 5] = [
+    "LeadingOffset",
+    "AscentOffset",
+    "CapHeight",
+    "EmboxHeight",
+    "XHeight",
+];
+/// `AutoSizingType` codes.
+pub(super) const SIZING: [&str; 5] = [
+    "Off",
+    "HeightOnly",
+    "WidthOnly",
+    "HeightAndWidth",
+    "HeightAndWidthProportionally",
+];
+
 impl Writer<'_> {
     pub(super) fn path_geometry(x: &mut Xml, paths: &[Path]) {
         if paths.is_empty() {
@@ -44,92 +129,108 @@ impl Writer<'_> {
         x.end().end();
     }
 
+    /// `TextFramePreference` of a text frame. IDML writes an attribute
+    /// only when its category is off in the frame's object style or its
+    /// value differs from the style's, apart from a few attributes it
+    /// always writes (objects.md, text frame preferences). `style` is the
+    /// applied style's values; without a style every value is written.
     pub(super) fn text_frame_preference(
+        &self,
         x: &mut Xml,
         p: &TextFramePreferences,
-        major: u32,
-        swatch: impl Fn(u32) -> Option<String>,
+        style: Option<&applied::StyleValues>,
     ) {
-        const POINTS: [&str; 9] = [
-            "TopLeftPoint",
-            "TopCenterPoint",
-            "TopRightPoint",
-            "LeftCenterPoint",
-            "CenterPoint",
-            "RightCenterPoint",
-            "BottomLeftPoint",
-            "BottomCenterPoint",
-            "BottomRightPoint",
+        let v = self.doc.version;
+        let major = v.major;
+        let swatch = |u: u32| match u {
+            0 => Some("n".to_string()),
+            u => self.doc.swatches.get(&u).cloned(),
+        };
+        let mut attrs: Vec<(&str, String)> = vec![
+            ("TextColumnCount", p.column_count.to_string()),
+            ("TextColumnGutter", num(p.column_gutter)),
+            ("TextColumnFixedWidth", num(p.column_fixed_width)),
         ];
-        const JUSTIFY: [&str; 4] = ["TopAlign", "CenterAlign", "BottomAlign", "JustifyAlign"];
-        const FIRST_BASELINE: [&str; 4] =
-            ["LeadingOffset", "AscentOffset", "CapHeight", "EmboxHeight"];
-        const SIZING: [&str; 5] = [
-            "Off",
-            "HeightOnly",
-            "WidthOnly",
-            "HeightAndWidth",
-            "HeightAndWidthProportionally",
-        ];
-        x.start("TextFramePreference")
-            .attr("TextColumnCount", p.column_count.to_string())
-            .attr("TextColumnGutter", num(p.column_gutter))
-            .attr("TextColumnFixedWidth", num(p.column_fixed_width));
         if let Some(v) = FIRST_BASELINE.get(p.first_baseline_offset as usize) {
-            x.attr("FirstBaselineOffset", *v);
+            attrs.push(("FirstBaselineOffset", v.to_string()));
         }
         if let Some(v) = JUSTIFY.get(p.vertical_justification as usize) {
-            x.attr("VerticalJustification", *v);
+            attrs.push(("VerticalJustification", v.to_string()));
         }
-        x.attr(
+        attrs.push((
             "VerticalBalanceColumns",
             p.vertical_balance_columns.to_string(),
-        );
+        ));
         if let Some(v) = SIZING.get(p.auto_sizing_type as usize) {
-            x.attr("AutoSizingType", *v);
+            attrs.push(("AutoSizingType", v.to_string()));
         }
         if let Some(v) = POINTS.get(p.auto_sizing_reference_point as usize) {
-            x.attr("AutoSizingReferencePoint", *v);
+            attrs.push(("AutoSizingReferencePoint", v.to_string()));
         }
         if let Some(w) = p.max_width {
-            x.attr("TextColumnMaxWidth", num(w));
+            attrs.push(("TextColumnMaxWidth", num(w)));
         }
-        x.attr("UseFixedColumnWidth", p.use_fixed_width.to_string());
+        attrs.push(("UseFixedColumnWidth", p.use_fixed_width.to_string()));
         if let Some(([use_height, use_width], [height, width], no_breaks)) = p.minimum_sizes {
-            x.attr("UseMinimumHeightForAutoSizing", use_height.to_string())
-                .attr("MinimumHeightForAutoSizing", num(height))
-                .attr("UseMinimumWidthForAutoSizing", use_width.to_string())
-                .attr("MinimumWidthForAutoSizing", num(width))
-                .attr("UseNoLineBreaksForAutoSizing", no_breaks.to_string());
+            attrs.push(("UseMinimumHeightForAutoSizing", use_height.to_string()));
+            attrs.push(("MinimumHeightForAutoSizing", num(height)));
+            attrs.push(("UseMinimumWidthForAutoSizing", use_width.to_string()));
+            attrs.push(("MinimumWidthForAutoSizing", num(width)));
+            attrs.push(("UseNoLineBreaksForAutoSizing", no_breaks.to_string()));
         }
         if let Some(v) = p.ignore_wrap {
-            x.attr("IgnoreWrap", v.to_string());
+            attrs.push(("IgnoreWrap", v.to_string()));
         }
         // Values every IDML of the version has where it writes them; they
         // also say from which version the column rule and footnote
-        // settings exist (idml-values.md).
+        // settings exist (idml-values.md). Footnote values from 13.1.
         let written = values::when_written("TextFrame/TextFramePreference", major);
         let has = |k: &str| written.iter().any(|(n, _)| n == k);
+        let footnotes = (major, v.minor) >= (13, 1);
         if has("ColumnRuleOffset") {
             let (width, color) = match p.column_rule {
                 Some((w, c)) => (w, swatch(c)),
                 // Without the chunk (objects.md).
                 None => (1.0, Some("Color/Black".to_string())),
             };
-            x.attr("ColumnRuleStrokeWidth", num(width));
+            attrs.push(("ColumnRuleStrokeWidth", num(width)));
             if let Some(c) = color {
-                x.attr("ColumnRuleStrokeColor", c);
+                attrs.push(("ColumnRuleStrokeColor", c));
             }
             if p.column_rule_override != Some(true) {
-                x.attr("ColumnRuleOverride", "false");
+                attrs.push(("ColumnRuleOverride", "false".into()));
             }
         }
-        if has("FootnotesEnableOverrides") {
+        if has("FootnotesEnableOverrides") && footnotes {
             let [spacing, between] = p.footnotes.unwrap_or([12.0, 6.0]);
-            x.attr("FootnotesMinimumSpacing", num(spacing))
-                .attr("FootnotesSpaceBetween", num(between));
+            attrs.push(("FootnotesMinimumSpacing", num(spacing)));
+            attrs.push(("FootnotesSpaceBetween", num(between)));
         }
-        x.attrs_missing(written.iter());
+        for (k, val) in written.iter() {
+            if !footnotes && k.starts_with("Footnotes") {
+                continue;
+            }
+            if !attrs.iter().any(|(n, _)| n == k) {
+                attrs.push((k.as_str(), val.clone()));
+            }
+        }
+        if let Some(s) = style {
+            attrs.retain(|(k, val)| {
+                frame_always(k, major)
+                    || !s
+                        .enabled
+                        .as_ref()
+                        .is_some_and(|on| frame_category(k).is_some_and(|c| on.contains(&c)))
+                    || !s.frame(k).is_some_and(|sv| applied::same_value(sv, val))
+            });
+        }
+        if attrs.is_empty() && major < 11 {
+            return;
+        }
+        x.start("TextFramePreference");
+        for (k, val) in attrs {
+            x.attr(k, val);
+        }
         if major >= 11 {
             let [top, left, bottom, right] = p.inset;
             let item = |v: f64| Node {
@@ -273,7 +374,19 @@ impl Writer<'_> {
             };
             x.attr("ContentType", content);
         }
-        self.item_attrs(x, &item.attrs);
+        let applied = item.object_style.and_then(|u| self.style_values(u));
+        for (name, v) in self.item_attr_values(&item.attrs) {
+            // Fill, stroke and corner values equal to the object style's
+            // are left out (attributes.md, page item attributes).
+            let same = STYLE_COMPARED.contains(&name)
+                && applied
+                    .as_ref()
+                    .and_then(|s| s.item(name))
+                    .is_some_and(|s| applied::same_value(s, &v));
+            if !same {
+                x.attr(name, v);
+            }
+        }
         let style = item
             .object_style
             .and_then(|u| self.doc.object_styles.get(&u));
@@ -303,10 +416,7 @@ impl Writer<'_> {
             ..
         } = &item.kind
         {
-            Self::text_frame_preference(x, p, self.doc.version.major, |u| match u {
-                0 => Some("n".to_string()),
-                u => self.doc.swatches.get(&u).cloned(),
-            });
+            self.text_frame_preference(x, p, applied.as_deref());
         }
         let frame = matches!(
             item.kind,
@@ -342,7 +452,13 @@ impl Writer<'_> {
                 ],
             );
         }
-        for (effect, attr, v) in transparency::write(self, x, &item.attrs, &uref(Some(item.uid))) {
+        for (effect, attr, v) in transparency::write(
+            self,
+            x,
+            &item.attrs,
+            applied.as_deref(),
+            &uref(Some(item.uid)),
+        ) {
             self.warnings.borrow_mut().push(format!(
                 "item {}: {effect} {attr} {v} is outside the IDML range; left out",
                 item.uid

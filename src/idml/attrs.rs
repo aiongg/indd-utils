@@ -746,13 +746,6 @@ impl Writer<'_> {
             .collect()
     }
 
-    /// Write page item attributes from the item's attribute list.
-    pub(super) fn item_attrs(&self, x: &mut Xml, attrs: &Attrs) {
-        for (name, text) in self.item_attr_values(attrs) {
-            x.attr(name, text);
-        }
-    }
-
     /// Page item attributes from an attribute list, as IDML values.
     pub(super) fn item_attr_values(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
         self.attr_values(attrs, ITEM_ATTRS)

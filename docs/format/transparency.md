@@ -29,6 +29,27 @@ value itself, which is the evidence that tells the attribute apart. The
 576 object styles of the pairs (matched by name) agree with their IDML
 style on every attribute below.
 
+## Values equal to the object style
+
+The converter writes only the values that differ from the object
+style's (its chunk 0x1B92C, then the styles it is based on), and an
+effect element only when it has such a value or its opacity stops
+differ from the style's. Per effect element the converter wrote before
+this rule, over the 489 trustworthy pairs (D = the attributes whose value
+differs from the style's effective value; style values followed through
+`BasedOn`, then `TransparencyDefaultContainerObject`):
+
+| Element | D empty, IDML writes nothing | D empty, IDML writes it | D not empty, IDML writes exactly D or more |
+|---|---:|---:|---:|
+| `GradientFeatherSetting` | 6,251 | 53 | 2,604 |
+| `InnerShadowSetting` | 2,884 | 0 | 17 |
+| `DropShadowSetting` | 44 | 8 | 289 |
+| `BlendingSetting` | 1 | 0 | 1,616 |
+
+Where IDML writes more than D (349 elements), the converter already
+wrote those values. The 53 + 8 elements with D empty that IDML still
+writes are not explained.
+
 ## Object transparency (`TransparencySetting`)
 
 | ID | IDML | Encoding | On the item |

@@ -203,6 +203,7 @@ pub mod chunk {
     pub const OBJECT_STYLE_FITTING: u32 = 0x1B956;
     /// Page item attributes of an object style (u16 count, records).
     pub const OBJECT_STYLE_ATTRS: u32 = 0x1B92B;
+    pub const OBJECT_STYLE_TRANSPARENCY: u32 = 0x1B92C;
     pub const OBJECT_STYLE_FRAME: u32 = 0x1B924;
     pub const OBJECT_STYLE_STORY: u32 = 0x285B;
     pub const OBJECT_STYLE_DIRECTION: u32 = 0x50F28;

@@ -7,6 +7,7 @@
 //! the text forms of values, `pages` page numbering, `values` the values
 //! every IDML has, and `transparency` the effect settings.
 
+mod applied;
 mod attrs;
 mod designmap;
 mod export;
@@ -65,6 +66,9 @@ struct Writer<'a> {
     page_sections: Vec<(Section, u32)>,
     /// Observed attributes by element path (`values::element_attrs`).
     observed: std::cell::RefCell<std::collections::HashMap<String, Observed>>,
+    /// Effective values of object styles, by UID (`applied`).
+    style_values:
+        std::cell::RefCell<std::collections::HashMap<u32, std::rc::Rc<applied::StyleValues>>>,
 }
 
 /// Attributes observed on an element path (`values::element_attrs`).
@@ -118,6 +122,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         group_path: group_paths(doc),
         warnings: Default::default(),
         observed: Default::default(),
+        style_values: Default::default(),
         page_layouts: alternate_layouts(doc).1,
         page_sections: page_sections(doc),
     };
@@ -171,6 +176,7 @@ impl<'a> Writer<'a> {
             group_path: Default::default(),
             warnings: Default::default(),
             observed: Default::default(),
+            style_values: Default::default(),
             page_layouts: Vec::new(),
             page_sections: Vec::new(),
         }

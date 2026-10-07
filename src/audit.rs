@@ -30,6 +30,8 @@ pub enum List {
     ObjectStyle,
     /// An object style's frame fitting attributes.
     ObjectStyleFitting,
+    /// An object style's transparency attributes.
+    ObjectStyleTransparency,
     /// A paragraph or character style's text attributes.
     Style,
     /// The text attributes of a run of text.
@@ -47,6 +49,7 @@ impl List {
             List::Item => "page item",
             List::ObjectStyle => "object style",
             List::ObjectStyleFitting => "object style fitting",
+            List::ObjectStyleTransparency => "object style transparency",
             List::Style => "style",
             List::Text => "text",
             List::Table => "table",

@@ -64,6 +64,33 @@ corners of object styles (chunk 0x1B92B) and of the page item defaults
 (class 0x6E07): all four radii and options of `PageItemDefault` match in
 495 of 495 documents.
 
+**Values equal to the object style.** The style's effective value is
+its own (chunk 0x1B92B), else that of the style it is based on, else the
+root `[None]`'s (`StrokeWeight="0"`, `FillTint="-1"`, `FillColor` and
+`StrokeColor` `Swatch/None`, `CornerRadius="12"`, `MiterLimit="4"`,
+`CornerOption="None"`; `idml-values.md`). Over the 489 trustworthy pairs,
+the converter wrote these values where the IDML has none, and every one
+of them equals the style's effective value:
+
+| Attribute | Written though the IDML has none | IDML writes it though equal |
+|---|---:|---:|
+| `StrokeWeight` | 27,989 | 5 |
+| `CornerRadius` | 1,608 | 0 |
+| `FillTint` | 1,423 | 0 |
+| `StrokeColor` | 1,336 | 0 |
+| `FillColor` | 312 | 0 |
+| `CornerOption` | 87 | 0 |
+| `MiterLimit` | 26 | 0 |
+
+Of the `StrokeWeight` values, the 26,969 on items whose IDML element has
+the same tag all equal the style (17,501 text frames, 7,070 rectangles,
+2,074 polygons, 297 ovals, 27 lines); the others are on shapes written
+as another element type. The converter leaves out these attributes, and
+the four corner radii and options, when they equal the style's value
+(numbers to 6 significant digits). `StrokeWeight="1"` on an item with
+`[None]` and no stroke weight of its own (`objects.md`, page item
+settings) differs from `[None]`'s 0 and is still written.
+
 Transparency attributes (IDs 0x108xx and 0x1EBxx) are described in
 `transparency.md`.
 

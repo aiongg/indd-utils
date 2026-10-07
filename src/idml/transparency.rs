@@ -1,5 +1,6 @@
 //! Transparency settings of page items. See `docs/format/transparency.md`.
 
+use super::applied::{StyleValues, same_value};
 use super::kind::Kind;
 use super::xml::Xml;
 use super::{Writer, num};
@@ -236,13 +237,16 @@ fn stops(raw: &[[f64; 3]]) -> Option<Vec<Stop>> {
 }
 
 /// Write the transparency settings found in a page item's attribute list.
-/// `item` is the item's `Self`, which names the opacity stops. Returns the
-/// values left out because they are outside the schema's range, as
-/// (effect, attribute, value).
+/// IDML writes only the values that differ from the object style `style`
+/// (all values without a style), and an effect element only when one of
+/// its values or its opacity stops differ. `item` is the item's `Self`,
+/// which names the opacity stops. Returns the values left out because
+/// they are outside the schema's range, as (effect, attribute, value).
 pub(super) fn write(
     w: &Writer,
     x: &mut Xml,
     attrs: &Attrs,
+    style: Option<&StyleValues>,
     item: &str,
 ) -> Vec<(&'static str, &'static str, f64)> {
     let mut left_out = Vec::new();
@@ -267,7 +271,16 @@ pub(super) fn write(
                     continue;
                 }
                 match w.value_text(kind, v) {
-                    Some(t) => values.push((name, t)),
+                    Some(t) => {
+                        let same = style.is_some_and(|s| {
+                            s.transparency(id)
+                                .and_then(|sv| w.value_text(kind, sv))
+                                .is_some_and(|st| same_value(&st, &t))
+                        });
+                        if !same {
+                            values.push((name, t));
+                        }
+                    }
                     None if kind.is_code() => attrs.unknown_code(id, v),
                     None => {}
                 }
@@ -276,9 +289,17 @@ pub(super) fn write(
                 STOPS
                     .iter()
                     .find(|(_, s)| *s == setting)
-                    .and_then(|(id, _)| match attrs.get(*id) {
-                        Some(Value::Stops(raw)) => stops(raw),
+                    .and_then(|(id, _)| {
+                        match attrs.get(*id) {
+                        Some(Value::Stops(raw))
+                            if !style.is_some_and(|s| {
+                                matches!(s.transparency(*id), Some(Value::Stops(st)) if st == raw)
+                            }) =>
+                        {
+                            stops(raw)
+                        }
                         _ => None,
+                    }
                     })
                     .unwrap_or_default()
             } else {
