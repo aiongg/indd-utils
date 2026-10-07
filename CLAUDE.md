@@ -35,8 +35,8 @@ now). Licence: MIT.
 
 ## Corpus
 
-`corpus/` (git-ignored, ~3.4 GB): 358 INDD files (357 third-party, 1
-privately held), 240 with a sibling IDML.
+`corpus/` (git-ignored, ~3.4 GB): 357 third-party INDD files, 240 with a
+sibling IDML, plus privately held samples in `corpus/own/`.
 `corpus/inventory.tsv` lists version and pairing per file. Priority:
 InDesign 18–21, little-endian. Pairs whose IDML DOMVersion is older than
 the INDD version were probably re-saved after export; trust them less.
@@ -53,7 +53,8 @@ the INDD version were probably re-saved after export; trust them less.
   (any version, either byte order) and reports their failures; every run
   counts converter warnings by kind (`--warnings N` lists N kinds).
   `--exclude PREFIX` leaves out files whose path under `corpus/` starts
-  with PREFIX; committed numbers must not include the privately held file.
+  with PREFIX; committed numbers must not include the privately held samples
+  (`--exclude own/`).
 - Schema validation: `tools/validate.sh out.idml <schemas> <jing>`, or
   `compare.py --schemas <dir> --jing <dir>` (validations run in parallel,
   `--jobs N`). Run `compare.py --all --schemas … --jing …` after changes
