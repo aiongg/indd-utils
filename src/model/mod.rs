@@ -121,6 +121,15 @@ pub mod chunk {
     pub const PHOTOSHOP_CLIPPING: u32 = 0x8C39;
     /// Frame fitting attributes of an object style (u16 count, records).
     pub const OBJECT_STYLE_FITTING: u32 = 0x1B956;
+    /// Page item attributes of an object style (u16 count, records).
+    pub const OBJECT_STYLE_ATTRS: u32 = 0x1B92B;
+    pub const OBJECT_STYLE_FRAME: u32 = 0x1B924;
+    pub const OBJECT_STYLE_STORY: u32 = 0x285B;
+    pub const OBJECT_STYLE_DIRECTION: u32 = 0x50F28;
+    pub const OBJECT_STYLE_WRAP: u32 = 0x3776;
+    pub const OBJECT_STYLE_CONTOUR: u32 = 0x3777;
+    pub const OBJECT_STYLE_ENABLED: u32 = 0x1B92E;
+    pub const OBJECT_STYLE_PARAGRAPH_STYLE: u32 = 0x1B946;
     pub const GUIDE: u32 = 0x3308;
 }
 
@@ -525,6 +534,22 @@ pub struct ObjectStyle {
     pub based_on: Option<u32>,
     /// Frame fitting attributes (chunk 0x1B956), same IDs as on page items.
     pub fitting: Attrs,
+    /// Page item attributes (chunk 0x1B92B): fill, stroke, corners.
+    pub attrs: Attrs,
+    /// Text frame settings (chunk 0x1B924); see `docs/format/objects.md`.
+    pub frame: Option<Vec<u8>>,
+    /// Story settings (chunk 0x285B).
+    pub story: Option<Vec<u8>>,
+    /// Story direction (chunk 0x50F28, u16).
+    pub direction: Option<u16>,
+    /// Text wrap (chunk 0x3776, the layout of chunk 0x3703).
+    pub text_wrap: Option<TextWrap>,
+    /// Contour type of the text wrap (chunk 0x3777).
+    pub contour_type: Option<u32>,
+    /// IDs of the setting categories the style turns on (chunk 0x1B92E).
+    pub enabled: Option<Vec<u32>>,
+    /// Paragraph style applied to text frames (chunk 0x1B946).
+    pub paragraph_style: Option<u32>,
 }
 
 /// Reads typed objects from a database, caching them.
@@ -696,6 +721,31 @@ impl<'a> Reader<'a> {
                                 fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
                                     Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
                                     None => Attrs::default(),
+                                },
+                                attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
+                                    Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
+                                    None => Attrs::default(),
+                                },
+                                frame: self.chunk(uid, chunk::OBJECT_STYLE_FRAME)?,
+                                story: self.chunk(uid, chunk::OBJECT_STYLE_STORY)?,
+                                direction: match self.chunk(uid, chunk::OBJECT_STYLE_DIRECTION)? {
+                                    Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
+                                    _ => None,
+                                },
+                                text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
+                                contour_type: match self.chunk(uid, chunk::OBJECT_STYLE_CONTOUR)? {
+                                    Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                                    _ => None,
+                                },
+                                enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
+                                    Some(d) => Some(Cursor::new(&d).u32_list()?),
+                                    None => None,
+                                },
+                                paragraph_style: match self
+                                    .chunk(uid, chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?
+                                {
+                                    Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                                    _ => None,
                                 },
                             },
                         );
@@ -1127,7 +1177,12 @@ impl<'a> Reader<'a> {
     /// Text wrap of a page item or graphic, from chunk 0x3703: u32 mode,
     /// u32 contour path object, four f64 offsets, u32 flags.
     fn text_wrap(&self, uid: u32) -> Result<Option<TextWrap>, Error> {
-        let Some(d) = self.chunk(uid, chunk::TEXT_WRAP)? else {
+        self.wrap_chunk(uid, chunk::TEXT_WRAP)
+    }
+
+    /// A text wrap record in chunk `id` of object `uid`.
+    fn wrap_chunk(&self, uid: u32, id: u32) -> Result<Option<TextWrap>, Error> {
+        let Some(d) = self.chunk(uid, id)? else {
             return Ok(None);
         };
         if d.len() < 44 {

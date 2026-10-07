@@ -548,6 +548,88 @@ u8 1 for a built-in name, then the name. A page item's chunk 0x1B916 is
 its applied object style (`AppliedObjectStyle`, 671/671 rectangles). A
 style based on the root `[None]` has its `BasedOn` written as a string.
 
+## Object style settings
+
+Object styles (class 0x1B901) hold their settings in these chunks.
+Evidence: the 337 object styles of the same-version pairs whose name
+matches an IDML `ObjectStyle` (259 of them other than `[None]`); all
+counts are matches of 337 unless stated.
+
+| Chunk | Contents | IDML |
+|---|---|---|
+| 0x1B92B | Attribute list, u16 count, page item records (`attributes.md`) | `FillColor`, `StrokeColor`, `StrokeWeight`, `StrokeType`, `CornerOption`, `CornerRadius`, `GradientFillAngle` (0x551E), `GradientStrokeAngle` (0x5524) |
+| 0x1B956 | Attribute list, frame fitting (see frame fitting) | `FrameFittingOption` |
+| 0x1B924 | Text frame settings (below) | `TextFramePreference`, `TextFrameFootnoteOptionsObject` |
+| 0x285B | u16 story orientation at 0, f64 12 at 2, u16 frame type at 14 | `StoryPreference` |
+| 0x50F28 | u16 story direction | `StoryPreference/StoryDirection` |
+| 0x3776, 0x3777 | Text wrap, as chunks 0x3703 and 0x373D of page items | `TextWrapPreference` |
+| 0x1B92E | u32 count, IDs of the categories the style turns on | `Enable…` attributes (below) |
+| 0x1B946 | u32 paragraph style, 0 = none | `AppliedParagraphStyle` (`n` for none) |
+
+**Attribute list.** The IDs of page items carry over. `CornerOption` 0
+is `None` and 0x5A16 `InverseRoundedCorner` (1 style). The two gradient
+angles are told apart by one style with −90 and 0. Per-corner values
+come in pairs of IDs whose order is not known: the top-left and
+top-right radius are 0x6E70 and 0x6E94, the bottom ones 0x6E92 and
+0x6E93; the options 0x6E6F and 0x6E91, and 0x6E8F and 0x6E90. The two
+of each pair are equal in every style. The converter writes the four
+corner radii, and the four corner options, only when all four values
+are equal (336 of 337 styles).
+
+**Text frame settings (chunk 0x1B924).** 222 bytes; 162 or 106 in files
+from older versions.
+
+| Offset | Contents | Attribute |
+|---|---|---|
+| 0 | f64 | `TextColumnFixedWidth` |
+| 8 | f64 | `TextColumnGutter` |
+| 34, 42, 50, 58 | four f64, inset spacing | `InsetSpacing` (below) |
+| 66 | u32 | `TextColumnCount` |
+| 144 | u16, 1 = true | `FootnotesSpanAcrossColumns`, `SpanFootnotesAcross` |
+| 146 | f64 | `FootnotesMinimumSpacing`, `MinimumSpacingOption` |
+| 154 | f64 | `FootnotesSpaceBetween`, `SpaceBetweenFootnotes` |
+| 190 | f64 | `ColumnRuleStrokeWidth` |
+| 198 | u32 swatch, 0 = `n` | `ColumnRuleStrokeColor` |
+| 210 | f64 | `ColumnRuleStrokeTint` |
+
+Footnote and column rule values: 305 of 305 styles whose chunk has them.
+The column rule colour maps one to one over 41 (file, UID) pairs. Only
+one style (3 copies) has unequal insets, and it shows only the top inset
+(offset 50), so the converter writes `InsetSpacing` only when all four
+are equal (334 of 337).
+
+**Story settings.** Frame type: 0 `Unknown`, 1 `TextFrameType`, 2
+`FrameGridType`. Orientation: 0 `Unknown`, 1 `Horizontal`. Direction: 1
+`LeftToRightDirection`, 0 or no chunk `UnknownDirection`. 337 of 337
+each. The f64 at 2 is 12 in every style, like `OpticalMarginSize`, and is
+not used.
+
+**Text wrap.** 234 styles have chunk 0x3776 with mode 0, offsets 0 and
+the u32 at 40 = 1, and chunk 0x3777 type 5: IDML `None` with
+`ContourType="SameAsClipping"`. 103 styles have neither chunk and IDML
+`None`.
+
+**Categories (chunk 0x1B92E).** An ID in the list means the attribute is
+`true`: 0x1B940 `EnableStoryOptions`, 0x1B960
+`EnableFrameFittingOptions`, 0xADCB `EnableTextFrameColumnRuleOptions`,
+no disagreement. Three more go with a pair of IDs that are both present
+or both absent in every style, so either ID gives the value: 0x1B933 and
+0x1B934 for `EnableFill` and `EnableStroke` (equal in every style),
+0xADC8 and 0x1B93E for `EnableTextFrameGeneralOptions` and
+`EnableTextFrameBaselineOptions` (equal in every style), and 0xADC9 or
+0xADCA for `EnableTextFrameAutoSizingOptions`. The converter writes them
+when the two IDs agree. Other `Enable…` attributes vary together with
+several IDs and are not written.
+
+**Not written.** `AnchoredObjectSetting` `PinPosition`, `AnchorPoint` and
+`VerticalAlignment` change together (312 against 25 styles) with four
+u16 fields of chunk 0x2800, so the fields cannot be told apart.
+`EnableTransparency` of the effects categories varies and has no
+identified field.
+
+The other values of object styles come from IDML observation
+(`idml-values.md`).
+
 ## Master spread names and sections
 
 Master spread chunk 0x1402: a flag byte and the name prefix (`A`), a flag

@@ -1559,6 +1559,14 @@ impl Writer<'_> {
 
     /// Write page item attributes from the item's attribute list.
     fn item_attrs(&self, x: &mut Xml, attrs: &Attrs) {
+        for (name, text) in self.item_attr_values(attrs) {
+            x.attr(name, text);
+        }
+    }
+
+    /// Page item attributes from an attribute list, as IDML values.
+    fn item_attr_values(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
+        let mut out = Vec::new();
         for &(id, name, kind) in ITEM_ATTRS {
             let Some(v) = attrs.get(id) else { continue };
             let text = match kind {
@@ -1581,9 +1589,10 @@ impl Writer<'_> {
                 },
             };
             if let Some(t) = text {
-                x.attr(name, t);
+                out.push((name, t));
             }
         }
+        out
     }
 
     /// `CellStyle/...` or `TableStyle/...` reference of a style.
@@ -1861,59 +1870,287 @@ impl Writer<'_> {
             } else {
                 os.name.clone()
             };
+            let root = os.builtin && os.name == "[None]" && os.based_on.is_none();
+            let node = self.object_style_node(os, root);
             x.start("ObjectStyle")
                 .attr("Self", format!("ObjectStyle/{}", self_name(&name)))
                 .attr("Name", &name);
-            let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
-            let fitting = fitting_attrs(&os.fitting, &all);
-            if os.builtin && os.name == "[None]" && os.based_on.is_none() {
-                let (attrs, props, mut children) = self.root_values("ObjectStyle", &[], &[]);
-                for (k, v) in &attrs {
-                    x.attr(k, v);
-                }
-                Self::properties_with(&mut x, &[], &props);
-                // Values read from the INDD take precedence.
-                if let Some(c) = children.iter_mut().find(|c| c.tag == "FrameFittingOption") {
-                    let rest: Vec<_> = std::mem::take(&mut c.attrs)
-                        .into_iter()
-                        .filter(|(k, _)| !fitting.iter().any(|(f, _)| f == k))
-                        .collect();
-                    c.attrs = fitting
-                        .iter()
-                        .map(|(k, v)| (k.to_string(), v.clone()))
-                        .chain(rest)
-                        .collect();
-                }
-                for c in &children {
-                    c.write(&mut x);
-                }
-            } else if let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
+            for (k, v) in &node.attrs {
+                x.attr(k, v);
+            }
+            let mut props: Vec<Node> = node
+                .child("Properties")
+                .map_or(Vec::new(), |p| p.children.clone());
+            if !root && let Some(base) = os.based_on.and_then(|b| doc.object_styles.get(&b)) {
                 let base_name = if base.builtin {
                     format!("$ID/{}", base.name)
                 } else {
                     base.name.clone()
                 };
                 // The root "[None]" is written as a string.
-                let prop = if base.builtin && base.name == "[None]" {
-                    ("BasedOn", "string", base_name.into())
+                let (ty, text) = if base.builtin && base.name == "[None]" {
+                    ("string", base_name)
                 } else {
-                    (
-                        "BasedOn",
-                        "object",
-                        format!("ObjectStyle/{}", self_name(&base_name)).into(),
-                    )
+                    ("object", format!("ObjectStyle/{}", self_name(&base_name)))
                 };
-                Self::properties(&mut x, &[prop]);
+                props.insert(
+                    0,
+                    Node {
+                        tag: "BasedOn".into(),
+                        attrs: vec![("type".into(), ty.into())],
+                        text: Some(text),
+                        children: Vec::new(),
+                    },
+                );
             }
-            if !(os.builtin && os.name == "[None]" && os.based_on.is_none()) && !fitting.is_empty()
-            {
-                x.empty("FrameFittingOption", &fitting);
+            if !props.is_empty() {
+                x.start("Properties");
+                for p in &props {
+                    p.write(&mut x);
+                }
+                x.end();
+            }
+            for c in node.children.iter().filter(|c| c.tag != "Properties") {
+                c.write(&mut x);
             }
             x.end();
         }
         x.end();
         x.end();
         x.finish()
+    }
+
+    /// An object style as a values node: the values every exported IDML
+    /// has on such a style (`idml-values.md`), with the values read from
+    /// the INDD in their place. See `docs/format/objects.md`.
+    fn object_style_node(&self, os: &crate::model::ObjectStyle, root: bool) -> Node {
+        let major = self.doc.version.major;
+        let mut node = if root {
+            values::root_style("ObjectStyle", major)
+        } else {
+            values::object_style(major)
+        };
+        let mut attrs = self.item_attr_values(&os.attrs);
+        for (id, name) in [
+            (0x551E, "GradientFillAngle"),
+            (0x5524, "GradientStrokeAngle"),
+        ] {
+            if let Some(v) = os.attrs.get(id).and_then(Value::as_f64) {
+                attrs.push((name, num(v)));
+            }
+        }
+        match os.attrs.get(0x6E6F).and_then(Value::as_u32) {
+            Some(0) => attrs.push(("CornerOption", "None".into())),
+            Some(0x5A16) => attrs.push(("CornerOption", "InverseRoundedCorner".into())),
+            _ => {}
+        }
+        match os.paragraph_style {
+            Some(0) => attrs.push(("AppliedParagraphStyle", "n".into())),
+            Some(p) if self.doc.styles.contains_key(&p) => {
+                attrs.push(("AppliedParagraphStyle", self.style_ref(Some(p), true)))
+            }
+            _ => {}
+        }
+        // Per-corner values: the two IDs of each pair are equal in every
+        // sample, so the values are written only when all four agree.
+        let corners = |ids: [u32; 4]| {
+            let v: Vec<_> = ids.iter().map(|&id| os.attrs.get(id)).collect();
+            (v[0].is_some() && v.iter().all(|x| *x == v[0])).then(|| v[0].cloned())?
+        };
+        if let Some(r) = corners([0x6E70, 0x6E94, 0x6E92, 0x6E93]).and_then(|v| v.as_f64()) {
+            for name in [
+                "TopLeftCornerRadius",
+                "TopRightCornerRadius",
+                "BottomLeftCornerRadius",
+                "BottomRightCornerRadius",
+            ] {
+                attrs.push((name, num(r)));
+            }
+        }
+        let corner_option = match corners([0x6E6F, 0x6E91, 0x6E8F, 0x6E90]).and_then(|v| v.as_u32())
+        {
+            Some(0) => Some("None"),
+            Some(0x5A15) => Some("RoundedCorner"),
+            Some(0x5A16) => Some("InverseRoundedCorner"),
+            _ => None,
+        };
+        if let Some(o) = corner_option {
+            for name in [
+                "TopLeftCornerOption",
+                "TopRightCornerOption",
+                "BottomLeftCornerOption",
+                "BottomRightCornerOption",
+            ] {
+                attrs.push((name, o.into()));
+            }
+        }
+        if let Some(on) = &os.enabled {
+            // Pairs of IDs that are both present or both absent in every
+            // sample; either one gives the attribute.
+            for (ids, names) in [
+                ([0x1B933, 0x1B934], &["EnableFill", "EnableStroke"][..]),
+                (
+                    [0xADC8, 0x1B93E],
+                    &[
+                        "EnableTextFrameGeneralOptions",
+                        "EnableTextFrameBaselineOptions",
+                    ][..],
+                ),
+                ([0xADC9, 0xADCA], &["EnableTextFrameAutoSizingOptions"][..]),
+            ] {
+                let (a, b) = (on.contains(&ids[0]), on.contains(&ids[1]));
+                if a == b {
+                    for name in names {
+                        attrs.push((name, a.to_string()));
+                    }
+                }
+            }
+            for (id, name) in [
+                (0x1B940, "EnableStoryOptions"),
+                (0x1B960, "EnableFrameFittingOptions"),
+                (0xADCB, "EnableTextFrameColumnRuleOptions"),
+            ] {
+                attrs.push((name, on.contains(&id).to_string()));
+            }
+        }
+        node.set(&[], attrs);
+        if let Some(d) = &os.frame {
+            let f = |o: usize| {
+                (d.len() >= o + 8)
+                    .then(|| Cursor::new(&d[o..]).f64().ok())
+                    .flatten()
+            };
+            let u = |o: usize| {
+                (d.len() >= o + 4)
+                    .then(|| Cursor::new(&d[o..]).u32().ok())
+                    .flatten()
+            };
+            let h = |o: usize| {
+                (d.len() >= o + 2)
+                    .then(|| Cursor::new(&d[o..]).u16().ok())
+                    .flatten()
+            };
+            let mut tf = Vec::new();
+            if let Some(n) = u(66) {
+                tf.push(("TextColumnCount", n.to_string()));
+            }
+            if let Some(v) = f(8) {
+                tf.push(("TextColumnGutter", num(v)));
+            }
+            if let Some(v) = f(0) {
+                tf.push(("TextColumnFixedWidth", num(v)));
+            }
+            let mut footnote = Vec::new();
+            if let (Some(span), Some(min), Some(between)) = (h(144), f(146), f(154))
+                && span <= 1
+            {
+                let span = (span == 1).to_string();
+                tf.push(("FootnotesSpanAcrossColumns", span.clone()));
+                tf.push(("FootnotesMinimumSpacing", num(min)));
+                tf.push(("FootnotesSpaceBetween", num(between)));
+                footnote = vec![
+                    ("SpanFootnotesAcross", span),
+                    ("MinimumSpacingOption", num(min)),
+                    ("SpaceBetweenFootnotes", num(between)),
+                ];
+            }
+            if let (Some(width), Some(color), Some(tint)) = (f(190), u(198), f(210)) {
+                let color = match color {
+                    0 => Some("n".to_string()),
+                    c => self.doc.swatches.get(&c).cloned(),
+                };
+                tf.push(("ColumnRuleStrokeWidth", num(width)));
+                if let Some(c) = color {
+                    tf.push(("ColumnRuleStrokeColor", c));
+                }
+                tf.push(("ColumnRuleStrokeTint", num(tint)));
+            }
+            node.set(&["TextFramePreference"], tf);
+            // Only the top inset is shown apart from the others; the list is
+            // written when all four are equal.
+            if let (Some(a), Some(b), Some(c), Some(e)) = (f(34), f(42), f(50), f(58))
+                && a == b
+                && b == c
+                && c == e
+            {
+                node.set(&["TextFramePreference", "Properties"], Vec::new());
+                let props = node
+                    .children
+                    .iter_mut()
+                    .find(|c| c.tag == "TextFramePreference")
+                    .and_then(|t| t.children.iter_mut().find(|c| c.tag == "Properties"))
+                    .expect("set above");
+                props.children.retain(|c| c.tag != "InsetSpacing");
+                props.children.push(Node {
+                    tag: "InsetSpacing".into(),
+                    attrs: vec![("type".into(), "list".into())],
+                    text: None,
+                    children: (0..4)
+                        .map(|_| Node {
+                            tag: "ListItem".into(),
+                            attrs: vec![("type".into(), "unit".into())],
+                            text: Some(num(a)),
+                            children: Vec::new(),
+                        })
+                        .collect(),
+                });
+            }
+            if !footnote.is_empty() && node.child("TextFrameFootnoteOptionsObject").is_some() {
+                node.set(&["TextFrameFootnoteOptionsObject"], footnote);
+            }
+        }
+        let mut story = Vec::new();
+        if let Some(d) = &os.story
+            && d.len() >= 16
+        {
+            let h = |o: usize| u16::from_le_bytes([d[o], d[o + 1]]);
+            match h(14) {
+                0 => story.push(("FrameType", "Unknown".to_string())),
+                1 => story.push(("FrameType", "TextFrameType".to_string())),
+                2 => story.push(("FrameType", "FrameGridType".to_string())),
+                _ => {}
+            }
+            match h(0) {
+                0 => story.push(("StoryOrientation", "Unknown".to_string())),
+                1 => story.push(("StoryOrientation", "Horizontal".to_string())),
+                _ => {}
+            }
+        }
+        match os.direction {
+            Some(1) => story.push(("StoryDirection", "LeftToRightDirection".into())),
+            Some(0) | None => story.push(("StoryDirection", "UnknownDirection".into())),
+            _ => {}
+        }
+        node.set(&["StoryPreference"], story);
+        let mode = match os.text_wrap.as_ref().map(|w| w.mode) {
+            None | Some(wrap_mode::NONE) => Some("None"),
+            Some(wrap_mode::JUMP_OBJECT) => Some("JumpObjectTextWrap"),
+            Some(wrap_mode::BOUNDING_BOX) => Some("BoundingBoxTextWrap"),
+            Some(wrap_mode::CONTOUR) => Some("Contour"),
+            Some(_) => None,
+        };
+        if let Some(mode) = mode {
+            node.set(&["TextWrapPreference"], vec![("TextWrapMode", mode.into())]);
+            let [left, top, right, bottom] = os.text_wrap.as_ref().map_or([0.0; 4], |w| w.offsets);
+            node.set(
+                &["TextWrapPreference", "Properties", "TextWrapOffset"],
+                vec![
+                    ("Top", num(top)),
+                    ("Left", num(left)),
+                    ("Bottom", num(bottom)),
+                    ("Right", num(right)),
+                ],
+            );
+            if os.contour_type == Some(5) {
+                node.set(
+                    &["TextWrapPreference", "ContourOption"],
+                    vec![("ContourType", "SameAsClipping".into())],
+                );
+            }
+        }
+        let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, _)| *id).collect();
+        node.set(&["FrameFittingOption"], fitting_attrs(&os.fitting, &all));
+        node
     }
 
     fn style_group_children(

@@ -129,6 +129,40 @@ and 49 EPS graphics with `ClippingPathSettings` have the same four
 values. The converter writes them (`objects.md`, clipping path
 settings).
 
+## Object styles other than the root
+
+`tools/root_values.py` also collects the object styles other than
+`[None]`: 295 styles in the 88 distinct IDML files, every file having at
+least one. A value is kept when every such style of every IDML from some
+DOM version on has it, with the same value, and at least 10 files show
+it. The kept values are in `src/idml/object_style_values.xml`. The
+converter writes them on every object style other than `[None]`, and
+writes the values it reads from the INDD (`objects.md`, object style
+settings) in their place.
+
+| Values | Same in | Written for version |
+|---|---|---|
+| 80 | 88 of 88 files | all |
+| 40 | 87 of 87 files with DOM 12 or later | 12 and later |
+| 14 | 80 of 80 files with DOM 15 or later | 15 and later |
+| 1 | 74 of 74 files with DOM 18 or later | 18 and later |
+
+Among them are the nine `Enable…` effect flags other than
+`EnableTransparency` in the four `ObjectStyle…EffectsCategorySettings`
+elements (all `true`), all of `BaselineFrameGridOption`,
+`ObjectExportOption` and `TransformAttributeOption`, and
+`ApplyNextParagraphStyle="false"` and `EnableParagraphStyle="false"`.
+
+**Left out because they vary or are not in every style** (59): the
+fill, stroke and corner values, most `Enable…` attributes,
+`AnchoredObjectSetting` `PinPosition`, `AnchorPoint` and
+`VerticalAlignment`, the frame fitting values, the story frame type,
+orientation and direction, the text wrap mode and contour type, the
+column, inset, footnote and column rule values of
+`TextFramePreference`, and `EnableTransparency`. The converter reads
+many of these from the INDD. Values that only the 2 files with DOM 20
+have (18) are left out as for the preferences.
+
 ## Column direction of pages
 
 All 832 `MarginPreference` elements in the 240 corpus IDML files have

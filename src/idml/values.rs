@@ -26,6 +26,38 @@ impl Node {
             .map(|(_, v)| v.as_str())
     }
 
+    /// Set the attributes of the descendant at `path`, creating missing
+    /// elements (`Properties` as the first child), replacing values
+    /// already there in place and adding the others at the end.
+    pub fn set(&mut self, path: &[&str], attrs: Vec<(&str, String)>) {
+        let mut node = self;
+        for tag in path {
+            let i = match node.children.iter().position(|c| c.tag == *tag) {
+                Some(i) => i,
+                None => {
+                    let new = Node {
+                        tag: tag.to_string(),
+                        ..Node::default()
+                    };
+                    if *tag == "Properties" {
+                        node.children.insert(0, new);
+                        0
+                    } else {
+                        node.children.push(new);
+                        node.children.len() - 1
+                    }
+                }
+            };
+            node = &mut node.children[i];
+        }
+        for (k, v) in attrs {
+            match node.attrs.iter_mut().find(|(a, _)| a == k) {
+                Some(e) => e.1 = v,
+                None => node.attrs.push((k.to_string(), v)),
+            }
+        }
+    }
+
     /// Add the attributes and children of `other` that `self` lacks.
     /// Children with the same tag are merged.
     fn merge(&mut self, other: &Node) {
@@ -79,6 +111,29 @@ pub fn root_style(tag: &str, major: u32) -> Node {
             .map_or(0, |v| v.parse().expect("MinimumVersion is a number"));
         if since <= major
             && let Some(n) = block.child(tag)
+        {
+            out.merge(n);
+        }
+    }
+    out
+}
+
+const OBJECT_STYLE_VALUES: &str = include_str!("object_style_values.xml");
+
+/// The observed values of object styles other than the root `[None]`, for
+/// a document of InDesign version `major`.
+pub fn object_style(major: u32) -> Node {
+    let mut out = Node {
+        tag: "ObjectStyle".to_string(),
+        ..Node::default()
+    };
+    let root = parse(OBJECT_STYLE_VALUES).expect("object_style_values.xml is well-formed");
+    for block in &root.children {
+        let since = block
+            .attr("MinimumVersion")
+            .map_or(0, |v| v.parse().expect("MinimumVersion is a number"));
+        if since <= major
+            && let Some(n) = block.child("ObjectStyle")
         {
             out.merge(n);
         }
@@ -216,6 +271,23 @@ mod tests {
                 .attr("AutoSizingType")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn gates_object_style_values_by_version() {
+        let old = object_style(7);
+        let new = object_style(21);
+        assert!(old.child("ObjectExportOption").is_none());
+        assert!(new.child("ObjectExportOption").is_some());
+        // Values that vary between styles are not in the file.
+        assert!(new.attr("FillColor").is_none());
+        let mut n = new.clone();
+        n.set(
+            &["TextWrapPreference", "Properties", "TextWrapOffset"],
+            vec![("Top", "1".into())],
+        );
+        let wrap = n.child("TextWrapPreference").unwrap();
+        assert_eq!(wrap.children[0].tag, "Properties");
     }
 
     #[test]
