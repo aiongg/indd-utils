@@ -2768,36 +2768,73 @@ impl Writer<'_> {
                 attrs.push((name, o.into()));
             }
         }
+        let mut effects = Vec::new();
         if let Some(on) = &os.enabled {
-            // Pairs of IDs that are both present or both absent in every
-            // sample; either one gives the attribute.
-            for (ids, names) in [
-                ([0x1B933, 0x1B934], &["EnableFill", "EnableStroke"][..]),
+            // Each attribute is true when its category ID is in the list,
+            // from the version on which IDML has it. Where several IDs
+            // are present or absent together in every sample, the
+            // attribute is written only when they agree.
+            // See `docs/format/objects.md`, object style settings.
+            const CATEGORIES: &[(&[u32], u32, &[&str])] = &[
+                (&[0x1B933], 7, &["EnableFill"]),
+                (&[0x1B934], 7, &["EnableStroke"]),
+                (&[0x1B935, 0x1B936], 7, &["EnableStrokeAndCornerOptions"]),
+                (&[0x1B93E], 7, &["EnableTextFrameGeneralOptions"]),
+                (&[0xADC8], 7, &["EnableTextFrameBaselineOptions"]),
+                (&[0xADC9], 8, &["EnableTextFrameAutoSizingOptions"]),
+                (&[0x1B940], 7, &["EnableStoryOptions"]),
+                (&[0x1B960], 7, &["EnableFrameFittingOptions"]),
+                (&[0x1B93F], 7, &["EnableParagraphStyle"]),
+                (&[0xADCB], 15, &["EnableTextFrameColumnRuleOptions"]),
+                (&[0xCA2F], 7, &["EnableAnchoredObjectOptions"]),
+                (&[0x1B942, 0x37C8, 0x37C9], 7, &["EnableTextWrapAndOthers"]),
+                (&[0xADCA], 12, &["EnableTextFrameFootnoteOptions"]),
                 (
-                    [0xADC8, 0x1B93E],
-                    &[
-                        "EnableTextFrameGeneralOptions",
-                        "EnableTextFrameBaselineOptions",
-                    ][..],
+                    &[0x6EA1, 0x6EA2, 0x6EA3, 0x6EA4, 0x6EA5, 0x6EA6, 0x6EA7],
+                    13,
+                    &["EnableTransformAttributes"],
                 ),
-                ([0xADC9, 0xADCA], &["EnableTextFrameAutoSizingOptions"][..]),
-            ] {
-                let (a, b) = (on.contains(&ids[0]), on.contains(&ids[1]));
-                if a == b {
-                    for name in names {
-                        attrs.push((name, a.to_string()));
+                (
+                    &[0x1B97A, 0x1B97C, 0x1B97D, 0x1B97E],
+                    9,
+                    &[
+                        "EnableExportTagging",
+                        "EnableObjectExportAltTextOptions",
+                        "EnableObjectExportEpubOptions",
+                        "EnableObjectExportTaggedPdfOptions",
+                    ],
+                ),
+            ];
+            for (ids, since, names) in CATEGORIES {
+                let first = on.contains(&ids[0]);
+                if major >= *since && ids.iter().all(|i| on.contains(i) == first) {
+                    for name in *names {
+                        attrs.push((name, first.to_string()));
                     }
                 }
             }
-            for (id, name) in [
-                (0x1B940, "EnableStoryOptions"),
-                (0x1B960, "EnableFrameFittingOptions"),
-                (0xADCB, "EnableTextFrameColumnRuleOptions"),
-            ] {
-                attrs.push((name, on.contains(&id).to_string()));
+            // The effects categories: transparency of the object, and of
+            // its fill, stroke and content together.
+            effects.push((
+                "ObjectStyleObjectEffectsCategorySettings",
+                on.contains(&0x1B937),
+            ));
+            let parts = [0x1B948, 0x1B950, 0x1B958];
+            let first = on.contains(&parts[0]);
+            if parts.iter().all(|i| on.contains(i) == first) {
+                for tag in [
+                    "ObjectStyleFillEffectsCategorySettings",
+                    "ObjectStyleStrokeEffectsCategorySettings",
+                    "ObjectStyleContentEffectsCategorySettings",
+                ] {
+                    effects.push((tag, first));
+                }
             }
         }
         node.set(&[], attrs);
+        for (tag, on) in effects {
+            node.set(&[tag], vec![("EnableTransparency", on.to_string())]);
+        }
         if let Some(d) = &os.frame {
             let f = |o: usize| {
                 (d.len() >= o + 8)

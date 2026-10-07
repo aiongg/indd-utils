@@ -1020,25 +1020,45 @@ the u32 at 40 = 1, and chunk 0x3777 type 5: IDML `None` with
 `None`.
 
 **Categories (chunk 0x1B92E).** An ID in the list means the attribute is
-`true`: 0x1B940 `EnableStoryOptions`, 0x1B960
-`EnableFrameFittingOptions`, 0xADCB `EnableTextFrameColumnRuleOptions`,
-no disagreement. Three more go with a pair of IDs that are both present
-or both absent in every style, so either ID gives the value: 0x1B933 and
-0x1B934 for `EnableFill` and `EnableStroke` (equal in every style),
-0xADC8 and 0x1B93E for `EnableTextFrameGeneralOptions` and
-`EnableTextFrameBaselineOptions` (equal in every style), and 0xADC9 or
-0xADCA for `EnableTextFrameAutoSizingOptions`. The converter writes them
-when the two IDs agree. Other `Enable…` attributes vary together with
-several IDs and are not written.
+`true`. Over the 1,684 object styles other than `[None]` of the
+trustworthy pairs whose name matches an IDML style (fewer for attributes
+that IDML has only from a later version), each attribute below equals
+the presence of its ID in every style:
+
+| ID | Attribute | From DOM |
+|---|---|---|
+| 0x1B933 | `EnableFill` | 7 |
+| 0x1B934 | `EnableStroke` | 7 |
+| 0x1B935, 0x1B936 | `EnableStrokeAndCornerOptions` | 7 |
+| 0x1B93E | `EnableTextFrameGeneralOptions` | 7 |
+| 0xADC8 | `EnableTextFrameBaselineOptions` | 7 |
+| 0xADC9 | `EnableTextFrameAutoSizingOptions` | 8 |
+| 0x1B940 | `EnableStoryOptions` | 7 |
+| 0x1B960 | `EnableFrameFittingOptions` | 7 |
+| 0x1B93F | `EnableParagraphStyle` | 7 |
+| 0xADCB | `EnableTextFrameColumnRuleOptions` | 15 |
+| 0xCA2F | `EnableAnchoredObjectOptions` | 7 |
+| 0x1B942, 0x37C8, 0x37C9 | `EnableTextWrapAndOthers` | 7 |
+| 0xADCA | `EnableTextFrameFootnoteOptions` | 12 |
+| 0x6EA1 to 0x6EA7 | `EnableTransformAttributes` | 13 |
+| 0x1B97A, 0x1B97C to 0x1B97E | `EnableExportTagging`, `EnableObjectExportAltTextOptions`, `EnableObjectExportEpubOptions`, `EnableObjectExportTaggedPdfOptions` | 9 |
+| 0x1B937 | `EnableTransparency` of `ObjectStyleObjectEffectsCategorySettings` | 7 |
+| 0x1B948, 0x1B950, 0x1B958 | `EnableTransparency` of the fill, stroke and content effects categories | 7 |
+
+Where a row has several IDs, they are all present or all absent in every
+style, so the corpus does not tell which one the attribute follows; the
+converter writes the attribute only when they agree. The four export
+attributes are equal in every style (84 true, 1,358 false). With the 88
+pairs of the earlier corpus, fill and stroke, and the general and
+baseline frame options, were not told apart; the larger corpus has
+styles that differ in them (10 without fill, 13 without stroke, 506
+without general options and 531 without baseline options).
 
 **Anchored object settings** are in chunk 0x2800, as for anchors (see
 stories). **Not written:** `AnchoredObjectSetting` `PinPosition` and
 `AnchorPoint` change together (312 against 25 styles) with
 `VerticalAlignment` and three other u16 fields of chunk 0x2800, so they
 cannot be told apart.
-`EnableTransparency` of the effects categories varies and has no
-identified field.
-
 The other values of object styles come from IDML observation
 (`idml-values.md`).
 
