@@ -877,3 +877,36 @@ IDML `ABullet` elements in 78 of 78 and the records end the chunk. All
 396 bullets match on type, value and font style, and 395 on the font;
 the other is in the pair whose IDML names the family `Minion Pro (OTF)`
 (`fonts.md`).
+
+## XML tags (0xBF19)
+
+Chunk 0xBF2F is a u32 length and the tag name as text segments; chunk
+0x117 is the UID of the tag's colour, an object of class 0x1F11 whose
+chunk 0x1F01 holds u32 colour space 5 (RGB), u16 3 and three f64
+fractions, as for swatches. IDML writes each tag as an `XMLTag` in
+`XML/Tags.xml`, with `Self="XMLTag/<Name>"` and the colour as the
+`TagColor` property. In all 78 pairs the number of tag objects equals the
+number of `XMLTag` elements and the names match (87 tags). IDML lists
+them by name, ignoring case (the one pair with more than one tag, 10
+tags).
+
+| Red, green, blue | `TagColor` | Evidence |
+|---|---|---|
+| 0.31, 0.6, 1 | `LightBlue` | 78 tags (`Root`) |
+| 1, 0, 0 | `Red` | 1 |
+| 0.31, 1, 0.31 | `Green` | 1 |
+| 0, 0, 1 | `Blue` | 1 |
+| 1, 1, 0.31 | `Yellow` | 1 |
+| 1, 0.31, 1 | `Magenta` | 1 |
+| 0, 1, 1 | `Cyan` | 1 |
+| 0.5, 0.5, 0.5 | `Gray` | 1 |
+| 0, 0, 0 | `Black` | 1 |
+| 0.6, 0, 0 | `BrickRed` | 1 |
+
+Each colour other than light blue occurs once, all in one file. The
+converter leaves out `TagColor` for other colours.
+
+The XML structure itself is not converted: the backing story (named by
+document chunk 0xBF14 in 76 of 78 pairs) and its `XMLElement` elements,
+whose `Self` (`di2`, `di3`, `di2ib`, …) does not follow from a UID found
+so far.

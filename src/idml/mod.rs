@@ -81,6 +81,27 @@ fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
     out
 }
 
+/// The IDML name of an XML tag colour (red, green, blue fractions);
+/// `None` for colours without evidence. See `docs/format/objects.md`.
+fn xml_tag_color(rgb: [f64; 3]) -> Option<&'static str> {
+    const NAMES: [([f64; 3], &str); 10] = [
+        ([0.31, 0.6, 1.0], "LightBlue"),
+        ([1.0, 0.0, 0.0], "Red"),
+        ([0.31, 1.0, 0.31], "Green"),
+        ([0.0, 0.0, 1.0], "Blue"),
+        ([1.0, 1.0, 0.31], "Yellow"),
+        ([1.0, 0.31, 1.0], "Magenta"),
+        ([0.0, 1.0, 1.0], "Cyan"),
+        ([0.5, 0.5, 0.5], "Gray"),
+        ([0.0, 0.0, 0.0], "Black"),
+        ([0.6, 0.0, 0.0], "BrickRed"),
+    ];
+    NAMES
+        .iter()
+        .find(|(c, _)| c.iter().zip(rgb).all(|(a, b)| (a - b).abs() < 1e-4))
+        .map(|(_, n)| *n)
+}
+
 /// Frame fitting attributes of `attrs` with IDs in `ids`, in IDML order.
 fn fitting_attrs(attrs: &Attrs, ids: &[u32]) -> Vec<(&'static str, String)> {
     FITTING_ATTRS
@@ -3140,6 +3161,18 @@ impl Writer<'_> {
     fn tags(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Tags");
+        // IDML lists the tags by name, ignoring case.
+        let mut tags: Vec<&(String, Option<[f64; 3]>)> = self.doc.xml_tags.iter().collect();
+        tags.sort_by_key(|(name, _)| name.to_lowercase());
+        for (name, color) in tags {
+            x.start("XMLTag")
+                .attr("Self", format!("XMLTag/{}", self_name(name)))
+                .attr("Name", name);
+            if let Some(c) = color.and_then(xml_tag_color) {
+                Self::properties(&mut x, &[("TagColor", "enumeration", c.to_string().into())]);
+            }
+            x.end();
+        }
         x.end();
         x.finish()
     }

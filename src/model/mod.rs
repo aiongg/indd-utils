@@ -61,6 +61,9 @@ pub mod class {
     /// Document-wide preferences.
     pub const PREFERENCES: u32 = 0x2202;
     pub const GUIDE: u32 = 0x3301;
+    pub const XML_TAG: u32 = 0xBF19;
+    /// A colour used in the interface (XML tags).
+    pub const UI_COLOR: u32 = 0x1F11;
 }
 
 /// Chunk IDs.
@@ -108,6 +111,8 @@ pub mod chunk {
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;
+    pub const XML_TAG_NAME: u32 = 0xBF2F;
+    pub const XML_TAG_COLOR: u32 = 0x117;
     /// Bullet characters, in the preferences object.
     pub const BULLETS: u32 = 0x1A488;
     pub const FRAME_COLUMNS: u32 = 0x2D1;
@@ -476,6 +481,8 @@ pub struct Document {
     pub color_groups: Vec<ColorGroup>,
     /// The bullet characters offered for lists (preferences chunk 0x1A488).
     pub bullets: Vec<Bullet>,
+    /// XML tags (class 0xBF19): name and colour (red, green, blue).
+    pub xml_tags: Vec<(String, Option<[f64; 3]>)>,
 }
 
 /// Document setup, from chunk 0x533 of the preferences object.
@@ -691,6 +698,7 @@ impl<'a> Reader<'a> {
         let mut composite_fonts = Vec::new();
         let mut composite_entries = HashMap::new();
         let mut cjk_tables = Vec::new();
+        let mut xml_tags = Vec::new();
         let mut inks = Vec::new();
         let mut color_groups = HashMap::new();
         for &(uid, cls) in self.db.classes() {
@@ -902,6 +910,20 @@ impl<'a> Reader<'a> {
                         color_groups.insert(uid, g);
                     }
                 }
+                class::XML_TAG => {
+                    // Chunk 0xBF2F: u32 length, then the name as text
+                    // segments; chunk 0x117: the UID of the tag's colour.
+                    if let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? {
+                        let mut c = Cursor::new(&d);
+                        let n = c.u32()? as usize;
+                        let name = c.segments(n)?;
+                        let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
+                            Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
+                            _ => None,
+                        };
+                        xml_tags.push((name, color));
+                    }
+                }
                 class::LANGUAGE => {
                     if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
                         && d.len() > 1
@@ -983,7 +1005,24 @@ impl<'a> Reader<'a> {
                 .filter_map(|u| color_groups.remove(&u))
                 .collect(),
             bullets: self.bullets()?,
+            xml_tags,
         })
+    }
+
+    /// An interface colour (class 0x1F11): chunk 0x1F01 holds u32 space
+    /// (5 = RGB), u16 count and the components as f64 fractions.
+    fn ui_color(&self, uid: u32) -> Result<Option<[f64; 3]>, Error> {
+        if self.class(uid) != Some(class::UI_COLOR) {
+            return Ok(None);
+        }
+        let Some(d) = self.chunk(uid, color::chunk::COLOR_VALUE)? else {
+            return Ok(None);
+        };
+        let mut c = Cursor::new(&d);
+        if c.u32()? != 5 || c.u16()? != 3 {
+            return Ok(None);
+        }
+        Ok(Some([c.f64()?, c.f64()?, c.f64()?]))
     }
 
     /// The bullet characters in the preferences object (chunk 0x1A488):
