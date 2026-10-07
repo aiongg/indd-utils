@@ -2,7 +2,7 @@
 
 Rust reader for INDD files (Adobe InDesign's native format) and converter
 to IDML. Crate and command: `indd`. Repo: `aiongg/indd-utils` (private for
-now). Licence: MIT.
+now). Licence: MIT OR Apache-2.0.
 
 ## Clean-room rules (read `CLEANROOM.md`)
 

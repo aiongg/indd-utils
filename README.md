@@ -184,6 +184,8 @@ template.
 
 ## Licence
 
-MIT. The repository contains no sample files. The test fixtures are
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at
+your option. Copyright (c) 2026 aiongg and the indd-utils contributors.
+The repository contains no sample files. The test fixtures are
 downloaded from their sources and keep their own licences; see
 `tests/fixtures/README.md`.
