@@ -532,6 +532,18 @@ converter does the same. The other fields of the chunk are not
 identified: `PinPosition` and `AnchorPoint` change together with three
 other u16 fields in the object styles.
 
+**Positions count characters.** A text record's run length counts
+UTF-16 code units, but every other position counts characters, a
+surrogate pair being one: the lengths in a strand's chunk 0x261 (also
+for the text strand), and the run lengths of style runs, owned items and
+text owners. Evidence: the 6 stories of the little-endian corpus whose
+text has a character outside the Basic Multilingual Plane (emoji, all in
+one pair). In all 6 the text records add up to the number of UTF-16
+units, and the other strands and all chunk 0x261 lengths to the number
+of characters; with that reading, each emoji gets the character style
+range IDML gives it (6 of 6). The converter applies the same reading to
+hyperlink range trees, for which no sample with such a character exists.
+
 INDD stores a forced line break as U+000A; IDML writes it as U+2028. The
 last paragraph return of a story is not written to IDML.
 

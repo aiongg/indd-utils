@@ -1777,6 +1777,39 @@ impl<'a> Reader<'a> {
                 }
             }
         }
+        // Text records count UTF-16 code units, every other strand counts
+        // characters (a surrogate pair is one position). Convert the
+        // positions to UTF-16 offsets.
+        let offsets = char_offsets(&text);
+        let unit = |p: usize| match offsets.get(p) {
+            Some(&u) => u,
+            None => text.len() + (p + 1 - offsets.len()),
+        };
+        let to_units = |list: Vec<StyleRun>| -> Vec<StyleRun> {
+            let mut at = 0;
+            list.into_iter()
+                .map(|(len, style, attrs)| {
+                    let n = unit(at + len) - unit(at);
+                    at += len;
+                    (n, style, attrs)
+                })
+                .collect()
+        };
+        let para = to_units(para);
+        let chars = to_units(chars);
+        let owned: Vec<_> = owned
+            .into_iter()
+            .map(|(p, cls, item)| (unit(p), cls, item))
+            .collect();
+        let owners: Vec<_> = owners
+            .into_iter()
+            .map(|(p, len, owner, cell)| (unit(p), unit(p + len) - unit(p), owner, cell))
+            .collect();
+        for r in &mut sources {
+            let start = unit(r.start);
+            r.len = unit(r.start + r.len) - start;
+            r.start = start;
+        }
         let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
         let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
         let mut text_variables = BTreeMap::new();
@@ -1865,7 +1898,23 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// Find the first in-object string at or after `from`.
+/// The UTF-16 offset of each character of `text`, where a surrogate pair is
+/// one character, followed by the length of `text`.
+fn char_offsets(text: &[u16]) -> Vec<usize> {
+    let mut out = Vec::with_capacity(text.len() + 1);
+    let mut i = 0;
+    while i < text.len() {
+        out.push(i);
+        let pair = (0xD800..0xDC00).contains(&text[i])
+            && text
+                .get(i + 1)
+                .is_some_and(|u| (0xDC00..0xE000).contains(u));
+        i += if pair { 2 } else { 1 };
+    }
+    out.push(text.len());
+    out
+}
+
 /// A master page's applied master and its own margins and columns.
 type MasterPageLayout = (Option<u32>, Option<Margins>, Option<Columns>);
 
@@ -1934,6 +1983,7 @@ fn resolve_page_layout(spreads: &mut [Spread], masters: &mut [Spread]) {
     }
 }
 
+/// Find the first in-object string at or after `from`.
 fn find_string(data: &[u8], from: usize) -> Result<String, Error> {
     for i in from..data.len().saturating_sub(4) {
         if data[i] == 2 && data[i + 1] == 0 {
@@ -2091,6 +2141,12 @@ mod tests {
             .map(|p| p.margins.as_ref().unwrap().top)
             .collect();
         assert_eq!(tops, [30.0, 20.0]);
+    }
+
+    #[test]
+    fn counts_a_surrogate_pair_as_one_position() {
+        let text: Vec<u16> = "a\u{1F93F}b".encode_utf16().collect();
+        assert_eq!(char_offsets(&text), [0, 1, 3, 4]);
     }
 
     #[test]
