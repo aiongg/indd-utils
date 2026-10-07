@@ -147,7 +147,63 @@ the name as an in-object string. The internal layer is named
 | 0x140F | u32 applied master spread, u16 (unknown), matrix `MasterPageTransform` |
 | 0x5CC | Matrix: `ItemTransform` |
 | 0x5DD | Four f64: left, top, right, bottom. IDML `GeometricBounds` is top, left, bottom, right. |
-| 0x51A | Four f64: margins (36 in the blank document) |
+| 0x51A | Margins: four f64 (left, top, right, bottom), u16 own-margins flag |
+| 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, 4 bytes |
+| 0xCD02 | Layout grid (`GridDataInformation`, below) |
+
+**Margins and columns.** IDML writes them as `MarginPreference`. The
+column edges are `ColumnsPositions` (left and right edge of each column,
+so `ColumnCount` is *n*/2), the gutter is `ColumnGutter`. A flag of 1
+means the page has its own values. With 0, or without the chunk, the
+page shows the values in effect on its master page: the page at the same
+position, counted from the left by `ItemTransform`, in the applied
+master spread, or that spread's only page. That master page can itself
+take them from its own master. The stored values of such a page are
+often stale.
+
+Evidence: all 325 IDML pages of the same-version pairs that have an INDD
+page with the same UID (document and master pages):
+
+- Margins: 156 pages with flag 1 match their own values; 169 take them
+  from a master page (146 directly, 23 through two or three masters) and
+  match. 325 of 325. Without the rule, 72 pages with flag 0 differ.
+- Columns, gutter and positions: 156 with flag 1, 169 from a master page,
+  325 of 325. Without the rule, 83 differ.
+- The order of the margins: the four values differ in many pages (for
+  example 56.69, 42.52, 56.69, 56.69 with IDML `Top="42.51968503937008"`).
+
+In the 250 distinct little-endian files, 2,246 pages hold 0x51A in 2,160
+(34 bytes each, flag 0 or 1) and 0x528 in 2,211 (always 18 bytes after
+the positions). The two bytes after the flag of 0x528 are 1 in 26 pages
+and 0 elsewhere; they are not identified.
+
+`ColumnDirection` has no identified field: all 832 `MarginPreference`
+elements of the 240 corpus IDML files say `Horizontal`. The converter
+writes that value (`idml-values.md`).
+
+**Layout grid (chunk 0xCD02).** u32 font family UID, a flag byte, the
+font style as an in-object string, five f64, four u32. IDML writes
+`GridDataInformation`:
+
+| Field | IDML | Evidence |
+|---|---|---|
+| Font family | `AppliedFont` (Properties, the family name) | 283 of 325 (below) |
+| Font style | `FontStyle` | 325 of 325 (`Regular`, `Roman`) |
+| f64 1 to 5 | `PointSize`, `CharacterAki`, `LineAki`, `HorizontalScale` (×100), `VerticalScale` (×100) | see below |
+| u32 1 to 4 | `LineAlignment`, `GridAlignment`, `CharacterAlignment`; one not identified | see below |
+
+The numbers are 12, 0, 9, 1, 1 and the codes 3, 0, 3, 1 in all 2,246
+pages of the 250 distinct little-endian files, and all 832
+`GridDataInformation` elements of the corpus IDML files have
+`PointSize="12"`, `CharacterAki="0"`, `LineAki="9"`, scales of 100,
+`LineAlignment="LeftOrTopLineJustify"` and `AlignEmCenter` for both
+alignments. The numbers 12 and 9 occur once, so those fields are
+located; the others are not proven. The converter writes each number only
+when it is the observed value, and the three alignments only when the
+codes are 3, 0, 3, 1. The other 42 pages are in one pair whose IDML
+names the family `Minion Pro (OTF)` where the INDD family name is
+`Minion Pro`; its `FontFamily` element has the same difference
+(`fonts.md`).
 
 **Applied master of a master page.** Pages of master spreads use the same
 chunk 0x140F. When it is absent or names UID 0, IDML writes

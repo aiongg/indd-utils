@@ -78,6 +78,9 @@ pub mod chunk {
     pub const PAGE_MASTER: u32 = 0x140F;
     pub const PAGE_TRANSFORM: u32 = 0x5CC;
     pub const PAGE_BOUNDS: u32 = 0x5DD;
+    pub const PAGE_MARGINS: u32 = 0x51A;
+    pub const PAGE_COLUMNS: u32 = 0x528;
+    pub const PAGE_GRID: u32 = 0xCD02;
     pub const ITEM_TRANSFORM: u32 = 0x151;
     pub const ITEM_PATHS: u32 = 0x162B;
     pub const ITEM_HIERARCHY: u32 = 0x15B;
@@ -177,6 +180,45 @@ pub struct Page {
     pub transform: Matrix,
     pub master: Option<u32>,
     pub master_transform: Matrix,
+    /// Margins and columns (chunks 0x51A and 0x528). After
+    /// `resolve_page_layout`, these are the values in effect: the page's
+    /// own, or its master page's.
+    pub margins: Option<Margins>,
+    pub columns: Option<Columns>,
+    /// Layout grid settings (chunk 0xCD02).
+    pub grid: Option<GridData>,
+}
+
+/// Page margins from chunk 0x51A: four f64 (left, top, right, bottom),
+/// then u16 1 if the page has its own margins, 0 if it uses its master
+/// page's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Margins {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+    pub own: bool,
+}
+
+/// Page columns from chunk 0x528: u32 count *n*, *n* f64 column edge
+/// positions, f64 gutter, then u16 1 if the page has its own columns.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Columns {
+    pub positions: Vec<f64>,
+    pub gutter: f64,
+    pub own: bool,
+}
+
+/// Layout grid settings of a page (chunk 0xCD02): u32 font family, a flag
+/// byte, the font style as an in-object string, five f64 and four u32.
+/// See `docs/format/objects.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GridData {
+    pub font: u32,
+    pub font_style: String,
+    pub numbers: [f64; 5],
+    pub codes: [u32; 4],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -530,16 +572,17 @@ impl<'a> Reader<'a> {
             .chunk(doc, chunk::DOC_ACTIVE_LAYER)?
             .map(|d| Cursor::new(&d).u32())
             .transpose()?;
-        let spreads = self
+        let mut spreads = self
             .uid_list(doc, chunk::DOC_SPREADS)?
             .into_iter()
             .map(|uid| self.spread(uid))
             .collect::<Result<Vec<_>, _>>()?;
-        let master_spreads = self
+        let mut master_spreads = self
             .uid_list(doc, chunk::DOC_MASTER_SPREADS)?
             .into_iter()
             .map(|uid| self.spread(uid))
             .collect::<Result<Vec<_>, _>>()?;
+        resolve_page_layout(&mut spreads, &mut master_spreads);
         let stories = self
             .uid_list(doc, chunk::DOC_STORIES)?
             .into_iter()
@@ -995,12 +1038,61 @@ impl<'a> Reader<'a> {
             }
             None => (None, Matrix::IDENTITY),
         };
+        let margins = match self.chunk(uid, chunk::PAGE_MARGINS)? {
+            Some(d) if d.len() >= 34 => {
+                let mut c = Cursor::new(&d);
+                Some(Margins {
+                    left: c.f64()?,
+                    top: c.f64()?,
+                    right: c.f64()?,
+                    bottom: c.f64()?,
+                    own: c.u16()? == 1,
+                })
+            }
+            _ => None,
+        };
+        let columns = match self.chunk(uid, chunk::PAGE_COLUMNS)? {
+            Some(d) => {
+                let mut c = Cursor::new(&d);
+                let n = c.u32()? as usize;
+                if n > d.len() / 8 {
+                    return Err(Error::Corrupt(format!("page {uid}: {n} column positions")));
+                }
+                let positions = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
+                Some(Columns {
+                    positions,
+                    gutter: c.f64()?,
+                    own: c.u16()? == 1,
+                })
+            }
+            None => None,
+        };
+        let grid = match self.chunk(uid, chunk::PAGE_GRID)? {
+            Some(d) => {
+                let mut c = Cursor::new(&d);
+                let font = c.u32()?;
+                c.u8()?;
+                let font_style = c.string()?;
+                let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?, c.f64()?];
+                let codes = [c.u32()?, c.u32()?, c.u32()?, c.u32()?];
+                Some(GridData {
+                    font,
+                    font_style,
+                    numbers,
+                    codes,
+                })
+            }
+            None => None,
+        };
         Ok(Page {
             uid,
             bounds,
             transform,
             master,
             master_transform,
+            margins,
+            columns,
+            grid,
         })
     }
 
@@ -1494,6 +1586,74 @@ impl<'a> Reader<'a> {
 }
 
 /// Find the first in-object string at or after `from`.
+/// A master page's applied master and its own margins and columns.
+type MasterPageLayout = (Option<u32>, Option<Margins>, Option<Columns>);
+
+/// Replace the margins and columns that pages take from their master page
+/// (flag 0) with the values in effect on that master page. A page's master
+/// page is the page at the same position, counted from the left, in its
+/// applied master spread, or that spread's only page. See
+/// `docs/format/objects.md`.
+fn resolve_page_layout(spreads: &mut [Spread], masters: &mut [Spread]) {
+    fn left_to_right(s: &Spread) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..s.pages.len()).collect();
+        order.sort_by(|&a, &b| s.pages[a].transform.0[4].total_cmp(&s.pages[b].transform.0[4]));
+        order
+    }
+    fn master_page(
+        raw: &HashMap<u32, Vec<MasterPageLayout>>,
+        master: Option<u32>,
+        index: usize,
+    ) -> Option<(usize, &MasterPageLayout)> {
+        let pages = raw.get(&master?)?;
+        let i = if pages.len() == 1 { 0 } else { index };
+        pages.get(i).map(|p| (i, p))
+    }
+    fn effective<T: Clone>(
+        raw: &HashMap<u32, Vec<MasterPageLayout>>,
+        get: fn(&MasterPageLayout) -> (Option<&T>, bool),
+        page: &MasterPageLayout,
+        index: usize,
+        depth: usize,
+    ) -> Option<T> {
+        let (own, is_own) = get(page);
+        if is_own || depth > 8 {
+            return own.cloned();
+        }
+        match master_page(raw, page.0, index) {
+            Some((i, m)) => effective(raw, get, m, i, depth + 1).or_else(|| own.cloned()),
+            None => own.cloned(),
+        }
+    }
+    let raw: HashMap<u32, Vec<MasterPageLayout>> = masters
+        .iter()
+        .map(|s| {
+            let pages = left_to_right(s)
+                .into_iter()
+                .map(|i| {
+                    let p = &s.pages[i];
+                    (p.master, p.margins.clone(), p.columns.clone())
+                })
+                .collect();
+            (s.uid, pages)
+        })
+        .collect();
+    fn margins(p: &MasterPageLayout) -> (Option<&Margins>, bool) {
+        (p.1.as_ref(), p.1.as_ref().is_some_and(|m| m.own))
+    }
+    fn columns(p: &MasterPageLayout) -> (Option<&Columns>, bool) {
+        (p.2.as_ref(), p.2.as_ref().is_some_and(|c| c.own))
+    }
+    for s in spreads.iter_mut().chain(masters.iter_mut()) {
+        for (index, i) in left_to_right(s).into_iter().enumerate() {
+            let p = &mut s.pages[i];
+            let layout = (p.master, p.margins.clone(), p.columns.clone());
+            p.margins = effective(&raw, margins, &layout, index, 0);
+            p.columns = effective(&raw, columns, &layout, index, 0);
+        }
+    }
+}
+
 fn find_string(data: &[u8], from: usize) -> Result<String, Error> {
     for i in from..data.len().saturating_sub(4) {
         if data[i] == 2 && data[i + 1] == 0 {
@@ -1591,6 +1751,67 @@ fn classify(paths: &[Path]) -> Shape {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pages_take_margins_from_master_page_at_same_position() {
+        let margins = |top, own| Margins {
+            left: 0.0,
+            top,
+            right: 0.0,
+            bottom: 0.0,
+            own,
+        };
+        let page = |uid, tx, master, m| Page {
+            uid,
+            bounds: [0.0; 4],
+            transform: Matrix([1.0, 0.0, 0.0, 1.0, tx, 0.0]),
+            master,
+            master_transform: Matrix::IDENTITY,
+            margins: Some(m),
+            columns: None,
+            grid: None,
+        };
+        let spread = |uid, pages| Spread {
+            uid,
+            master_name: None,
+            transform: Matrix::IDENTITY,
+            binding_location: 0,
+            pages,
+            items: Vec::new(),
+            guides: Vec::new(),
+        };
+        // Master B (pages listed right to left) is based on master A.
+        let mut masters = vec![
+            spread(
+                10,
+                vec![
+                    page(1, -100.0, None, margins(10.0, true)),
+                    page(2, 0.0, None, margins(20.0, true)),
+                ],
+            ),
+            spread(
+                11,
+                vec![
+                    page(3, 0.0, Some(10), margins(0.0, false)),
+                    page(4, -100.0, Some(10), margins(30.0, true)),
+                ],
+            ),
+        ];
+        let mut spreads = vec![spread(
+            12,
+            vec![
+                page(5, -100.0, Some(11), margins(0.0, false)),
+                page(6, 0.0, Some(11), margins(0.0, false)),
+            ],
+        )];
+        resolve_page_layout(&mut spreads, &mut masters);
+        let tops: Vec<f64> = spreads[0]
+            .pages
+            .iter()
+            .map(|p| p.margins.as_ref().unwrap().top)
+            .collect();
+        assert_eq!(tops, [30.0, 20.0]);
+    }
 
     #[test]
     fn splits_runs_at_style_boundaries() {

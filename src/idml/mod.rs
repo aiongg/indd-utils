@@ -2187,6 +2187,53 @@ impl Writer<'_> {
         x.end();
     }
 
+    /// `MarginPreference` and `GridDataInformation` of a page. Margins
+    /// and columns are those in effect (see `resolve_page_layout`). The
+    /// grid values that are the same in every sample are written only
+    /// when the stored value is that one. See `docs/format/objects.md`.
+    fn page_layout(&self, x: &mut Xml, p: &Page) {
+        if let (Some(m), Some(c)) = (&p.margins, &p.columns) {
+            x.empty(
+                "MarginPreference",
+                &[
+                    ("ColumnCount", (c.positions.len() / 2).to_string()),
+                    ("ColumnGutter", num(c.gutter)),
+                    ("Top", num(m.top)),
+                    ("Bottom", num(m.bottom)),
+                    ("Left", num(m.left)),
+                    ("Right", num(m.right)),
+                    // Every exported IDML has this (idml-values.md).
+                    ("ColumnDirection", "Horizontal".into()),
+                    ("ColumnsPositions", nums(&c.positions)),
+                ],
+            );
+        }
+        let Some(g) = &p.grid else { return };
+        x.start("GridDataInformation")
+            .attr("FontStyle", &g.font_style);
+        let [size, character_aki, line_aki, h_scale, v_scale] = g.numbers;
+        for (name, value, observed, scale) in [
+            ("PointSize", size, 12.0, 1.0),
+            ("CharacterAki", character_aki, 0.0, 1.0),
+            ("LineAki", line_aki, 9.0, 1.0),
+            ("HorizontalScale", h_scale, 1.0, 100.0),
+            ("VerticalScale", v_scale, 1.0, 100.0),
+        ] {
+            if value == observed {
+                x.attr(name, num(value * scale));
+            }
+        }
+        if g.codes == [3, 0, 3, 1] {
+            x.attr("LineAlignment", "LeftOrTopLineJustify")
+                .attr("GridAlignment", "AlignEmCenter")
+                .attr("CharacterAlignment", "AlignEmCenter");
+        }
+        if let Some(f) = self.doc.fonts.get(&g.font) {
+            Self::properties(x, &[("AppliedFont", "string", f.name.clone().into())]);
+        }
+        x.end();
+    }
+
     /// `page_index` counts the document pages written so far; `names`
     /// gives each document page its name (see `page_names`).
     fn spread(&self, s: &Spread, master: bool, page_index: &mut usize, names: &[String]) -> String {
@@ -2238,6 +2285,7 @@ impl Writer<'_> {
                     Self::guide(&mut x, g, origin);
                 }
             }
+            self.page_layout(&mut x, p);
             x.end();
         }
         for item in &s.items {
@@ -2537,6 +2585,9 @@ mod tests {
             transform: Matrix::IDENTITY,
             master: None,
             master_transform: Matrix::IDENTITY,
+            margins: None,
+            columns: None,
+            grid: None,
         };
         let section = |uid, page, continue_numbering, start| Section {
             uid,
@@ -2597,6 +2648,9 @@ mod tests {
             transform: Matrix([1.0, 0.0, 0.0, 1.0, tx, -396.0]),
             master: None,
             master_transform: Matrix::IDENTITY,
+            margins: None,
+            columns: None,
+            grid: None,
         };
         let origin = spread_origin(&[page(1, -612.0), page(2, 0.0)]);
         assert_eq!(origin, (-612.0, -396.0));

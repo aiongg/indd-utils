@@ -96,6 +96,13 @@ All 240 corpus IDML files list the same 18 `StrokeStyle` elements in
 writes the same list, so every `StrokeType` it writes refers to an
 element in the package.
 
+## Column direction of pages
+
+All 832 `MarginPreference` elements in the 240 corpus IDML files have
+`ColumnDirection="Horizontal"`. No INDD field for it is identified, so
+the converter writes that value on every `MarginPreference`
+(`objects.md`).
+
 ## Font platform name
 
 `PlatformName` is `$ID/` in all 4,464 `Font` elements of the corpus IDML
