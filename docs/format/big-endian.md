@@ -69,7 +69,7 @@ not read. The byte after that is 0 in all but 13 strings of each file.
 | Page (0x50F) transform and bounds | Chunks 0x5CC and 0x5DD | Chunks 0x151 (matrix, 48 bytes) and 0x154 (four f64, 32 bytes, same order as 0x5DD); no 0x5CC or 0x5DD | Reads 0x151 and 0x154 when 0x5CC and 0x5DD are missing |
 | Page chunk 0x140F | u32, u16, matrix | u32, u16 only (6 bytes) | No matrix: `MasterPageTransform` is the identity |
 | Font record (`fonts.md`) | PostScript name as u16 *n*, *n* bytes | PostScript name as u8 and an in-object string; 3.0 also has no version field | Tries the current layout, then the 4.0 and 3.0 layouts, which must end exactly at the chunk's end |
-| XML tag name (chunk 0xBF2F) | u32 length, segments | An in-object string with flag 2, then four zero bytes | Reads the string when the length and segments do not parse |
+| XML tag name (chunk 0xBF2F) | u32 length, segments | A flag byte (2; 0 in two tags) and an in-object string, then four zero bytes. Survey of the first three tags of every distinct file: this layout in all 2.0–5.0 files (129 tags, either byte order), the u32 length in all 6.0–21.x files (1,401 tags) | Reads the flag and string when the length and segments do not parse |
 | XML node part 0xBF0D (`xml.md`) | 22 bytes between the content UID and the parent key | 20 bytes (4.0), 4 bytes (3.0) | Uses the size for which the child count ends the part |
 | Story strands (chunk 0x223) | Every strand has object data | 3.0: the last strand of each story has no object data | Skips strands without data |
 | Ruler guide (chunk 0x3308, `objects.md`) | 52 bytes | 40 bytes, the first 40 bytes of the 52-byte layout | Reads it without the guide type; `GuideType` is left out |

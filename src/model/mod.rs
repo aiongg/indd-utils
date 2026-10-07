@@ -1020,11 +1020,15 @@ impl<'a> Reader<'a> {
                         if let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? {
                             let mut c = Cursor::new(&d);
                             let n = c.u32()? as usize;
-                            // Files from InDesign 3.0 and 4.0 hold an in-object
-                            // string instead.
+                            // Files from InDesign 2.0 to 4.0 hold a flag byte and
+                            // an in-object string instead.
                             let name = match c.segments(n) {
                                 Ok(name) => name,
-                                Err(_) => Cursor::new(&d).string()?,
+                                Err(_) => {
+                                    let mut c = Cursor::new(&d);
+                                    c.flag()?;
+                                    c.string()?
+                                }
                             };
                             let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
                                 Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
@@ -1118,7 +1122,7 @@ impl<'a> Reader<'a> {
             destinations,
             bookmarks,
             bookmark_order: match self.chunk(doc, hyperlink::chunk::DOCUMENT_LISTS)? {
-                Some(d) => hyperlink::document_bookmarks(&d)?,
+                Some(d) => hyperlink::document_bookmarks(&d, version.major)?,
                 None => Vec::new(),
             },
             cross_reference_formats,
@@ -1206,7 +1210,17 @@ impl<'a> Reader<'a> {
             let font = c.u32()?;
             let builtin = c.flag()? == 1;
             let style = c.string()?;
-            c.u8()?;
+            // 0, or 1 and four bytes of unknown meaning (objects.md).
+            match c.u8()? {
+                0 => {}
+                1 => c.skip(4)?,
+                other => {
+                    return Err(Error::Corrupt(format!(
+                        "bullet font style followed by {other} at {}",
+                        c.pos() - 1
+                    )));
+                }
+            }
             out.push(Bullet {
                 kind,
                 value,
@@ -2117,7 +2131,15 @@ impl<'a> Reader<'a> {
                     r.source
                 ));
             }
-            inside && r.len > 0
+            // The IDML schema allows no page item inside a text source.
+            let anchored = anchors.range(r.start..r.start + r.len).next().is_some();
+            if inside && anchored {
+                self.warn(format!(
+                    "story {uid}: hyperlink source {} holds an anchored object; left out",
+                    r.source
+                ));
+            }
+            inside && r.len > 0 && !anchored
         });
         Ok(Story {
             uid,

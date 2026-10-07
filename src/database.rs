@@ -93,7 +93,15 @@ impl<'a> Database<'a> {
             classes: Vec::new(),
             unclassed: Vec::new(),
         };
-        db.read_logical_table(db.u32(master + MASTER_LOGICAL_DIR)?)?;
+        let directory = db.u32(master + MASTER_LOGICAL_DIR)?;
+        let db_pages = container.master().db_pages;
+        if directory >= db_pages {
+            return Err(Error::NoDatabase {
+                db_pages,
+                directory,
+            });
+        }
+        db.read_logical_table(directory)?;
         let mut trees: [Vec<Entry>; 3] = Default::default();
         for (i, tree) in trees.iter_mut().enumerate() {
             let root = db.u32(master + MASTER_TREE_ROOTS + 4 * i)?;

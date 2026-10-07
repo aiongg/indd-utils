@@ -64,6 +64,15 @@ other members.
 Other fields at 0x100–0x3A8 and 0xB78–0xBAC are not yet identified. 0xBAC
 holds the document's `xmp.did:` identifier as a NUL-terminated string.
 
+The logical page directory lies within the database pages (its page
+number is below the database page count at 0x118, `container.md`) in
+1,503 of the 1,504 distinct corpus files with the signature. The
+exception is a 12 KB InDesign 3.0 file from a metadata tool's test suite:
+it holds the two master pages, one more page and the XMP packet, its
+master page counts 2 database pages and names page 6 as the directory.
+It has no object database; the converter reports such files as having
+none.
+
 ## Logical pages
 
 Tree and slotted pages are addressed by logical page number, so they can

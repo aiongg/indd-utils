@@ -33,6 +33,12 @@ pub enum Error {
     Corrupt(String),
     /// A valid file using a feature this crate does not read yet.
     Unsupported(&'static str),
+    /// The file has the master pages but not the object database they
+    /// point to (a file stripped to its metadata).
+    NoDatabase {
+        db_pages: u32,
+        directory: u32,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -52,6 +58,14 @@ impl std::fmt::Display for Error {
             }
             Error::Corrupt(msg) => write!(f, "corrupt database: {msg}"),
             Error::Unsupported(what) => write!(f, "not supported yet: {what}"),
+            Error::NoDatabase {
+                db_pages,
+                directory,
+            } => write!(
+                f,
+                "no object database: the page directory is page {directory}, \
+                 but the file has only {db_pages} database pages"
+            ),
         }
     }
 }
@@ -74,7 +88,7 @@ impl From<std::io::Error> for Error {
 /// Read only the header of the file at `path`.
 pub fn read_header(path: impl AsRef<std::path::Path>) -> Result<Header, Error> {
     use std::io::Read;
-    let mut buf = [0u8; header::HEADER_LEN];
+    let mut buf = [0u8; header::PROBE_LEN];
     let mut f = std::fs::File::open(path)?;
     let mut got = 0;
     while got < buf.len() {
@@ -92,6 +106,7 @@ pub fn read_header(path: impl AsRef<std::path::Path>) -> Result<Header, Error> {
 pub fn convert(indd: &[u8], name: &str, out: impl std::io::Write) -> Result<Vec<String>, Error> {
     let container = Container::parse(indd)?;
     let _order = object::use_byte_order(container.header.byte_order);
+    let _tag = object::use_string_tag(object::string_tag_for(container.header.version));
     let db = container.database()?;
     let doc = model::Reader::new(&db).document(container.header.version)?;
     idml::write(&doc, name, out)?;

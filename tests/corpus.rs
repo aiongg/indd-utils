@@ -1,5 +1,12 @@
 //! Tests over the local, git-ignored `corpus/` directory. Each test passes
 //! without checking anything when the corpus is absent.
+//!
+//! `corpus/exclude.txt` (local, optional) lists paths under `corpus/` to
+//! leave out, one per line, for example a folder still being downloaded.
+//!
+//! Two kinds of file cannot be converted, and the tests accept them: the
+//! InDesign 1.x layout ([`indd::Error::Unsupported`], `header.md`) and files
+//! without an object database ([`indd::Error::NoDatabase`], `database.md`).
 
 use std::path::{Path, PathBuf};
 
@@ -8,15 +15,43 @@ fn corpus_root() -> Option<PathBuf> {
     root.is_dir().then_some(root)
 }
 
-fn indd_files(dir: &Path, out: &mut Vec<PathBuf>) {
+fn excluded(root: &Path) -> Vec<PathBuf> {
+    std::fs::read_to_string(root.join("exclude.txt"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| root.join(l))
+        .collect()
+}
+
+/// The INDD and INDT files under `root`, without the excluded paths.
+fn corpus_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    indd_files(root, &excluded(root), &mut files);
+    files
+}
+
+/// A file this crate cannot read by design (see the module comment).
+fn known_unreadable(e: &indd::Error) -> bool {
+    matches!(
+        e,
+        indd::Error::Unsupported(_) | indd::Error::NoDatabase { .. }
+    )
+}
+
+fn indd_files(dir: &Path, skip: &[PathBuf], out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
+        if skip.iter().any(|s| path.starts_with(s)) {
+            continue;
+        }
         if path.is_dir() {
             if path.file_name().is_some_and(|n| n != ".git") {
-                indd_files(&path, out);
+                indd_files(&path, skip, out);
             }
         } else if path
             .extension()
@@ -34,8 +69,7 @@ fn every_corpus_header_parses() {
         eprintln!("corpus/ not present; skipping");
         return;
     };
-    let mut files = Vec::new();
-    indd_files(&root, &mut files);
+    let files = corpus_files(&root);
     assert!(!files.is_empty(), "corpus/ contains no INDD files");
 
     let failures: Vec<String> = files
@@ -43,6 +77,7 @@ fn every_corpus_header_parses() {
         .filter_map(|p| {
             indd::read_header(p)
                 .err()
+                .filter(|e| !known_unreadable(e))
                 .map(|e| format!("{}: {e}", p.display()))
         })
         .collect();
@@ -61,8 +96,7 @@ fn every_corpus_container_has_xmp() {
         eprintln!("corpus/ not present; skipping");
         return;
     };
-    let mut files = Vec::new();
-    indd_files(&root, &mut files);
+    let files = corpus_files(&root);
 
     let failures: Vec<String> = files
         .iter()
@@ -72,6 +106,7 @@ fn every_corpus_container_has_xmp() {
             match result {
                 Ok(Some(_)) => None,
                 Ok(None) => Some(format!("{}: no XMP", p.display())),
+                Err(e) if known_unreadable(&e) => None,
                 Err(e) => Some(format!("{}: {e}", p.display())),
             }
         })
@@ -91,15 +126,14 @@ fn every_corpus_object_reads() {
         eprintln!("corpus/ not present; skipping");
         return;
     };
-    let mut files = Vec::new();
-    indd_files(&root, &mut files);
+    let files = corpus_files(&root);
 
     let mut checked = 0;
     let mut failures = Vec::new();
     for p in &files {
         let bytes = std::fs::read(p).unwrap();
-        let c = indd::Container::parse(&bytes).unwrap();
-        let result = c.database().and_then(|db| {
+        let result = indd::Container::parse(&bytes).and_then(|c| {
+            let db = c.database()?;
             for uid in db.uids() {
                 db.object(uid)?;
             }
@@ -107,6 +141,7 @@ fn every_corpus_object_reads() {
         });
         match result {
             Ok(()) => checked += 1,
+            Err(e) if known_unreadable(&e) => {}
             Err(e) => failures.push(format!("{}: {e}", p.display())),
         }
     }
@@ -125,13 +160,13 @@ fn every_corpus_file_converts() {
         eprintln!("corpus/ not present; skipping");
         return;
     };
-    let mut files = Vec::new();
-    indd_files(&root, &mut files);
+    let files = corpus_files(&root);
     let mut failures = Vec::new();
     for p in &files {
         let bytes = std::fs::read(p).unwrap();
-        if let Err(e) = indd::convert(&bytes, "test.indd", std::io::sink()) {
-            failures.push(format!("{}: {e}", p.display()));
+        match indd::convert(&bytes, "test.indd", std::io::sink()) {
+            Err(e) if !known_unreadable(&e) => failures.push(format!("{}: {e}", p.display())),
+            _ => {}
         }
     }
     assert!(

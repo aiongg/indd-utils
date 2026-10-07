@@ -129,17 +129,21 @@ impl<'a> Container<'a> {
 }
 
 /// An XMP object is a u32 packet length followed by the packet. Some files
-/// store the length in the other byte order, so both are accepted.
+/// store the length in the other byte order, so both are accepted. The
+/// packet can be shorter than the object: the rest is left over from an
+/// earlier, longer packet (`docs/format/container.md`).
 fn xmp_packet(data: &[u8], order: ByteOrder) -> Option<&[u8]> {
     if data.len() < 4 + XMP_START.len() {
         return None;
     }
-    let expected = (data.len() - 4) as u32;
-    let len = order.read_u32(data, 0);
-    if len != expected && len.swap_bytes() != expected {
-        return None;
-    }
-    let packet = &data[4..];
+    let room = data.len() - 4;
+    let len = order.read_u32(data, 0) as usize;
+    let swapped = order.read_u32(data, 0).swap_bytes() as usize;
+    let len = [len, swapped]
+        .into_iter()
+        .find(|&n| n == room)
+        .or_else(|| [len, swapped].into_iter().find(|&n| n <= room))?;
+    let packet = &data[4..4 + len];
     packet.starts_with(XMP_START).then_some(packet)
 }
 
@@ -249,6 +253,17 @@ mod tests {
         let f = file([1, 2], &[contig(1, b"other"), xmp_object(packet)]);
         let c = Container::parse(&f).unwrap();
         assert_eq!(c.contig_objects().count(), 2);
+        assert_eq!(c.xmp().unwrap(), Some(&packet[..]));
+    }
+
+    #[test]
+    fn xmp_packet_ignores_leftover_bytes() {
+        let packet = b"<?xpacket begin=\"\" id=\"x\"?><x/>";
+        let mut data = (packet.len() as u32).to_le_bytes().to_vec();
+        data.extend_from_slice(packet);
+        data.extend_from_slice(b"stale tail of an older packet");
+        let f = file([1, 2], &[contig(7, &data)]);
+        let c = Container::parse(&f).unwrap();
         assert_eq!(c.xmp().unwrap(), Some(&packet[..]));
     }
 

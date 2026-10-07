@@ -12,6 +12,19 @@ Offsets are from the start of the file.
 
 Major versions seen: 3, 7–9, 11–13, 15–21.
 
+## InDesign 1.0 and 1.5 files
+
+Eight distinct files whose header (below) says 1.0 or 1.5 do not start
+with the signature. The ASCII `DOCUMENT` is at 0x5C instead, and the
+fields after it follow the layout above shifted by 0x4C: byte order 1 at
+0x64, `70 0F 00 00` at 0x65, major version at 0x69 and minor at 0x6D
+(1.0 or 1.5, matching the version in each file name).
+The 76 bytes before 0x4C hold small u32 values and are not identified.
+The files are not made of 4096-byte pages (sizes 41,984 to 123,904
+bytes, multiples of 1,024 but not of 4,096), so the container below does
+not apply. The converter reports them as not supported. Files from 2.0
+on start with the signature.
+
 ## Other observations
 
 These are observations, not yet explanations. The page layout, master page

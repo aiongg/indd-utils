@@ -14,6 +14,12 @@ const KIND_OFFSET: usize = 0x10;
 const BYTE_ORDER_OFFSET: usize = 0x18;
 const MAJOR_OFFSET: usize = 0x1D;
 const MINOR_OFFSET: usize = 0x21;
+/// Where files from InDesign 1.0 and 1.5 have the `DOCUMENT` tag. They do
+/// not start with the signature (`docs/format/header.md`).
+const LEGACY_KIND_OFFSET: usize = 0x5C;
+
+/// Number of bytes [`Header::parse`] needs to recognise every layout.
+pub const PROBE_LEN: usize = LEGACY_KIND_OFFSET + 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ByteOrder {
@@ -61,6 +67,9 @@ impl Header {
             });
         }
         if bytes[..16] != SIGNATURE {
+            if bytes.get(LEGACY_KIND_OFFSET..LEGACY_KIND_OFFSET + 8) == Some(b"DOCUMENT") {
+                return Err(Error::Unsupported("InDesign 1.x file layout"));
+            }
             return Err(Error::NotIndd);
         }
         let byte_order = match bytes[BYTE_ORDER_OFFSET] {
@@ -119,6 +128,13 @@ mod tests {
         let mut b = header_bytes(1, [0; 4], [0; 4]);
         b[0] = 0;
         assert!(matches!(Header::parse(&b), Err(Error::NotIndd)));
+    }
+
+    #[test]
+    fn reports_version_1_layout() {
+        let mut b = vec![0u8; 0x80];
+        b[LEGACY_KIND_OFFSET..LEGACY_KIND_OFFSET + 8].copy_from_slice(b"DOCUMENT");
+        assert!(matches!(Header::parse(&b), Err(Error::Unsupported(_))));
     }
 
     #[test]

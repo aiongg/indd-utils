@@ -62,6 +62,14 @@ GUID.
 - The XMP object's data is a u32 packet length (in the file's byte order),
   equal to the data length minus 4, followed by the packet starting with
   `<?xpacket begin=`.
+- In 2 of 1,504 distinct files with the signature (both InDesign 9.2),
+  the packet length is smaller than the data length
+  minus 4 (164,680 of 171,636 and 160,539 of 554,659 bytes). The packet
+  ends with `<?xpacket end="w"?>` exactly at the stated length; the bytes
+  after it are the end of another, longer XMP packet (a second
+  `</x:xmpmeta>` and `<?xpacket end="w"?>`, which end the data). In one of
+  them the header says big-endian and the length is little-endian. The
+  converter takes the stated length. All 1,504 files have an XMP object.
 - In 13 files, non-zero bytes follow the last object before the end of the
   file. In the one examined, they are space characters, which matches the
   padding at the end of an XMP packet from an earlier, longer save.

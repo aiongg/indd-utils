@@ -11,6 +11,12 @@ pub struct Xml {
     inline: bool,
 }
 
+/// Whether XML 1.0 allows `c` (control characters aside): not U+FFFE or
+/// U+FFFF. Rust `char`s are never surrogates.
+fn xml_char(c: char) -> bool {
+    !matches!(c, '\u{FFFE}' | '\u{FFFF}')
+}
+
 pub fn escape_attr(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -22,7 +28,7 @@ pub fn escape_attr(s: &str) -> String {
             '\t' => out.push_str("&#x9;"),
             '\n' => out.push_str("&#xa;"),
             '\r' => out.push_str("&#xd;"),
-            c if (c as u32) < 0x20 => {}
+            c if (c as u32) < 0x20 || !xml_char(c) => {}
             c => out.push(c),
         }
     }
@@ -103,6 +109,7 @@ impl Xml {
                 c if (c as u32) < 0x20 => {
                     let _ = write!(self.out, "<?ACE {:x}?>", c as u32);
                 }
+                c if !xml_char(c) => {}
                 c => self.out.push(c),
             }
         }
@@ -179,5 +186,13 @@ mod tests {
         let mut x = Xml::new();
         x.start("Content").text("a\u{18}b").end();
         assert!(x.finish().ends_with("<Content>a<?ACE 18?>b</Content>"));
+    }
+
+    #[test]
+    fn leaves_out_noncharacters_xml_forbids() {
+        let mut x = Xml::new();
+        x.start("a").attr("k", "x\u{FFFE}\u{FFFD}\u{FFFF}y");
+        x.text("p\u{FFFF}q").end();
+        assert!(x.finish().ends_with("<a k=\"x\u{FFFD}y\">pq</a>"));
     }
 }

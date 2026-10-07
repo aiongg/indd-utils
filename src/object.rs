@@ -5,10 +5,11 @@
 
 use std::cell::Cell;
 
-use crate::{ByteOrder, Error};
+use crate::{ByteOrder, Error, Version};
 
 thread_local! {
     static BIG_ENDIAN: Cell<bool> = const { Cell::new(false) };
+    static STRING_TAG: Cell<u8> = const { Cell::new(2) };
 }
 
 /// Object data is in the file's byte order (`docs/format/objects.md`).
@@ -30,6 +31,27 @@ impl Drop for ByteOrderGuard {
 /// Whether object data on this thread is big-endian.
 pub fn big_endian() -> bool {
     BIG_ENDIAN.get()
+}
+
+/// The first byte of an in-object string: 1 in files from InDesign 2.0, 2
+/// in later files (`docs/format/objects.md`).
+pub fn string_tag_for(version: Version) -> u8 {
+    if version.major <= 2 { 1 } else { 2 }
+}
+
+/// Everything that decodes object data on this thread expects in-object
+/// strings to start with `tag`, until the returned guard is dropped.
+pub fn use_string_tag(tag: u8) -> StringTagGuard {
+    StringTagGuard(STRING_TAG.replace(tag))
+}
+
+/// Restores the previous string tag when dropped.
+pub struct StringTagGuard(u8);
+
+impl Drop for StringTagGuard {
+    fn drop(&mut self) {
+        STRING_TAG.set(self.0);
+    }
 }
 
 macro_rules! decoders {
@@ -235,7 +257,8 @@ impl<'a> Cursor<'a> {
 
     /// The flag byte before a string (see [`Cursor::string`]).
     pub fn flag(&mut self) -> Result<u8, Error> {
-        if big_endian() && self.data.get(self.pos) == Some(&2) && self.remaining() >= 2 {
+        let tag = STRING_TAG.get();
+        if big_endian() && self.data.get(self.pos) == Some(&tag) && self.remaining() >= 2 {
             self.tag_read = true;
             self.pos += 2;
             return Ok(self.data[self.pos - 1]);
@@ -243,8 +266,9 @@ impl<'a> Cursor<'a> {
         self.u8()
     }
 
-    /// A string stored inside object data: u8 2, a u8 whose meaning is
-    /// unknown (usually 0), u16 length in UTF-16 code units, then segments.
+    /// A string stored inside object data: u8 2 (1 in files from InDesign
+    /// 2.0, see [`use_string_tag`]), a u8 whose meaning is unknown (usually
+    /// 0), u16 length in UTF-16 code units, then segments.
     ///
     /// The byte before the 2 is often a flag (1 = the string is a built-in
     /// key), and the two bytes form a u16 with the 2 in the high byte. In
@@ -253,10 +277,11 @@ impl<'a> Cursor<'a> {
     /// instead, the 2 is that byte (`docs/format/big-endian.md`).
     pub fn string(&mut self) -> Result<String, Error> {
         let start = self.pos;
+        let expected = STRING_TAG.get();
         if big_endian() {
             if !std::mem::take(&mut self.tag_read) {
                 let before = start.checked_sub(1).map(|i| self.data[i]);
-                if before != Some(2) && self.u8()? != 2 {
+                if before != Some(expected) && self.u8()? != expected {
                     return Err(Error::Corrupt(format!("no string tag at {start}")));
                 }
                 // The flag.
@@ -264,9 +289,9 @@ impl<'a> Cursor<'a> {
             }
         } else {
             let tag = self.u8()?;
-            if tag != 2 {
+            if tag != expected {
                 return Err(Error::Corrupt(format!(
-                    "string tag {tag} at {start}, expected 2"
+                    "string tag {tag} at {start}, expected {expected}"
                 )));
             }
         }
@@ -320,6 +345,15 @@ mod tests {
             2, 0, 7, 0, 7, 0x40, b'R', b'e', b'g', b'u', b'l', b'a', b'r',
         ];
         assert_eq!(Cursor::new(&data).string().unwrap(), "Regular");
+    }
+
+    #[test]
+    fn decodes_version_2_string() {
+        let _tag = use_string_tag(string_tag_for(Version { major: 2, minor: 0 }));
+        let data = [1, 0, 5, 0, 5, 0x40, b'R', b'o', b'm', b'a', b'n'];
+        assert_eq!(Cursor::new(&data).string().unwrap(), "Roman");
+        let data = [2, 0, 5, 0, 5, 0x40, b'R', b'o', b'm', b'a', b'n'];
+        assert!(Cursor::new(&data).string().is_err());
     }
 
     #[test]

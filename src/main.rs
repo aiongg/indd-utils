@@ -114,6 +114,7 @@ fn dump(path: &str, uids: &[u32]) -> CliResult {
     let bytes = std::fs::read(path)?;
     let c = indd::Container::parse(&bytes)?;
     let _order = indd::object::use_byte_order(c.header.byte_order);
+    let _tag = indd::object::use_string_tag(indd::object::string_tag_for(c.header.version));
     let db = c.database()?;
     let mut out = std::io::stdout().lock();
     for &uid in uids {

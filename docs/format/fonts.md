@@ -154,6 +154,10 @@ UTF-16 unit or a surrogate pair. `CustomCharacters` is every character
 from first to last of each range, in order. IDML never writes
 `CustomCharacters` for the `$ID/Kanji` entry (240 of 240 files), whose
 ranges cover most of Unicode; the converter leaves it out for that entry.
+In one file without IDML the `$ID/kCompFontString_Base` entry covers all
+of Unicode (U+0000–U+D7FF and U+E000–U+10FFFF); XML 1.0 does not allow
+U+FFFE and U+FFFF, so the converter leaves those two characters out of
+every attribute value and text.
 The four numbers have one value in every sample, so only the 0 is told
 apart (`BaselineShift`); the converter writes the four attributes only
 when the numbers are (100, 0, 100, 100). Which of the four u16 is

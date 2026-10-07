@@ -244,10 +244,18 @@ impl Bookmark {
     }
 }
 
-/// Document chunk 0x13501: u32, u16, then UID lists of text sources,
-/// hyperlinks and bookmarks.
-pub fn document_bookmarks(data: &[u8]) -> Result<Vec<u32>, Error> {
+/// The bookmark list in document chunk 0x13501. From InDesign 6.0: u32,
+/// u16, then UID lists of text sources, hyperlinks and bookmarks. In 3.0
+/// and 4.0 files: UID lists of text sources, destinations, hyperlinks and
+/// bookmarks (`docs/format/hyperlinks.md`).
+pub fn document_bookmarks(data: &[u8], major: u32) -> Result<Vec<u32>, Error> {
     let mut c = Cursor::new(data);
+    if major <= 4 {
+        for _ in 0..3 {
+            c.u32_list()?;
+        }
+        return c.u32_list();
+    }
     c.skip(6)?;
     c.u32_list()?;
     c.u32_list()?;

@@ -148,6 +148,18 @@ sources, the hyperlinks and the bookmarks, then a fourth list. The
 converter writes the top-level bookmarks in the order of the bookmark
 list.
 
+Files from InDesign 3.0 and 4.0 lay out chunk 0x13501 differently: it
+starts with the UID lists, and there are four before anything else: text
+sources, page destinations, hyperlinks, bookmarks. Evidence: of the 58
+distinct 3.0 and 4.0 files, three have the chunk, and the classes of the
+listed UIDs show the order. In a 3.0 file (little-endian) the first list
+holds one text source (class 0x13502), the third one hyperlink (0x13501),
+and the four lists end the chunk. In two 4.0 files (big-endian) the
+second list holds 8 page destinations (0x13505) and the fourth 8
+bookmarks (0x1354C); then come three empty lists, a count of 8 and eight
+strings, not identified. The 6.0 layout above reads in all 1,203
+distinct 6.0–21.x files that have the chunk; no 5.0 file has it.
+
 ## Order in designmap
 
 The schema puts page destinations, URL destinations and hyperlinks after
@@ -161,3 +173,8 @@ The pairs have no text destinations (`HyperlinkTextDestination`),
 cross-reference sources, page item sources or QR code hyperlinks with an
 INDD object of the classes above. One pair has a `HyperlinkQRCode`; it
 is not converted.
+
+A text source whose range holds an anchored object is left out with its
+hyperlink. InDesign writes the anchored `Rectangle` inside the
+`HyperlinkTextSource` (one source in each of two corpus pairs), but the
+IDML schema allows no page item there.

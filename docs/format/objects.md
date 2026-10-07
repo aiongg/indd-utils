@@ -47,6 +47,12 @@ are in `big-endian.md`.
   `05 40 "WOMEN" 01 80 19 20 02 40 "S\r"`.
 - **In-object strings:** u8 2, u8 (usually 0, meaning unknown), u16 length
   in code units, then segments. 4,135 occurrences in three sample files.
+  In files from InDesign 2.0 the first byte is 1: in the four distinct 2.0
+  files, the pattern tag, 0, length *n*, 0, segment header 0x4000 + *n*
+  occurs 154 to 353 times per file with tag 1 and never with tag 2. In
+  the 83 distinct 3.0, 4.0 and 5.0 little-endian files the same pattern
+  has tag 2 (76 to 4,296 times per file); tag 1 matches once in each of
+  two of them.
 
 ## Document (class 0xE01, always UID 1)
 
@@ -1016,8 +1022,8 @@ offered for lists in chunk 0x1A488: u16 1, u32 count, then for each
 bullet u32 character type (0 `UnicodeOnly`, 1 `UnicodeWithFont`, 2
 `GlyphWithFont`, as in `attributes.md`), u32 character value, u32 font
 family UID (0 = none), a flag byte (1 = built-in key, `$ID/`) and the
-font style as an in-object string, and a byte that is 0 in every sample.
-IDML writes one `ABullet` per entry in `designmap.xml`, with
+font style as an in-object string, then a byte: 0, or 1 followed by four
+more bytes. IDML writes one `ABullet` per entry in `designmap.xml`, with
 `Self="dABullet<index>"`, `CharacterType`, `CharacterValue` and the
 `BulletsFont` (the family name, `$ID/` for none) and `BulletsFontStyle`
 properties.
@@ -1028,10 +1034,23 @@ IDML `ABullet` elements in 78 of 78 and the records end the chunk. All
 the other is in the pair whose IDML names the family `Minion Pro (OTF)`
 (`fonts.md`).
 
+The byte after the font style is 0 in 7,443 of the 7,447 bullets in the
+1,428 distinct little-endian files that have the chunk. In one InDesign
+20.0 file (with IDML) it is 1 in four bullets, each with flag byte 2, and
+four bytes follow: `00 00 90 01` after `Regular` and `00 00 BC 02` after
+`Bold` (read as two u16: 0 and 400, 0 and 700). Their meaning is not
+known, and IDML writes nothing for them. With this layout the records end
+the chunk in all 1,428 files. In the same file, the same five bytes also
+follow `Regular` in `FontStyle` attribute values (0x1B02,
+`attributes.md`), whose length prefix includes them. Flag byte 2 occurs in
+46 bullets; in that file's IDML its style names have no `$ID/` prefix, as
+with flag 0.
+
 ## XML tags (0xBF19)
 
-Chunk 0xBF2F is a u32 length and the tag name as text segments (in the
-InDesign 3.0 and 4.0 files, an in-object string; `big-endian.md`); chunk
+Chunk 0xBF2F is a u32 length and the tag name as text segments (in files
+from InDesign 2.0 to 5.0, a flag byte and an in-object string;
+`big-endian.md`); chunk
 0x117 is the UID of the tag's colour, an object of class 0x1F11 whose
 chunk 0x1F01 holds u32 colour space 5 (RGB), u16 3 and three f64
 fractions, as for swatches. IDML writes each tag as an `XMLTag` in
