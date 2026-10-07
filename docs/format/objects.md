@@ -486,10 +486,16 @@ Frames, shapes and lines are all class 0x6201; groups are 0x401.
 | Chunk | Contents |
 |---|---|
 | 0x151 | Matrix: `ItemTransform` |
+| 0x40D | Groups without chunk 0x151: the matrix (`ItemTransform`) |
 | 0x162B | Path geometry (below) |
 | 0x15B | Hierarchy: u32 spread, u32 parent, UID list of children |
 | 0x6E03 | Attribute list: local formatting (see `attributes.md`) |
 | 0x1B916 | u32: applied object style |
+
+Groups store their matrix in chunk 0x40D when they have no chunk 0x151:
+with it, the `ItemTransform` of all 5,670 groups of the trustworthy
+pairs (8,788 of 8,789 over all pairs) matches; without it, 5,277 of them were
+written as the identity, though they have a translation in IDML.
 
 **Path geometry:** u32 path count; per path: u32 point count, points, u16
 1 if the path is open. Each point is a u32 type, then f64 values: type 2 =

@@ -119,6 +119,8 @@ pub mod chunk {
     pub const PAGE_COLUMNS: u32 = 0x528;
     pub const PAGE_GRID: u32 = 0xCD02;
     pub const ITEM_TRANSFORM: u32 = 0x151;
+    /// A group's transform when it has no chunk 0x151.
+    pub const GROUP_TRANSFORM: u32 = 0x40D;
     pub const ITEM_PATHS: u32 = 0x162B;
     pub const ITEM_HIERARCHY: u32 = 0x15B;
     pub const COLUMN_FRAME_LIST: u32 = 0x220;
@@ -2214,9 +2216,15 @@ impl<'a> Reader<'a> {
         if cls != Some(class::SPLINE_ITEM) && cls != Some(class::GROUP) {
             return Ok(None);
         }
+        // Groups without chunk 0x151 have their transform in chunk 0x40D.
         let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
             Some(d) => Matrix::read(&mut Cursor::new(&d))?,
-            None => Matrix::IDENTITY,
+            None => match self.chunk(uid, chunk::GROUP_TRANSFORM)? {
+                Some(d) if cls == Some(class::GROUP) && d.len() >= 48 => {
+                    Matrix::read(&mut Cursor::new(&d))?
+                }
+                _ => Matrix::IDENTITY,
+            },
         };
         let child_uids = self.children(uid, chunk::ITEM_HIERARCHY)?;
         let mut children = Vec::new();
