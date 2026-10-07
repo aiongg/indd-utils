@@ -80,10 +80,13 @@ pub struct Document {
     pub color_groups: Vec<ColorGroup>,
     /// The bullet characters offered for lists (preferences chunk 0x1A488).
     pub bullets: Vec<Bullet>,
-    /// XML tags (class 0xBF19): name and colour (red, green, blue).
-    pub xml_tags: Vec<(String, Option<[f64; 3]>)>,
+    /// XML tags (class 0xBF19).
+    pub xml_tags: Vec<XmlTag>,
     pub xml: XmlStructure,
 }
+
+/// An XML tag: its name and colour (red, green, blue).
+pub type XmlTag = (String, Option<[f64; 3]>);
 
 /// The objects read from the class list, before they are put together
 /// into the `Document`.
@@ -111,7 +114,7 @@ struct ClassObjects {
     composite_fonts: Vec<(u32, String, Vec<u32>)>,
     composite_entries: HashMap<u32, CompositeFontEntry>,
     cjk_tables: Vec<CjkTable>,
-    xml_tags: Vec<(String, Option<[f64; 3]>)>,
+    xml_tags: Vec<XmlTag>,
     xml_tag_names: HashMap<u32, String>,
     inks: Vec<Ink>,
     color_groups: HashMap<u32, ColorGroup>,
@@ -537,7 +540,7 @@ impl<'a> Reader<'a> {
     /// An XML tag (class 0xBF19): its name and colour. Chunk 0xBF2F: u32
     /// length, then the name as text segments; chunk 0x117: the UID of
     /// the tag's colour.
-    fn xml_tag(&self, uid: u32) -> Result<Option<(String, Option<[f64; 3]>)>, Error> {
+    fn xml_tag(&self, uid: u32) -> Result<Option<XmlTag>, Error> {
         let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? else {
             return Ok(None);
         };
