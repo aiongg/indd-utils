@@ -165,7 +165,7 @@ impl<'a> Reader<'a> {
             Some(d) if d.len() >= 2 => {
                 let mut c = self.cursor(&d);
                 let n = c.u16()? as usize;
-                Attrs::parse_text(&mut c, n, List::Style).unwrap_or_default()
+                Attrs::parse_text(&mut c, n, List::Style, self.db.recorder()).unwrap_or_default()
             }
             _ => Attrs::default(),
         };
@@ -296,13 +296,15 @@ impl<'a> Reader<'a> {
             based_on: uid_or_none(based_on),
             fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
                 Some(d) => {
-                    Attrs::parse_short(self.enc(), &d, List::ObjectStyleFitting).unwrap_or_default()
+                    Attrs::parse_short(self.enc(), &d, List::ObjectStyleFitting, self.db.recorder())
+                        .unwrap_or_default()
                 }
                 None => Attrs::default(),
             },
             attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
                 Some(d) => {
-                    Attrs::parse_short(self.enc(), &d, List::ObjectStyle).unwrap_or_default()
+                    Attrs::parse_short(self.enc(), &d, List::ObjectStyle, self.db.recorder())
+                        .unwrap_or_default()
                 }
                 None => Attrs::default(),
             },

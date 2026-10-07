@@ -184,8 +184,21 @@ pub fn convert_into(
     name: &str,
     out: impl std::io::Write,
 ) -> Result<Vec<Warning>, Error> {
+    convert_with(indd, name, out, None)
+}
+
+/// [`convert_into`], recording what the conversion reads (for `indd audit`).
+fn convert_with(
+    indd: &[u8],
+    name: &str,
+    out: impl std::io::Write,
+    recorder: Option<audit::Recorder>,
+) -> Result<Vec<Warning>, Error> {
     let container = Container::parse(indd)?;
-    let db = container.database()?;
+    let mut db = container.database()?;
+    if let Some(r) = recorder {
+        db.set_recorder(r);
+    }
     let doc = model::Reader::new(&db).document(container.header.version)?;
     let mut warnings = doc.warnings.clone();
     warnings.extend(idml::write(&doc, name, out)?);

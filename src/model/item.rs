@@ -575,7 +575,9 @@ impl<'a> Reader<'a> {
         }
         let paths = self.paths(uid)?;
         let attrs = match self.chunk(uid, chunk::ITEM_ATTRS)? {
-            Some(d) => Attrs::parse(self.enc(), &d, List::Item).unwrap_or_default(),
+            Some(d) => {
+                Attrs::parse(self.enc(), &d, List::Item, self.db.recorder()).unwrap_or_default()
+            }
             None => Attrs::default(),
         };
         let object_style = match self.chunk(uid, chunk::ITEM_OBJECT_STYLE)? {
@@ -706,7 +708,9 @@ impl<'a> Reader<'a> {
         if uid == 0 || self.class(uid) != Some(class::RAW_DATA) {
             return Ok(None);
         }
-        crate::audit::object_read(uid);
+        if let Some(r) = self.db.recorder() {
+            r.object_read(uid);
+        }
         self.db.object(uid)
     }
 

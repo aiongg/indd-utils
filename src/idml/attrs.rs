@@ -611,12 +611,6 @@ pub(super) const CELL_STYLE_PARAGRAPH_STYLE: u32 = 0x10463;
 /// Stroke style code of a cell edge that has no stroke type (IDML `n`).
 pub(super) const CELL_NO_STROKE_TYPE: u32 = 0x1040C;
 
-/// Report an attribute value that the converter has no IDML value for to
-/// `indd audit`: its code (see [`Value::code`]).
-pub(super) fn unknown_code(attrs: &Attrs, id: u32, v: &Value) {
-    crate::audit::unknown_code(attrs.1, id, v.code().unwrap_or(u32::MAX));
-}
-
 /// Records of a `TabList`. `None` for an alignment code without evidence.
 /// See `docs/format/attributes.md`.
 pub(super) fn tab_list(stops: &[TabStop]) -> Option<Vec<Vec<Field>>> {
@@ -688,7 +682,7 @@ impl Writer<'_> {
                 _ => self.text_value(kind, v).map(|(t, s)| (t, s.into())),
             };
             if out.is_none() && matches!(kind, TextKind::Enum(_)) {
-                unknown_code(attrs, id, v);
+                attrs.unknown_code(id, v);
             }
             if let Some((ty, value)) = out {
                 if in_props {
@@ -856,7 +850,7 @@ impl Writer<'_> {
             match text {
                 Some(t) => out.push((name, t)),
                 None if matches!(kind, AttrKind::Enum(_) | AttrKind::Builtin(..)) => {
-                    unknown_code(attrs, id, v)
+                    attrs.unknown_code(id, v)
                 }
                 None => {}
             }
@@ -882,7 +876,7 @@ impl Writer<'_> {
                     _ => self.table_value(v, kind),
                 };
                 if t.is_none() && matches!(kind, CellKind::Enum(_) | CellKind::StrokeType) {
-                    unknown_code(attrs, id, v);
+                    attrs.unknown_code(id, v);
                 }
                 Some((name, t?))
             })
@@ -901,7 +895,7 @@ impl Writer<'_> {
                     }
                 }
                 None if matches!(kind, CellKind::Enum(_) | CellKind::StrokeType) => {
-                    unknown_code(attrs, id, v)
+                    attrs.unknown_code(id, v)
                 }
                 None => {}
             }

@@ -2,7 +2,7 @@
 
 use super::{Attrs, Reader, TextRun, Value};
 use crate::Error;
-use crate::audit::List;
+use crate::audit::{List, Recorder};
 use crate::object::{Cursor, Encoding};
 
 pub mod class {
@@ -107,7 +107,11 @@ pub struct Table {
 
 /// Groups of rows or columns sharing attributes: u32 group count; per
 /// group u32 count, u16, u16 attribute count, attributes, 8 bytes.
-fn groups(enc: Encoding, data: &[u8]) -> Result<Vec<(usize, Attrs)>, Error> {
+fn groups(
+    enc: Encoding,
+    data: &[u8],
+    recorder: Option<&Recorder>,
+) -> Result<Vec<(usize, Attrs)>, Error> {
     let mut c = enc.cursor(data);
     let n = c.u32()?;
     let mut out = Vec::new();
@@ -115,7 +119,7 @@ fn groups(enc: Encoding, data: &[u8]) -> Result<Vec<(usize, Attrs)>, Error> {
         let count = c.u32()? as usize;
         c.u16()?;
         let na = c.u16()? as usize;
-        let attrs = Attrs::parse_text(&mut c, na, List::Table)?;
+        let attrs = Attrs::parse_text(&mut c, na, List::Table, recorder)?;
         c.skip(8)?;
         out.push((count, attrs));
     }
@@ -143,7 +147,7 @@ impl Reader<'_> {
             Some(d) if d.len() >= 2 => {
                 let mut c = self.cursor(&d);
                 let n = c.u16()? as usize;
-                Attrs::parse_text(&mut c, n, List::Table)?
+                Attrs::parse_text(&mut c, n, List::Table, self.db.recorder())?
             }
             _ => Attrs::default(),
         })
@@ -196,11 +200,11 @@ impl Reader<'_> {
         let footer_rows = c.u32()?;
 
         let column_groups = match self.chunk(uid, chunk::TABLE_COLUMNS)? {
-            Some(d) => groups(self.enc(), &d)?,
+            Some(d) => groups(self.enc(), &d, self.db.recorder())?,
             None => Vec::new(),
         };
         let row_groups = match self.chunk(uid, chunk::TABLE_ROWS)? {
-            Some(d) => groups(self.enc(), &d)?,
+            Some(d) => groups(self.enc(), &d, self.db.recorder())?,
             None => Vec::new(),
         };
         // The cell data has a row of grid positions for every table row,
@@ -300,7 +304,7 @@ impl Reader<'_> {
                     let columns = g.u32()? as usize;
                     let attrs = if g.u16()? != 0 {
                         let na = g.u16()? as usize;
-                        Attrs::parse_text(&mut g, na, List::Cell)?
+                        Attrs::parse_text(&mut g, na, List::Cell, self.db.recorder())?
                     } else {
                         Attrs::default()
                     };

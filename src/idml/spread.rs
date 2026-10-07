@@ -379,7 +379,7 @@ impl Writer<'_> {
         // style [None] has `StrokeWeight="1"` in IDML (objects.md, page
         // item settings); groups vary.
         if tag != "Group"
-            && item.attrs.0.iter().all(|(id, _)| *id != 0x6E65)
+            && item.attrs.values.iter().all(|(id, _)| *id != 0x6E65)
             && style.is_some_and(|os| os.builtin && os.name == "[None]")
         {
             x.attr("StrokeWeight", "1");

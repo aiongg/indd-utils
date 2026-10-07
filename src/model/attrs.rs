@@ -5,7 +5,7 @@
 //! u32 type, u16 length and data. The first value is the attribute's value.
 
 use crate::Error;
-use crate::audit::{self, List};
+use crate::audit::{List, Recorder};
 use crate::object::{Cursor, Encoding};
 
 /// Value type codes.
@@ -163,38 +163,74 @@ impl Value {
     }
 }
 
-/// Attribute IDs and values, and the kind of list they come from (for
-/// `indd audit`).
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Attrs(pub Vec<(u32, Value)>, pub List);
+/// Attribute IDs and values, the kind of list they come from and the
+/// recorder of the database they come from (for `indd audit`).
+#[derive(Debug, Clone, Default)]
+pub struct Attrs {
+    pub values: Vec<(u32, Value)>,
+    pub list: List,
+    recorder: Option<Recorder>,
+}
+
+/// Lists are equal when their values and kinds are.
+impl PartialEq for Attrs {
+    fn eq(&self, other: &Attrs) -> bool {
+        self.values == other.values && self.list == other.list
+    }
+}
 
 impl Attrs {
     pub fn get(&self, id: u32) -> Option<&Value> {
-        let v = self.0.iter().find(|(a, _)| *a == id).map(|(_, v)| v);
-        if v.is_some() {
-            audit::attr_read(self.1, id);
+        let v = self.values.iter().find(|(a, _)| *a == id).map(|(_, v)| v);
+        if v.is_some()
+            && let Some(r) = &self.recorder
+        {
+            r.attr_read(self.list, id);
         }
         v
     }
 
+    /// Report a value of attribute `id` that has no IDML value to
+    /// `indd audit`: its code (see [`Value::code`]).
+    pub fn unknown_code(&self, id: u32, v: &Value) {
+        if let Some(r) = &self.recorder {
+            r.unknown_code(self.list, id, v.code().unwrap_or(u32::MAX));
+        }
+    }
+
     /// A page item list (chunk 0x6E03): u32 count, then records.
-    pub fn parse(enc: Encoding, data: &[u8], list: List) -> Result<Attrs, Error> {
+    pub fn parse(
+        enc: Encoding,
+        data: &[u8],
+        list: List,
+        recorder: Option<&Recorder>,
+    ) -> Result<Attrs, Error> {
         let mut c = enc.cursor(data);
         let n = c.u32()? as usize;
-        Attrs::records(&mut c, n, decode, list)
+        Attrs::records(&mut c, n, decode, list, recorder)
     }
 
     /// A page item attribute list with a u16 count, as object styles hold.
-    pub fn parse_short(enc: Encoding, data: &[u8], list: List) -> Result<Attrs, Error> {
+    pub fn parse_short(
+        enc: Encoding,
+        data: &[u8],
+        list: List,
+        recorder: Option<&Recorder>,
+    ) -> Result<Attrs, Error> {
         let mut c = enc.cursor(data);
         let n = c.u16()? as usize;
-        Attrs::records(&mut c, n, decode, list)
+        Attrs::records(&mut c, n, decode, list, recorder)
     }
 
-    /// A text attribute list: `count` records at the cursor. Text value
-    /// types differ per attribute, so values are decoded by length.
-    pub fn parse_text(c: &mut Cursor, count: usize, list: List) -> Result<Attrs, Error> {
-        Attrs::records(c, count, decode_text, list)
+    /// A text attribute list: `count` records at the cursor. Values are
+    /// decoded by their attribute's layout (see `text_layout`).
+    pub fn parse_text(
+        c: &mut Cursor,
+        count: usize,
+        list: List,
+        recorder: Option<&Recorder>,
+    ) -> Result<Attrs, Error> {
+        Attrs::records(c, count, decode_text, list, recorder)
     }
 
     fn records(
@@ -202,6 +238,7 @@ impl Attrs {
         n: usize,
         decode: fn(Encoding, u32, u32, &[u8]) -> Value,
         list: List,
+        recorder: Option<&Recorder>,
     ) -> Result<Attrs, Error> {
         let enc = c.encoding();
         let mut out = Vec::with_capacity(n.min(1024));
@@ -232,8 +269,14 @@ impl Attrs {
                 out.push((id, v));
             }
         }
-        audit::attrs_parsed(list, out.iter().map(|(id, _)| *id));
-        Ok(Attrs(out, list))
+        if let Some(r) = recorder {
+            r.attrs_parsed(list, out.iter().map(|(id, _)| *id));
+        }
+        Ok(Attrs {
+            values: out,
+            list,
+            recorder: recorder.cloned(),
+        })
     }
 }
 
@@ -419,7 +462,7 @@ mod tests {
         d.extend_from_slice(&0x6E63u32.to_le_bytes());
         d.extend_from_slice(&6u16.to_le_bytes());
         d.extend_from_slice(&[0; 6]);
-        let a = Attrs::parse(Encoding::default(), &d, List::Item).unwrap();
+        let a = Attrs::parse(Encoding::default(), &d, List::Item, None).unwrap();
         assert_eq!(a.get(0x6E65), Some(&Value::Double(0.25)));
     }
 
@@ -438,7 +481,7 @@ mod tests {
         d.extend_from_slice(&0x6E63u32.to_le_bytes());
         d.extend_from_slice(&6u16.to_le_bytes());
         d.extend_from_slice(&[0; 6]);
-        let a = Attrs::parse(Encoding::default(), &d, List::Item).unwrap();
+        let a = Attrs::parse(Encoding::default(), &d, List::Item, None).unwrap();
         assert_eq!(a.get(0x6E6E), Some(&Value::RefOrCode(0, 0x5A39)));
     }
 
@@ -455,7 +498,8 @@ mod tests {
 
     fn text_value(id: u32, value: &[u8]) -> Value {
         let d = text_record(id, value);
-        let a = Attrs::parse_text(&mut Encoding::default().cursor(&d), 1, List::Text).unwrap();
+        let a =
+            Attrs::parse_text(&mut Encoding::default().cursor(&d), 1, List::Text, None).unwrap();
         a.get(id).unwrap().clone()
     }
 
@@ -563,7 +607,7 @@ mod tests {
         d.extend(0u32.to_le_bytes());
         d.extend((v.len() as u16).to_le_bytes());
         d.extend(&v);
-        let a = Attrs::parse(Encoding::default(), &d, List::Item).unwrap();
+        let a = Attrs::parse(Encoding::default(), &d, List::Item, None).unwrap();
         assert_eq!(
             a.get(0x1EB8C),
             Some(&Value::Stops(vec![[0.15, 0.5, 100.0], [0.85, 1.0, 0.0]]))

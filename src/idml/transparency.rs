@@ -308,9 +308,7 @@ pub(super) fn write(
                 match value(v, kind, swatches) {
                     Some(Ok(t)) => values.push((name, t)),
                     Some(Err(f)) => left_out.push((effect, name, f)),
-                    None if matches!(kind, Kind::Enum(_) | Kind::Bool) => {
-                        crate::audit::unknown_code(attrs.1, id, v.as_u32().unwrap_or(u32::MAX))
-                    }
+                    None if matches!(kind, Kind::Enum(_) | Kind::Bool) => attrs.unknown_code(id, v),
                     None => {}
                 }
             }

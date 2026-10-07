@@ -43,7 +43,9 @@ impl<'a> Reader<'a> {
             .get(uid)?
             .ok_or_else(|| Error::Corrupt(format!("object {uid} has no data")))?;
         let obj = std::rc::Rc::new(obj);
-        crate::audit::object_read(uid);
+        if let Some(r) = self.db.recorder() {
+            r.object_read(uid);
+        }
         self.cache.borrow_mut().insert(uid, obj.clone());
         Ok(obj)
     }

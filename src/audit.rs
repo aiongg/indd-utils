@@ -1,18 +1,19 @@
 //! What a conversion reads, for `indd audit`.
 //!
-//! While a [`Recorder`] is active on a thread, the code that decodes
-//! objects reports which objects, chunks and attributes it reads, and which
-//! values it found but could not convert. [`audit`] converts a document
-//! with a recorder active and compares the record with everything the
-//! document contains. Anything present but never read is what the
-//! converter does not understand yet. Without a recorder, reporting does
-//! nothing.
+//! When a [`Database`](crate::Database) has a [`Recorder`], the code that decodes its
+//! objects reports to it which objects, chunks and attributes it reads,
+//! and which values it found but could not convert: objects and attribute
+//! lists carry the recorder of the database they come from. [`audit`]
+//! converts a document with a recorder and compares the record with
+//! everything the document contains. Anything present but never read is
+//! what the converter does not understand yet. Without a recorder,
+//! nothing is recorded.
 //!
 //! "Read" means the converter looked the item up, not that it converted
 //! every value in it correctly.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 use crate::{Container, Error};
 
@@ -64,79 +65,77 @@ struct Log {
     strand_kinds: HashMap<u32, usize>,
 }
 
-thread_local! {
-    static LOG: RefCell<Option<Log>> = const { RefCell::new(None) };
-}
+/// Records what a conversion reads. Clones share one record.
+#[derive(Clone, Default)]
+pub struct Recorder(Arc<Mutex<Log>>);
 
-fn with(f: impl FnOnce(&mut Log)) {
-    LOG.with_borrow_mut(|log| {
-        if let Some(log) = log {
-            f(log);
-        }
-    });
+impl std::fmt::Debug for Recorder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Recorder")
+    }
 }
-
-/// Records what the converter reads on this thread until dropped.
-pub struct Recorder(());
 
 impl Recorder {
-    pub fn start() -> Recorder {
-        LOG.set(Some(Log::default()));
-        Recorder(())
+    pub fn new() -> Recorder {
+        Recorder::default()
     }
 
-    fn take(self) -> Log {
-        LOG.take().unwrap_or_default()
-    }
-}
-
-impl Drop for Recorder {
-    fn drop(&mut self) {
-        LOG.set(None);
-    }
-}
-
-/// The converter read object `uid`.
-pub fn object_read(uid: u32) {
-    with(|l| {
-        l.objects.insert(uid);
-    });
-}
-
-/// The converter looked up chunk `id` of object `uid`.
-pub fn chunk_read(uid: u32, id: u32) {
-    with(|l| {
-        l.objects.insert(uid);
-        l.chunks.insert((uid, id));
-    });
-}
-
-/// An attribute list of kind `list` with these attribute IDs was parsed.
-pub fn attrs_parsed(list: List, ids: impl Iterator<Item = u32>) {
-    with(|l| {
-        for id in ids {
-            *l.attrs_present.entry((list, id)).or_default() += 1;
+    fn with(&self, f: impl FnOnce(&mut Log)) {
+        if let Ok(mut log) = self.0.lock() {
+            f(&mut log);
         }
-    });
-}
+    }
 
-/// The converter looked up attribute `id` in a list of kind `list` that
-/// has it.
-pub fn attr_read(list: List, id: u32) {
-    with(|l| {
-        l.attrs_read.insert((list, id));
-    });
-}
+    fn take(&self) -> Log {
+        self.0
+            .lock()
+            .map(|mut l| std::mem::take(&mut *l))
+            .unwrap_or_default()
+    }
 
-/// Attribute `id` of a list of kind `list` has a code the converter does
-/// not know.
-pub fn unknown_code(list: List, id: u32, code: u32) {
-    with(|l| *l.codes.entry((list, id, code)).or_default() += 1);
-}
+    /// The converter read object `uid`.
+    pub fn object_read(&self, uid: u32) {
+        self.with(|l| {
+            l.objects.insert(uid);
+        });
+    }
 
-/// A strand holds run data of a kind the converter does not read.
-pub fn unknown_strand_kind(kind: u32) {
-    with(|l| *l.strand_kinds.entry(kind).or_default() += 1);
+    /// The converter looked up chunk `id` of object `uid`.
+    pub fn chunk_read(&self, uid: u32, id: u32) {
+        self.with(|l| {
+            l.objects.insert(uid);
+            l.chunks.insert((uid, id));
+        });
+    }
+
+    /// An attribute list of kind `list` with these attribute IDs was
+    /// parsed.
+    pub fn attrs_parsed(&self, list: List, ids: impl Iterator<Item = u32>) {
+        self.with(|l| {
+            for id in ids {
+                *l.attrs_present.entry((list, id)).or_default() += 1;
+            }
+        });
+    }
+
+    /// The converter looked up attribute `id` in a list of kind `list`
+    /// that has it.
+    pub fn attr_read(&self, list: List, id: u32) {
+        self.with(|l| {
+            l.attrs_read.insert((list, id));
+        });
+    }
+
+    /// Attribute `id` of a list of kind `list` has a code the converter
+    /// does not know.
+    pub fn unknown_code(&self, list: List, id: u32, code: u32) {
+        self.with(|l| *l.codes.entry((list, id, code)).or_default() += 1);
+    }
+
+    /// A strand holds run data of a kind the converter does not read.
+    pub fn unknown_strand_kind(&self, kind: u32) {
+        self.with(|l| *l.strand_kinds.entry(kind).or_default() += 1);
+    }
 }
 
 /// Objects of one class.
@@ -172,8 +171,8 @@ pub struct Audit {
 
 /// Convert `indd` (output discarded) and report what was not read.
 pub fn audit(indd: &[u8], name: &str) -> Result<Audit, Error> {
-    let recorder = Recorder::start();
-    let result = crate::convert_into(indd, name, std::io::sink());
+    let recorder = Recorder::new();
+    let result = crate::convert_with(indd, name, std::io::sink(), Some(recorder.clone()));
     let log = recorder.take();
 
     let container = Container::parse(indd)?;

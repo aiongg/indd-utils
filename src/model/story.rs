@@ -238,7 +238,8 @@ impl<'a> Reader<'a> {
                             let style = rc.u32()?;
                             let n = rc.u16()? as usize;
                             let attrs =
-                                Attrs::parse_text(&mut rc, n, List::Text).unwrap_or_default();
+                                Attrs::parse_text(&mut rc, n, List::Text, self.db.recorder())
+                                    .unwrap_or_default();
                             let list = if kind == strand::PARAGRAPH_STYLE {
                                 &mut para
                             } else {
@@ -246,7 +247,11 @@ impl<'a> Reader<'a> {
                             };
                             list.push((len, style, attrs));
                         }
-                        _ => crate::audit::unknown_strand_kind(kind),
+                        _ => {
+                            if let Some(r) = self.db.recorder() {
+                                r.unknown_strand_kind(kind)
+                            }
+                        }
                     }
                 }
             }

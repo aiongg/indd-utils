@@ -3,6 +3,7 @@
 //! Most objects are a sequence of chunks: u32 chunk ID, u32 length, data.
 //! Some objects (embedded files, the XMP packet) are plain byte streams.
 
+use crate::audit::Recorder;
 use crate::{ByteOrder, Error, Header, Version};
 
 /// How the object data of one file is encoded: its byte order
@@ -117,6 +118,8 @@ pub struct Object {
     pub bytes: Vec<u8>,
     /// The encoding of the file the object comes from.
     pub encoding: Encoding,
+    /// The recorder of the database the object comes from.
+    pub recorder: Option<Recorder>,
 }
 
 impl Object {
@@ -132,7 +135,9 @@ impl Object {
 
     /// Data of the first chunk with this ID.
     pub fn chunk(&self, id: u32) -> Option<&[u8]> {
-        crate::audit::chunk_read(self.uid, id);
+        if let Some(r) = &self.recorder {
+            r.chunk_read(self.uid, id);
+        }
         self.chunks()?
             .into_iter()
             .find(|c| c.id == id)

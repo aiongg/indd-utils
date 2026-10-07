@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::audit::Recorder;
 use crate::container::PAGE_SIZE;
 use crate::object::Encoding;
 use crate::{Container, Error};
@@ -80,6 +81,8 @@ pub struct Database<'a> {
     unclassed: Vec<u32>,
     /// The encoding of object data.
     encoding: Encoding,
+    /// Records reads for `indd audit`.
+    recorder: Option<Recorder>,
 }
 
 fn corrupt(msg: impl Into<String>) -> Error {
@@ -96,6 +99,7 @@ impl<'a> Database<'a> {
             classes: Vec::new(),
             unclassed: Vec::new(),
             encoding: Encoding::of(&container.header),
+            recorder: None,
         };
         let directory = db.u32(master + MASTER_LOGICAL_DIR)?;
         let db_pages = container.master().db_pages;
@@ -323,7 +327,18 @@ impl<'a> Database<'a> {
             class: self.class_of(uid),
             bytes,
             encoding: self.encoding,
+            recorder: self.recorder.clone(),
         }))
+    }
+
+    /// Record what is read from this database's objects (`indd audit`).
+    pub fn set_recorder(&mut self, recorder: Recorder) {
+        self.recorder = Some(recorder);
+    }
+
+    /// The recorder set with [`Database::set_recorder`].
+    pub fn recorder(&self) -> Option<&Recorder> {
+        self.recorder.as_ref()
     }
 
     /// The encoding of object data in this database.
@@ -392,6 +407,7 @@ pub(crate) mod synthetic {
             classes,
             unclassed: Vec::new(),
             encoding: Encoding::default(),
+            recorder: None,
         }
     }
 
@@ -451,6 +467,7 @@ mod tests {
             classes: Vec::new(),
             unclassed: Vec::new(),
             encoding: Encoding::default(),
+            recorder: None,
         }
     }
 
