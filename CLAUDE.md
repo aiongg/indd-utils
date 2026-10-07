@@ -71,6 +71,12 @@ separately (rule and evidence: `docs/measurement.md`).
   in `docs/measurement.md`): `cargo build --release && python3 -I
   tools/compare.py --exclude own/`. It prints them last and writes
   `pairs.tsv`, `gaps.tsv` and `gaps-all.tsv` to `target/compare/`.
+- `python3 -I tools/diff_outputs.py [OLD [NEW]]`: build two revisions
+  (default `HEAD` and the working tree `.`) under `~/.cache/indd-diff/`,
+  convert every corpus file with both and report which outputs differ
+  (package entries compared byte for byte), plus differences in failures
+  and warnings. Takes about a minute. A refactoring must show 0 differing
+  outputs. Full list: `~/.cache/indd-diff/diff.tsv`.
 - `indd audit <file>`: what the converter does not read in one document
   (classes, chunks, attribute IDs, unknown codes, strand kinds) and its
   warnings. `python3 -I tools/audit_corpus.py --exclude own/` ranks these
