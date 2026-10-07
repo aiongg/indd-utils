@@ -224,3 +224,40 @@ analysis script found the list; over all pairs the converter reproduces
 `StrokeWeight`, `CornerRadius` and `MiterLimit` of every file, and the
 frame fitting attributes of the list are written to the preference
 `FrameFittingOption`.
+
+## Print settings (`PrintPreference`, `PrintBookletPrintPreference`)
+
+Chunk 0xA4C holds the print settings and chunk 0xAF2 those of booklet
+printing, in the same layout. Its start, in order (a "string" is a flag
+byte, 1 for a built-in key, then an in-object string):
+
+| Field | IDML |
+|---|---|
+| u8 1 if a print record follows, u8, u32 length *n*, *n* bytes | `PrintRecord`: `$ID/` and the bytes in base64, 76 characters per line, a line feed after every full line |
+| 6 bytes with a print record, 2 without | |
+| String | `ActivePrinterPreset`: built-in `kPrSt_DefaultName` is `Default`, built-in empty `Custom`, otherwise the name (string) |
+| u32 | `PrintTo`; `PrintToDisk` is `true` when it is 2 |
+| String | `Printer`: built-in `kPrepress File` is `PostscriptFile`, otherwise the name |
+| String | not identified (empty in every file) |
+| String | `PPD`: built-in `kDevice Independent` is `DeviceIndependent`, built-in empty the string `$ID/`, otherwise the name |
+| String | `PPDFile` (`$ID/` and the text for a built-in string) |
+| u32 | `PostScriptLevel`: 2 `Level2`, 3 `Level3` |
+| f64 | `PrintResolution` |
+| 4 f64 | `PaperSizeRect`: left, top, right, bottom |
+| 4 f64 | `ImageablePaperSizeRect`: left, top, right, bottom |
+| i32, then a string | `PaperSize`: −3 the string, −2 `DefinedByDriver`, −1 `Custom` |
+
+After that string, at these offsets from its end: f64 −1 at 0 and 24
+(`PaperWidth` and `PaperHeight` are `Auto` in every file), f64 pairs at 8
+and 32 (`PaperWidthRange`, `PaperHeightRange`), u16 at 84
+(`PrintPageOrientation`: 0 `Portrait`, 1 `Landscape`), u32 at 104
+(`Copies`), u8 at 118 (`PrintBlankPages`). The rest of the chunk (marks,
+bleeds, screening, colour output, scaling and the paper size selector) is
+not decoded.
+
+Evidence: every field above matches in all 654 pairs for both chunks,
+except `PPD` (653, one built-in key written as a string in IDML),
+`Printer` of booklets (653) and `PPDFile` of booklets (652). The paper rectangles are written as IDML
+writes them: with the digits of the shortest form that reads back, the
+last rounded half to even from the exact value (583.2000122070312, not
+…313).

@@ -7,6 +7,7 @@ pub mod zip;
 
 use std::collections::BTreeMap;
 
+use crate::model::prefs::PrefProp;
 use crate::model::{
     Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, Matrix, Orientation, Page, PageItem,
     Path, Section, Shape, Spread, Story, Style, StyleGroup, Table, TextFramePreferences, TextRun,
@@ -207,6 +208,8 @@ const PREFERENCE_TAGS: &[&str] = &[
     "TextPreference",
     "PasteboardPreference",
     "XMLPreference",
+    "PrintPreference",
+    "PrintBookletPrintPreference",
 ];
 
 /// A `Properties` child as a values node.
@@ -2801,6 +2804,44 @@ impl Writer<'_> {
                 ours[i]
                     .attrs
                     .extend(fitting.into_iter().map(|(k, v)| (k.to_string(), v)));
+            }
+        }
+        for (tag, data) in &prefs.print_records {
+            let mut text = base64_lines(data);
+            // IDML ends a last line of full length with a line feed.
+            if text.rsplit('\n').next().is_some_and(|l| l.len() == 76) {
+                text.push('\n');
+            }
+            let i = ours_of(&mut ours, tag);
+            ours[i]
+                .attrs
+                .push(("PrintRecord".into(), format!("$ID/{text}")));
+        }
+        for (tag, name, value) in &prefs.props {
+            let mut n = Node {
+                tag: name.to_string(),
+                ..Node::default()
+            };
+            match value {
+                PrefProp::Text(ty, text) => {
+                    n.attrs.push(("type".into(), ty.to_string()));
+                    n.text = Some(text.clone());
+                }
+                PrefProp::Attrs(a) => {
+                    n.attrs = a.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
+                }
+            }
+            let i = ours_of(&mut ours, tag);
+            match ours[i].children.iter_mut().find(|c| c.tag == "Properties") {
+                Some(p) => p.children.push(n),
+                None => ours[i].children.insert(
+                    0,
+                    Node {
+                        tag: "Properties".into(),
+                        children: vec![n],
+                        ..Node::default()
+                    },
+                ),
             }
         }
         for &(tag, name, rgb) in &prefs.colors {

@@ -31,6 +31,130 @@ pub struct Prefs {
     pub anchor: Option<Vec<u8>>,
     /// Page item defaults (class 0x6E07), a page item attribute list.
     pub item_defaults: Option<Attrs>,
+    /// `Properties` children: element, name, value.
+    pub props: Vec<(&'static str, &'static str, PrefProp)>,
+    /// Print records (element, bytes), written in base64 as `PrintRecord`.
+    pub print_records: Vec<(&'static str, Vec<u8>)>,
+}
+
+/// The value of a `Properties` child of a preference element.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PrefProp {
+    /// Text of the given IDML type (`string`, `enumeration`).
+    Text(&'static str, String),
+    /// An empty element with these attributes.
+    Attrs(Vec<(&'static str, String)>),
+}
+
+/// A flagged in-object string: a flag byte (1 for a built-in key) and the
+/// string.
+fn flagged(c: &mut Cursor) -> Result<(u8, String), Error> {
+    let flag = c.u8()?;
+    Ok((flag, c.string()?))
+}
+
+/// Print settings (chunk 0xA4C, and 0xAF2 for booklets): see
+/// `docs/format/preferences.md`, print preferences.
+fn print_prefs(
+    d: &[u8],
+    element: &'static str,
+    values: &mut Vec<PrefValue>,
+    props: &mut Vec<(&'static str, &'static str, PrefProp)>,
+    records: &mut Vec<(&'static str, Vec<u8>)>,
+) -> Result<(), Error> {
+    let mut set = |name: &'static str, value: String| {
+        values.push(PrefValue {
+            element,
+            name,
+            value,
+        })
+    };
+    let mut c = Cursor::new(d);
+    let has_record = c.u8()? != 0;
+    c.u8()?;
+    let n = c.u32()? as usize;
+    records.push((element, c.bytes(n)?.to_vec()));
+    c.skip(if has_record { 6 } else { 2 })?;
+    let preset = flagged(&mut c)?;
+    let to = c.u32()?;
+    let printer = flagged(&mut c)?;
+    flagged(&mut c)?;
+    let ppd = flagged(&mut c)?;
+    let ppd_file = flagged(&mut c)?;
+    let mut prop = |name: &'static str, ty: &'static str, text: String| {
+        props.push((element, name, PrefProp::Text(ty, text)))
+    };
+    match (preset.0, preset.1.as_str()) {
+        (1, "kPrSt_DefaultName") => prop("ActivePrinterPreset", "enumeration", "Default".into()),
+        (1, "") => prop("ActivePrinterPreset", "enumeration", "Custom".into()),
+        (1, _) => {}
+        (_, name) => prop("ActivePrinterPreset", "string", name.into()),
+    }
+    match (printer.0, printer.1.as_str()) {
+        (1, "kPrepress File") => prop("Printer", "enumeration", "PostscriptFile".into()),
+        (1, _) => {}
+        (_, name) => prop("Printer", "string", name.into()),
+    }
+    match (ppd.0, ppd.1.as_str()) {
+        (1, "kDevice Independent") => prop("PPD", "enumeration", "DeviceIndependent".into()),
+        (1, "") => prop("PPD", "string", "$ID/".into()),
+        (1, _) => {}
+        (_, name) => prop("PPD", "string", name.into()),
+    }
+    set("PrintTo", to.to_string());
+    set("PrintToDisk", (to == 2).to_string());
+    let file = if ppd_file.0 == 1 {
+        format!("$ID/{}", ppd_file.1)
+    } else {
+        ppd_file.1
+    };
+    set("PPDFile", file);
+    match c.u32()? {
+        2 => set("PostScriptLevel", "Level2".into()),
+        3 => set("PostScriptLevel", "Level3".into()),
+        _ => {}
+    }
+    set("PrintResolution", num(c.f64()?));
+    let mut rect = |name: &'static str, c: &mut Cursor| -> Result<(), Error> {
+        let mut a = Vec::new();
+        for side in ["Left", "Top", "Right", "Bottom"] {
+            a.push((side, num_half_even(c.f64()?)));
+        }
+        props.push((element, name, PrefProp::Attrs(a)));
+        Ok(())
+    };
+    rect("PaperSizeRect", &mut c)?;
+    rect("ImageablePaperSizeRect", &mut c)?;
+    let size = c.i32()?;
+    let name = flagged(&mut c)?;
+    let paper = match size {
+        -3 => Some(("string", name.1)),
+        -2 => Some(("enumeration", "DefinedByDriver".to_string())),
+        -1 => Some(("enumeration", "Custom".to_string())),
+        _ => None,
+    };
+    if let Some((ty, text)) = paper {
+        props.push((element, "PaperSize", PrefProp::Text(ty, text)));
+    }
+    let q = c.pos();
+    let f = |o: usize| Cursor::new(&d[q + o..]).f64();
+    set("PaperWidthRange", format!("{} {}", num(f(8)?), num(f(16)?)));
+    set(
+        "PaperHeightRange",
+        format!("{} {}", num(f(32)?), num(f(40)?)),
+    );
+    match Cursor::new(&d[q + 84..]).u16()? {
+        0 => set("PrintPageOrientation", "Portrait".into()),
+        1 => set("PrintPageOrientation", "Landscape".into()),
+        _ => {}
+    }
+    set("Copies", Cursor::new(&d[q + 104..]).u32()?.to_string());
+    match d.get(q + 118) {
+        Some(0) => set("PrintBlankPages", "false".into()),
+        Some(1) => set("PrintBlankPages", "true".into()),
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Chunks of the preferences object.
@@ -53,6 +177,8 @@ mod id {
     pub const MARGINS: u32 = 0x550;
     pub const COLUMNS: u32 = 0x555;
     pub const ANCHOR: u32 = 0x2800;
+    pub const PRINT: u32 = 0xA4C;
+    pub const PRINT_BOOKLET: u32 = 0xAF2;
     pub const PASTEBOARD: u32 = 0x5D2;
     pub const XML_TAGS: u32 = 0xBF4F;
     pub const GRIDS_IN_BACK: u32 = 0x567;
@@ -91,6 +217,51 @@ fn policy(code: &[u8]) -> Option<&'static str> {
 
 fn num(v: f64) -> String {
     crate::idml::num(v)
+}
+
+/// A number as IDML writes the paper rectangles of the print settings:
+/// the digits of the shortest form that reads back, the last one rounded
+/// half to even from the exact value (583.2000122070312, where the
+/// shortest form is …313).
+fn num_half_even(v: f64) -> String {
+    if v == 0.0 || !v.is_finite() {
+        return num(v);
+    }
+    // As many digits as the shortest form that reads back, rounded half
+    // to even from the exact value.
+    let shortest = format!("{v:e}");
+    let n = shortest
+        .split('e')
+        .next()
+        .unwrap_or("")
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .count()
+        .max(1);
+    let e = format!("{v:.*e}", n - 1);
+    let (mant, exp) = e.split_once('e').unwrap_or((&e, "0"));
+    let exp: i32 = exp.parse().unwrap_or(0);
+    let neg = mant.starts_with('-');
+    let digits: String = mant.chars().filter(|c| c.is_ascii_digit()).collect();
+    let point = exp + 1;
+    let mut out = if point <= 0 {
+        format!("0.{}{}", "0".repeat((-point) as usize), digits)
+    } else if point as usize >= digits.len() {
+        format!("{}{}", digits, "0".repeat(point as usize - digits.len()))
+    } else {
+        format!(
+            "{}.{}",
+            &digits[..point as usize],
+            &digits[point as usize..]
+        )
+    };
+    if out.contains('.') {
+        out = out.trim_end_matches('0').trim_end_matches('.').to_string();
+    }
+    if neg {
+        out.insert(0, '-');
+    }
+    out
 }
 
 impl Reader<'_> {
@@ -424,6 +595,27 @@ impl Reader<'_> {
             None => None,
         };
 
+        // Print settings.
+        let mut props = Vec::new();
+        let mut print_records = Vec::new();
+        for (id, element) in [
+            (id::PRINT, "PrintPreference"),
+            (id::PRINT_BOOKLET, "PrintBookletPrintPreference"),
+        ] {
+            if let Some(d) = get(id)? {
+                let (mut v, mut p, mut r) = (Vec::new(), Vec::new(), Vec::new());
+                // A layout the corpus does not show leaves the element as
+                // observed.
+                if print_prefs(&d, element, &mut v, &mut p, &mut r).is_ok() {
+                    for pv in v {
+                        set(pv.element, pv.name, pv.value);
+                    }
+                    props.extend(p);
+                    print_records.extend(r);
+                }
+            }
+        }
+
         // Grids.
         if let Some(d) = get(id::BASELINE_GRID)?.filter(|d| d.len() >= 26) {
             let f = |o: usize| Cursor::new(&d[o..]).f64();
@@ -485,6 +677,24 @@ impl Reader<'_> {
             text_defaults,
             anchor,
             item_defaults,
+            props,
+            print_records,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::num_half_even;
+
+    #[test]
+    fn rounds_shortest_digits_half_even() {
+        assert_eq!(num_half_even(f64::from(583.2_f32)), "583.2000122070312");
+        assert_eq!(num_half_even(f64::from(841.92_f32)), "841.9199829101562");
+        assert_eq!(num_half_even(612.0), "612");
+        assert_eq!(num_half_even(0.0), "0");
+        assert_eq!(num_half_even(-12.5), "-12.5");
+        assert_eq!(num_half_even(0.0625), "0.0625");
+        assert_eq!(num_half_even(f64::from(16.6_f32)), "16.600000381469727");
     }
 }
