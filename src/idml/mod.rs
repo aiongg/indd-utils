@@ -2496,7 +2496,8 @@ impl Writer<'_> {
             "BottomRightPoint",
         ];
         const JUSTIFY: [&str; 4] = ["TopAlign", "CenterAlign", "BottomAlign", "JustifyAlign"];
-        const FIRST_BASELINE: [&str; 3] = ["LeadingOffset", "AscentOffset", "CapHeight"];
+        const FIRST_BASELINE: [&str; 4] =
+            ["LeadingOffset", "AscentOffset", "CapHeight", "EmboxHeight"];
         const SIZING: [&str; 5] = [
             "Off",
             "HeightOnly",

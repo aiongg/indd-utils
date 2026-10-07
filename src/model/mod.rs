@@ -564,7 +564,7 @@ pub struct TextFramePreferences {
     pub column_gutter: f64,
     pub column_fixed_width: f64,
     /// First baseline offset code (chunk 0x2CE, u16 at 0): 0 LeadingOffset,
-    /// 1 AscentOffset, 2 CapHeight.
+    /// 1 AscentOffset, 2 CapHeight, 3 EmboxHeight.
     pub first_baseline_offset: u16,
     pub vertical_justification: u16,
     pub vertical_balance_columns: bool,

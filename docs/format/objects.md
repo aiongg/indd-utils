@@ -791,7 +791,7 @@ From the frame's multi-column frame object (class 0x263):
 | 0x2D1 | u32 0 | `TextColumnCount` (1,052/1,052) |
 | 0x2D1 | f64 4 | `TextColumnGutter` (93/93) |
 | 0x2D1 | f64 14 | `TextColumnFixedWidth` (1,045/1,045) |
-| 0x2CE | u16 0 | `FirstBaselineOffset`: 0 LeadingOffset, 1 AscentOffset, 2 CapHeight (below) |
+| 0x2CE | u16 0 | `FirstBaselineOffset`: 0 LeadingOffset, 1 AscentOffset, 2 CapHeight, 3 EmboxHeight (below) |
 | 0x2CE | u16 2 | `VerticalJustification`: 0 Top, 1 Center, 2 Bottom, 3 Justify (350/350) |
 | 0x2CE | u16 20 | `VerticalBalanceColumns` (18/18) |
 | 0x2CE | u16 22 | `AutoSizingType`: 0 Off, 1 HeightOnly, 2 WidthOnly, 3 HeightAndWidth (61/61) |
@@ -839,9 +839,32 @@ the PDF, the first baseline in each frame with code 0 lies below the
 frame's top edge by exactly the leading of that first line, for first
 lines with several different leadings. Of the values in the IDML schema
 (`AscentOffset`, `CapHeight`, `LeadingOffset`, `EmboxHeight`, `XHeight`,
-`FixedHeight`), only `LeadingOffset` depends on the leading. A sample
-also has code 3, with no evidence; the converter leaves out codes other
-than 0, 1 and 2.
+`FixedHeight`), only `LeadingOffset` depends on the leading.
+
+Code 3 is `EmboxHeight`. No public file has it: the 18,207 multi-column
+frames of the 239 distinct little-endian public files have code 1 or 2
+only. The evidence is a sample and its print PDF, and a sample typeset
+vertically with the same print PDF:
+
+- The frames measured have code 3, `TopAlign` and one line. No chunk
+  of these frames or of their multi-column frame objects holds the
+  measured distance as a number, so it is not a stored minimum offset.
+- A first line set in a CJK font lies below the frame's top edge by
+  0.880 of its point size. The font's ideographic em box (its `BASE`
+  table) has its bottom at −0.120 em, so the em box top is at 0.880 em.
+  The font's cap height (0.742 em), its x-height (0.503 em), the leading
+  and a fixed offset of 0 give other distances. Its ascent is also
+  0.880 em.
+- A first line set in a Latin font lies below the frame's top edge by
+  0.825 of its point size. The font's ascent is 0.710 em, its cap height
+  0.650 em and its x-height 0.400 em; the leading and a fixed offset of
+  0 do not match either. So code 3 is not `AscentOffset`, which is code
+  1 in any case.
+- Of the values in the IDML schema, only `EmboxHeight` remains. The
+  Latin font has no em box data; the measured 0.825 em equals an em box
+  centred on half the cap height (0.325 + 0.5).
+
+The converter leaves out codes other than 0 to 3.
 
 ## Kinsoku and mojikumi tables
 
