@@ -44,12 +44,25 @@ list and absent from the IDML.
 | 0x6E6D | `MiterLimit` | 778 of 778 |
 | 0x6E6F | `CornerOption`: code 0 = `None`, 0x5A15 = `RoundedCorner`, 0x5A16 = `InverseRoundedCorner` (the codes of object styles, `objects.md`) | 20 of 23 for 0x5A15; with all three codes, 1,876 of 1,995 rectangles, 504 of 520 text frames and 489 of 489 page item defaults in the trustworthy pairs |
 | 0x6E70 | `CornerRadius` | 213 of 216 |
+| 0x6E70, 0x6E94, 0x6E92, 0x6E93 | `TopLeftCornerRadius`, `TopRightCornerRadius`, `BottomLeftCornerRadius`, `BottomRightCornerRadius` (below) | each radius ID against its own corner 4,357, 3,200, 3,276 and 3,325 matches, no mismatch |
+| 0x6E6F, 0x6E91, 0x6E8F, 0x6E90 | `TopLeftCornerOption`, `TopRightCornerOption`, `BottomLeftCornerOption`, `BottomRightCornerOption`: codes as `CornerOption` (below) | 11,211 of 11,211 |
 | 0x551F | `GradientFillLength` | all non-zero (30) |
 | 0x5520 | `GradientFillStart` (point) | all non-zero (30) |
 | 0x5525 | `GradientStrokeLength` (assumed; equal to fill in all samples) | 30 |
 | 0x5526 | `GradientStrokeStart` (assumed; equal to fill in all samples) | 30 |
 | 0x6E6E | `StrokeType` (built-in stroke style code, below) | 51 of 51 items, 576 of 576 object styles |
 | 0x6E8C | `StrokeAlignment`: 0 `CenterAlignment`, 1 `InsideAlignment` (below) | 1 item, 576 object styles |
+
+**Corners.** The top-left corner uses the same IDs as `CornerRadius`
+and `CornerOption`. The corner option codes are 0 `None`, 0x5A15
+`RoundedCorner`, 0x5A16 `InverseRoundedCorner`, 0x5A17 `InsetCorner`,
+0x5A18 `BevelCorner` and 0x5A19 `FancyCorner`; all six occur. The
+evidence is over the items of the trustworthy pairs whose corners
+differ: each radius ID matches its own corner with no mismatch, and has
+16 to 71 mismatches against each other corner. The same IDs hold the
+corners of object styles (chunk 0x1B92B) and of the page item defaults
+(class 0x6E07): all four radii and options of `PageItemDefault` match in
+495 of 495 documents.
 
 Transparency attributes (IDs 0x108xx and 0x1EBxx) are described in
 `transparency.md`.
@@ -509,6 +522,39 @@ IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
 One public template without an IDML has a style with code 4; with no
 reference, the converter leaves out codes other than 0 and 2.
 
+### Paragraph borders and shading: corners and origins
+
+| ID | IDML | Styles with both (other than the root) |
+|---|---|---|
+| 0x1DF12 | `ParagraphShadingTopLeftCornerRadius` | 452 (126) |
+| 0x1DF14 | `ParagraphShadingBottomLeftCornerRadius` | 452 (126) |
+
+On every style other than the root the ID is present exactly when the
+IDML style has the attribute, and every value matches. The two are told
+apart by 8 styles (4.5 against 0).
+
+**Tied groups.** The IDs of each group below have the same value in
+every style, so which ID belongs to which attribute is not known. The
+converter writes a group only when all its IDs are present and equal:
+
+| IDs | IDML | Styles |
+|---|---|---|
+| 0x1DF0A–0x1DF0D | the four `ParagraphBorder…CornerRadius` | 446 (120) |
+| 0x1DF13, 0x1DF15 | `ParagraphShadingTopRightCornerRadius`, `ParagraphShadingBottomRightCornerRadius` | 444 (118) |
+| 0x1DF0E, 0x1DF10 | `ParagraphShadingTopLeftCornerOption`, `ParagraphShadingBottomLeftCornerOption` | 339 (13) |
+| 0x1DF0F, 0x1DF11 | `ParagraphShadingTopRightCornerOption`, `ParagraphShadingBottomRightCornerOption` | 331 (5) |
+
+The shading corner option codes are 0 `None`, 0x5A15 `RoundedCorner`
+and 0x5A18 `BevelCorner`.
+
+**Origins.** The two IDs of each pair always change together; the
+converter writes a pair only for these combinations of codes:
+
+| IDs | IDML | Codes → values | Styles |
+|---|---|---|---|
+| 0x1BDD, 0x1BDE | `ParagraphShadingTopOrigin`, `ParagraphShadingBottomOrigin` | 0, 0 → `AscentTopOrigin`, `DescentBottomOrigin`; 3, 2 → `EmBoxTopOrigin`, `EmBoxBottomOrigin`; 1, 1 → `BaselineTopOrigin`, `BaselineBottomOrigin` | 378, 14, 4 |
+| 0x1DF18, 0x1DF19 | `ParagraphBorderTopOrigin`, `ParagraphBorderBottomOrigin` | 0, 0 → `AscentTopOrigin`, `DescentBottomOrigin`; 3, 2 → `EmBoxTopOrigin`, `EmBoxBottomOrigin` | 325, 13 |
+
 Attributes whose value never varies in the corpus cannot be located this
 way. The converter writes the root styles' values for them from IDML
 observation (`idml-values.md`); styles and ranges inherit them. These include
@@ -521,7 +567,7 @@ attribute, because both always have the same value or appear in the same
 styles:
 
 - left and right shading offsets, left and right border offsets, and the
-  four border line weights and corner radii (equal in every sample);
+  four border line weights (equal in every sample);
 - `KeepRuleAboveInFrame` and `RuleAboveType` (always set together, with
   other attributes, in one pair);
 - `TreatIdeographicSpaceAsSpace` and `DiacriticPosition`.

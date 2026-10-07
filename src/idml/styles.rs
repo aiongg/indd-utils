@@ -352,36 +352,6 @@ impl Writer<'_> {
             }
             _ => {}
         }
-        // Per-corner values: the two IDs of each pair are equal in every
-        // sample, so the values are written only when all four agree.
-        let corners = |ids: [u32; 4]| {
-            let v: Vec<_> = ids.iter().map(|&id| os.attrs.get(id)).collect();
-            (v[0].is_some() && v.iter().all(|x| *x == v[0])).then(|| v[0].cloned())?
-        };
-        if let Some(r) = corners([0x6E70, 0x6E94, 0x6E92, 0x6E93]).and_then(|v| v.as_f64()) {
-            for name in [
-                "TopLeftCornerRadius",
-                "TopRightCornerRadius",
-                "BottomLeftCornerRadius",
-                "BottomRightCornerRadius",
-            ] {
-                attrs.push((name, num(r)));
-            }
-        }
-        let corner_option = corners([0x6E6F, 0x6E91, 0x6E8F, 0x6E90])
-            .and_then(|v| v.as_u32())
-            .and_then(|u| CORNER_OPTIONS.iter().find(|(k, _)| *k == u))
-            .map(|(_, n)| *n);
-        if let Some(o) = corner_option {
-            for name in [
-                "TopLeftCornerOption",
-                "TopRightCornerOption",
-                "BottomLeftCornerOption",
-                "BottomRightCornerOption",
-            ] {
-                attrs.push((name, o.into()));
-            }
-        }
         let mut effects = Vec::new();
         if let Some(on) = &os.enabled {
             // Each attribute is true when its category ID is in the list,

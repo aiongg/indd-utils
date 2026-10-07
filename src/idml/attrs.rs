@@ -118,6 +118,9 @@ pub(super) const CORNER_OPTIONS: &[(u32, &str)] = &[
     (0, "None"),
     (0x5A15, "RoundedCorner"),
     (0x5A16, "InverseRoundedCorner"),
+    (0x5A17, "InsetCorner"),
+    (0x5A18, "BevelCorner"),
+    (0x5A19, "FancyCorner"),
 ];
 
 /// Codes of built-in stroke styles. See `docs/format/attributes.md`.
@@ -332,6 +335,18 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (0x1BF6, "ParagraphBorderColor", Kind::Swatch, true),
     (0x1BF9, "ParagraphBorderOn", Kind::Equals(1), false),
     (0x1DF03, "ParagraphBorderTopOffset", Kind::Number, false),
+    (
+        0x1DF12,
+        "ParagraphShadingTopLeftCornerRadius",
+        Kind::Number,
+        false,
+    ),
+    (
+        0x1DF14,
+        "ParagraphShadingBottomLeftCornerRadius",
+        Kind::Number,
+        false,
+    ),
     (0x1DF04, "ParagraphBorderBottomOffset", Kind::Number, false),
     (
         0x1DF21,
@@ -372,6 +387,78 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (0x1A423, "NumberingExpression", Kind::String, false),
 ];
 
+/// Paragraph shading corner option codes.
+const SHADING_CORNERS: &[(u32, &str)] = &[
+    (0, "None"),
+    (0x5A15, "RoundedCorner"),
+    (0x5A18, "BevelCorner"),
+];
+
+/// Text attributes whose IDs have the same value in every sample, so the
+/// ID of each attribute is not known: IDs, IDML names, value kind. A group
+/// is written only when all its IDs are present with the same value. See
+/// `docs/format/attributes.md`, paragraph borders and shading.
+const TIED_TEXT_ATTRS: &[(&[u32], &[&str], Kind)] = &[
+    (
+        &[0x1DF0A, 0x1DF0B, 0x1DF0C, 0x1DF0D],
+        &[
+            "ParagraphBorderTopLeftCornerRadius",
+            "ParagraphBorderTopRightCornerRadius",
+            "ParagraphBorderBottomLeftCornerRadius",
+            "ParagraphBorderBottomRightCornerRadius",
+        ],
+        Kind::Number,
+    ),
+    (
+        &[0x1DF13, 0x1DF15],
+        &[
+            "ParagraphShadingTopRightCornerRadius",
+            "ParagraphShadingBottomRightCornerRadius",
+        ],
+        Kind::Number,
+    ),
+    (
+        &[0x1DF0E, 0x1DF10],
+        &[
+            "ParagraphShadingTopLeftCornerOption",
+            "ParagraphShadingBottomLeftCornerOption",
+        ],
+        Kind::Enum(SHADING_CORNERS),
+    ),
+    (
+        &[0x1DF0F, 0x1DF11],
+        &[
+            "ParagraphShadingTopRightCornerOption",
+            "ParagraphShadingBottomRightCornerOption",
+        ],
+        Kind::Enum(SHADING_CORNERS),
+    ),
+];
+
+/// Pairs of text attributes that change together: the two IDs, the two
+/// IDML names, and the IDML values of each known pair of codes. See
+/// `docs/format/attributes.md`, paragraph borders and shading.
+#[allow(clippy::type_complexity)]
+const PAIRED_TEXT_ATTRS: &[([u32; 2], [&str; 2], &[([u32; 2], [&str; 2])])] = &[
+    (
+        [0x1BDD, 0x1BDE],
+        ["ParagraphShadingTopOrigin", "ParagraphShadingBottomOrigin"],
+        &[
+            ([0, 0], ["AscentTopOrigin", "DescentBottomOrigin"]),
+            ([3, 2], ["EmBoxTopOrigin", "EmBoxBottomOrigin"]),
+            ([1, 1], ["BaselineTopOrigin", "BaselineBottomOrigin"]),
+        ],
+    ),
+    (
+        [0x1DF18, 0x1DF19],
+        ["ParagraphBorderTopOrigin", "ParagraphBorderBottomOrigin"],
+        &[
+            ([0, 0], ["AscentTopOrigin", "DescentBottomOrigin"]),
+            ([3, 2], ["EmBoxTopOrigin", "EmBoxBottomOrigin"]),
+        ],
+    ),
+];
+
 /// An attribute written as a `<Properties>` child: name, type, value.
 pub(super) type Property = (&'static str, &'static str, PropValue);
 
@@ -403,6 +490,18 @@ pub(super) const ITEM_ATTRS: &[(u32, &str, Kind)] = &[
     (0x6E6D, "MiterLimit", Kind::Number),
     (0x6E6F, "CornerOption", Kind::Enum(CORNER_OPTIONS)),
     (0x6E70, "CornerRadius", Kind::Number),
+    (0x6E70, "TopLeftCornerRadius", Kind::Number),
+    (0x6E94, "TopRightCornerRadius", Kind::Number),
+    (0x6E92, "BottomLeftCornerRadius", Kind::Number),
+    (0x6E93, "BottomRightCornerRadius", Kind::Number),
+    (0x6E6F, "TopLeftCornerOption", Kind::Enum(CORNER_OPTIONS)),
+    (0x6E91, "TopRightCornerOption", Kind::Enum(CORNER_OPTIONS)),
+    (0x6E8F, "BottomLeftCornerOption", Kind::Enum(CORNER_OPTIONS)),
+    (
+        0x6E90,
+        "BottomRightCornerOption",
+        Kind::Enum(CORNER_OPTIONS),
+    ),
     (0x551F, "GradientFillLength", Kind::Number),
     (0x5520, "GradientFillStart", Kind::Point),
     (0x5525, "GradientStrokeLength", Kind::Number),
@@ -595,6 +694,36 @@ impl Writer<'_> {
                 }
             }
         }
+        for &(ids, names, kind) in TIED_TEXT_ATTRS {
+            let Some(v) = attrs.get(ids[0]) else { continue };
+            if ids[1..].iter().any(|&id| attrs.get(id) != Some(v)) {
+                continue;
+            }
+            match self.value(kind, v) {
+                Some((_, PropValue::Text(text))) => {
+                    plain.extend(names.iter().map(|&n| (n, text.clone())));
+                }
+                Some(_) => {}
+                None if kind.is_code() => attrs.unknown_code(ids[0], v),
+                None => {}
+            }
+        }
+        for &(ids, names, known) in PAIRED_TEXT_ATTRS {
+            let (Some(a), Some(b)) = (attrs.get(ids[0]), attrs.get(ids[1])) else {
+                continue;
+            };
+            let codes = [a.as_u32(), b.as_u32()];
+            match known
+                .iter()
+                .find(|(c, _)| codes == [Some(c[0]), Some(c[1])])
+            {
+                Some((_, values)) => {
+                    plain.push((names[0], values[0].to_string()));
+                    plain.push((names[1], values[1].to_string()));
+                }
+                None => attrs.unknown_code(ids[0], a),
+            }
+        }
         (plain, props)
     }
 
@@ -710,6 +839,36 @@ mod tests {
         assert_eq!(stops[1][3].2, "237.5");
         // Unknown alignment code.
         assert!(tab_list(&[stop(12.0, 1, "")]).is_none());
+    }
+
+    #[test]
+    fn writes_tied_and_paired_text_attributes() {
+        let doc = Document::default();
+        let w = Writer::for_test(&doc);
+        let list = |values: Vec<(u32, Value)>| {
+            let mut a = Attrs::default();
+            a.values = values;
+            a
+        };
+        let border = [0x1DF0A, 0x1DF0B, 0x1DF0C, 0x1DF0D];
+        let (plain, _) = w.text_attrs(&list(
+            border
+                .iter()
+                .map(|&id| (id, Value::Double(4.5)))
+                .chain([(0x1BDD, Value::Enum(3)), (0x1BDE, Value::Enum(2))])
+                .collect(),
+        ));
+        assert!(plain.contains(&("ParagraphBorderBottomRightCornerRadius", "4.5".into())));
+        assert!(plain.contains(&("ParagraphShadingTopOrigin", "EmBoxTopOrigin".into())));
+        assert!(plain.contains(&("ParagraphShadingBottomOrigin", "EmBoxBottomOrigin".into())));
+        // Unequal tied values and unknown pairs are left out.
+        let (plain, _) = w.text_attrs(&list(vec![
+            (0x1DF13, Value::Double(1.0)),
+            (0x1DF15, Value::Double(2.0)),
+            (0x1BDD, Value::Enum(0)),
+            (0x1BDE, Value::Enum(2)),
+        ]));
+        assert!(plain.is_empty());
     }
 
     #[test]

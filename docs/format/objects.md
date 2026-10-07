@@ -1305,13 +1305,9 @@ counts are matches of 337 unless stated.
 
 **Attribute list.** The IDs of page items carry over. `CornerOption` 0
 is `None` and 0x5A16 `InverseRoundedCorner` (1 style). The two gradient
-angles are told apart by one style with −90 and 0. Per-corner values
-come in pairs of IDs whose order is not known: the top-left and
-top-right radius are 0x6E70 and 0x6E94, the bottom ones 0x6E92 and
-0x6E93; the options 0x6E6F and 0x6E91, and 0x6E8F and 0x6E90. The two
-of each pair are equal in every style. The converter writes the four
-corner radii, and the four corner options, only when all four values
-are equal (336 of 337 styles).
+angles are told apart by one style with −90 and 0. Each corner radius
+and corner option has its own ID, as in page items (`attributes.md`,
+corners), and the converter writes each corner from its ID.
 
 **Text frame settings (chunk 0x1B924).** 222 bytes; 162, 142 or 106 in
 files from older versions (942, 48, 66 and 61 object styles in the
