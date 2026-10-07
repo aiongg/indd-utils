@@ -98,10 +98,9 @@ impl Writer<'_> {
     /// `$ID/` first for a built-in style. Its `Self` is this name escaped
     /// with `self_name` (`docs/format/objects.md`, style groups).
     fn grouped_name(&self, uid: u32, name: &str, builtin: bool) -> String {
-        let mut parts: Vec<String> = self
-            .group_path
-            .get(&uid)
-            .map_or(Vec::new(), |p| p.iter().map(|g| g.replace(':', "\\:")).collect());
+        let mut parts: Vec<String> = self.group_path.get(&uid).map_or(Vec::new(), |p| {
+            p.iter().map(|g| g.replace(':', "\\:")).collect()
+        });
         parts.push(name.replace(':', "\\:"));
         let joined = parts.join(":");
         if builtin {
