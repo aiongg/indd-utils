@@ -17,9 +17,9 @@ documents.
 - **Published source under compatible licences may be used**, with
   attribution. The list is in "Permitted references" below.
 - **The IDML side follows Adobe's published IDML specification.**
-- **Only redistributable samples are committed.** See
-  `tests/fixtures/README.md`. Other samples stay in the git-ignored
-  `corpus/` directory.
+- **No sample files are committed.** The open-licensed test fixtures
+  are downloaded from their sources (`tests/fixtures/README.md`). Other
+  samples stay in the git-ignored `corpus/` directory.
 
 ## Method
 

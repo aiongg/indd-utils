@@ -571,7 +571,7 @@ All 486 style names and 291 `NextStyle` values in the pairs match.
 
 **Kind field.** The kind and the unidentified u16 after it can be read
 as one u32 in most files, because the second u16 is 0. The InDesign 7.5
-template in `tests/fixtures/scml-template/` (no IDML) has 1 there in 600
+template fixture `scml-template/scml.indt` (no IDML) has 1 there in 600
 of its styles: 151 have `00 00 01 00` before the flag and 449 have
 `01 00 01 00`. The 151 are all listed in the tree of the root character
 style group (chunk 0x28C2 = 0xCA0D, below) and the 449 in the tree of the

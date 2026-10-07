@@ -1,13 +1,31 @@
-//! Smoke tests on the redistributable sample files in `tests/fixtures/`.
+//! Smoke tests on the open-licensed sample files listed in
+//! `tests/fixtures/manifest.json`. `tools/fetch_fixtures.py` downloads them
+//! into the git-ignored `tests/fixtures/files/`. Each test passes without
+//! checking anything when that directory is absent.
+
+use std::path::{Path, PathBuf};
 
 use indd::{ByteOrder, Version, read_header};
 
-fn fixture(rel: &str) -> String {
-    format!("{}/tests/fixtures/{rel}", env!("CARGO_MANIFEST_DIR"))
+/// The fixture directory, or `None` (with a note) if it has not been fetched.
+fn fixtures() -> Option<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/files");
+    if root.is_dir() {
+        Some(root)
+    } else {
+        eprintln!(
+            "tests/fixtures/files/ not present; skipping \
+             (fetch with `python3 -I tools/fetch_fixtures.py`)"
+        );
+        None
+    }
 }
 
 #[test]
 fn fixture_headers() {
+    let Some(root) = fixtures() else {
+        return;
+    };
     let cases = [
         (
             "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
@@ -36,7 +54,7 @@ fn fixture_headers() {
         ),
     ];
     for (rel, order, major, minor) in cases {
-        let h = read_header(fixture(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        let h = read_header(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert_eq!(&h.kind, b"DOCUMENT", "{rel}");
         assert_eq!(h.byte_order, order, "{rel}");
         assert_eq!(h.version, Version { major, minor }, "{rel}");
@@ -45,12 +63,18 @@ fn fixture_headers() {
 
 #[test]
 fn rejects_non_indd_file() {
-    let err = read_header(fixture("opf-neddy-flyer/Neddy_Flyer_HeatherRyan.pdf")).unwrap_err();
+    let Some(root) = fixtures() else {
+        return;
+    };
+    let err = read_header(root.join("opf-neddy-flyer/Neddy_Flyer_HeatherRyan.pdf")).unwrap_err();
     assert!(matches!(err, indd::Error::NotIndd));
 }
 
 #[test]
 fn fixture_containers() {
+    let Some(root) = fixtures() else {
+        return;
+    };
     for rel in [
         "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
         "scml-template/scml.indt",
@@ -58,7 +82,7 @@ fn fixture_containers() {
         "lizdenys-minizine/indesign-minizine-template.indd",
         "xmp-toolkit-bluesquare/BlueSquare.indd",
     ] {
-        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         let c = indd::Container::parse(&bytes).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert!(c.contig_start() < bytes.len(), "{rel}");
         let xmp = c.xmp().unwrap().unwrap_or_else(|| panic!("{rel}: no XMP"));
@@ -72,6 +96,9 @@ fn fixture_containers() {
 
 #[test]
 fn fixture_objects_read() {
+    let Some(root) = fixtures() else {
+        return;
+    };
     for rel in [
         "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
         "xmp-toolkit-bluesquare/BlueSquare.indd",
@@ -79,7 +106,7 @@ fn fixture_objects_read() {
         "bootstrap3-template/bootstrap3-indesign-template.indd",
         "lizdenys-minizine/indesign-minizine-template.indd",
     ] {
-        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         let c = indd::Container::parse(&bytes).unwrap();
         let db = c.database().unwrap_or_else(|e| panic!("{rel}: {e}"));
         let mut total = 0;
@@ -92,6 +119,9 @@ fn fixture_objects_read() {
 
 #[test]
 fn big_endian_fixtures_convert() {
+    let Some(root) = fixtures() else {
+        return;
+    };
     // InDesign 3.0 and 4.0. Neither has an IDML, so check values that can
     // be seen otherwise: the flyer's print PDF shows a letter-size page and
     // these headings; BlueSquare is a letter-size page with one blue square.
@@ -124,7 +154,7 @@ fn big_endian_fixtures_convert() {
             ][..],
         ),
     ] {
-        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         let mut out = Vec::new();
         indd::convert(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert_eq!(&out[..4], b"PK\x03\x04", "{rel}");
@@ -137,12 +167,15 @@ fn big_endian_fixtures_convert() {
 
 #[test]
 fn little_endian_fixtures_convert() {
+    let Some(root) = fixtures() else {
+        return;
+    };
     for rel in [
         "scml-template/scml.indt",
         "bootstrap3-template/bootstrap3-indesign-template.indd",
         "lizdenys-minizine/indesign-minizine-template.indd",
     ] {
-        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
         let mut out = Vec::new();
         indd::convert(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
         assert_eq!(&out[..4], b"PK\x03\x04", "{rel}");
@@ -156,7 +189,10 @@ fn little_endian_fixtures_convert() {
 /// followed by a non-zero u16 (`docs/format/objects.md`, Styles).
 #[test]
 fn style_kind_is_a_u16() {
-    let bytes = std::fs::read(fixture("scml-template/scml.indt")).unwrap();
+    let Some(root) = fixtures() else {
+        return;
+    };
+    let bytes = std::fs::read(root.join("scml-template/scml.indt")).unwrap();
     let mut out = Vec::new();
     indd::convert(&bytes, "test.indd", &mut out).unwrap();
     let text = String::from_utf8_lossy(&out);

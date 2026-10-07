@@ -117,8 +117,10 @@ version.
 - `tools/compare.py --all` also converts the files without a usable IDML.
 - With `--schemas` and `--jing`, every output is validated against the
   IDML RelaxNG schemas with Jing (`tools/validate.sh`).
-- `cargo test` runs smoke tests on the open-licensed samples in
-  `tests/fixtures/` and, if `corpus/` exists, tests over the corpus.
+- `cargo test` runs smoke tests on the open-licensed samples listed in
+  `tests/fixtures/manifest.json` (fetch them first with
+  `python3 -I tools/fetch_fixtures.py`) and, if `corpus/` exists, tests
+  over the corpus.
 
 ## Current numbers
 
@@ -170,6 +172,7 @@ template.
 
 ## Development
 
+- `python3 -I tools/fetch_fixtures.py` downloads the test fixtures.
 - `cargo test`, `cargo clippy --all-targets`, `cargo fmt`.
 - `python3 -I tools/compare.py [--all] [--detail TAG --show N]
   [--schemas DIR --jing DIR]` after every change. The schemas and Jing
@@ -181,5 +184,6 @@ template.
 
 ## Licence
 
-MIT. Sample files in `tests/fixtures/` keep their own licences; see the
-README there.
+MIT. The repository contains no sample files. The test fixtures are
+downloaded from their sources and keep their own licences; see
+`tests/fixtures/README.md`.

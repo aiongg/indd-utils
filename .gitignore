@@ -2,3 +2,4 @@
 /target/
 /.thoughts/
 __pycache__/
+/tests/fixtures/files/

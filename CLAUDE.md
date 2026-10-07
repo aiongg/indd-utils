@@ -26,7 +26,11 @@ now). Licence: MIT.
 ## Layout
 
 - `src/header.rs`, `src/container.rs`: decoded layers (see `docs/format/`).
-- `tests/fixtures.rs`: smoke tests on committed open-licensed samples.
+- `tests/fixtures.rs`: smoke tests on open-licensed samples listed in
+  `tests/fixtures/manifest.json`; they skip if `tests/fixtures/files/` is
+  absent.
+- `tools/fetch_fixtures.py`: downloads the fixtures into the git-ignored
+  `tests/fixtures/files/` and checks their SHA-256.
 - `tests/corpus.rs`: tests over the local `corpus/`; they skip if absent.
 - `tools/inventory.py`: corpus inventory (`python3 -I tools/inventory.py corpus/`).
 - `tools/root_values.py [--write]`: root style values that every corpus IDML
@@ -45,6 +49,10 @@ the INDD version were probably re-saved after export; trust them less.
 ## Commands
 
 - `cargo test` (all tests), `cargo clippy --all-targets`, `cargo fmt`.
+- `python3 -I tools/fetch_fixtures.py`: fetch the fixture files before
+  `cargo test`. To add a fixture, add its pinned URL, size and SHA-256 to
+  `tests/fixtures/manifest.json` and its licence and source to
+  `tests/fixtures/README.md`.
 - `cargo run -q -- info <file>`, `indd convert in.indd out.idml`,
   `indd objects <file>`, `indd dump <file> <uid>...`.
 - `python3 -I tools/compare.py [--detail TAG --show N]`: convert every

@@ -2,13 +2,13 @@
 
 Two sample files store their objects big-endian (byte order flag 2, see
 `header.md`): `opf-neddy-flyer` (InDesign 3.0) and `xmp-toolkit-bluesquare`
-(InDesign 4.0), both in `tests/fixtures/`. They are also the only samples
-from before InDesign 7.0, so some of their object layouts differ from the
+(InDesign 4.0), both test fixtures (`tests/fixtures/README.md`). They are
+also the only samples from before InDesign 7.0, so some of their object layouts differ from the
 rest of the corpus for reasons of version rather than byte order. Both
 kinds of difference are described here.
 
 Neither file has an IDML. The facts below rest on the files' internal
-consistency, on the flyer's print PDF (in the fixture directory), and on
+consistency, on the flyer's print PDF (also a fixture), and on
 comparison with the layouts in the other documents of `docs/format/`.
 Implemented in `src/object.rs` (byte order) and `src/model/`.
 
