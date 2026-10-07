@@ -226,3 +226,107 @@ impl<'a> Reader<'a> {
         out
     }
 }
+
+impl<'a> Reader<'a> {
+    /// A root style group (the root of paragraph and character, object,
+    /// cell or table styles): its kind (chunk 0x28C2) and children.
+    pub(super) fn style_root_group(&self, uid: u32) -> Result<StyleGroup, Error> {
+        let kind = match self.chunk(uid, chunk::ROOT_GROUP_KIND)? {
+            Some(d) => Cursor::new(&d).u32()?,
+            None => 0,
+        };
+        let mut children = Vec::new();
+        for id in [
+            chunk::STYLE_ROOT_CHILDREN,
+            chunk::OBJECT_STYLE_ROOT_CHILDREN,
+            table::chunk::CELL_STYLE_ROOT_CHILDREN,
+            table::chunk::TABLE_STYLE_ROOT_CHILDREN,
+        ] {
+            if children.is_empty() {
+                children = self.children(uid, id)?;
+            }
+        }
+        Ok(StyleGroup {
+            uid,
+            name: String::new(),
+            root: Some(kind),
+            children,
+        })
+    }
+
+    /// A named style group: a flag byte and the name, and its children.
+    pub(super) fn style_group(&self, uid: u32) -> Result<StyleGroup, Error> {
+        let name = match self.chunk(uid, chunk::STYLE_GROUP_NAME)? {
+            Some(d) if d.len() > 1 => {
+                let mut c = Cursor::new(&d);
+                c.flag()?;
+                c.string()?
+            }
+            _ => String::new(),
+        };
+        let children = self.children(uid, chunk::STYLE_GROUP_CHILDREN)?;
+        Ok(StyleGroup {
+            uid,
+            name,
+            root: None,
+            children,
+        })
+    }
+
+    /// An object style. `None` if it has no info chunk (based-on style,
+    /// flag byte and name).
+    pub(super) fn object_style(&self, uid: u32) -> Result<Option<ObjectStyle>, Error> {
+        let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? else {
+            return Ok(None);
+        };
+        let mut c = Cursor::new(&d);
+        let based_on = c.u32()?;
+        let builtin = c.flag()? == 1;
+        let name = c.string()?;
+        let u32_chunk = |id: u32| -> Result<Option<u32>, Error> {
+            match self.chunk(uid, id)? {
+                Some(d) if d.len() >= 4 => Ok(Some(Cursor::new(&d).u32()?)),
+                _ => Ok(None),
+            }
+        };
+        Ok(Some(ObjectStyle {
+            uid,
+            name,
+            builtin,
+            based_on: uid_or_none(based_on),
+            fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
+                Some(d) => Attrs::parse_short(&d, List::ObjectStyleFitting).unwrap_or_default(),
+                None => Attrs::default(),
+            },
+            attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
+                Some(d) => Attrs::parse_short(&d, List::ObjectStyle).unwrap_or_default(),
+                None => Attrs::default(),
+            },
+            // The layout is known for these sizes only
+            // (`docs/format/big-endian.md`).
+            frame: match self.chunk(uid, chunk::OBJECT_STYLE_FRAME)? {
+                Some(d) if !matches!(d.len(), 106 | 142 | 162 | 222) => {
+                    self.warn(format!(
+                        "object style {uid}: text frame settings of {} bytes are not known; left out",
+                        d.len()
+                    ));
+                    None
+                }
+                d => d,
+            },
+            story: self.chunk(uid, chunk::OBJECT_STYLE_STORY)?,
+            direction: match self.chunk(uid, chunk::OBJECT_STYLE_DIRECTION)? {
+                Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
+                _ => None,
+            },
+            text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
+            contour_type: u32_chunk(chunk::OBJECT_STYLE_CONTOUR)?,
+            enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
+                Some(d) => Some(Cursor::new(&d).u32_list()?),
+                None => None,
+            },
+            paragraph_style: u32_chunk(chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?,
+            anchor: self.chunk(uid, chunk::ANCHOR_SETTINGS)?,
+        }))
+    }
+}

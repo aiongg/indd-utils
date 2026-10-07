@@ -85,395 +85,184 @@ pub struct Document {
     pub xml: XmlStructure,
 }
 
+/// The objects read from the class list, before they are put together
+/// into the `Document`.
+#[derive(Default)]
+struct ClassObjects {
+    styles: BTreeMap<u32, Style>,
+    colors: Vec<Color>,
+    tints: Vec<Tint>,
+    gradients: Vec<Gradient>,
+    swatches: BTreeMap<u32, String>,
+    fonts: BTreeMap<u32, FontFamily>,
+    languages: BTreeMap<u32, String>,
+    language_list: Vec<Language>,
+    style_groups: BTreeMap<u32, StyleGroup>,
+    object_styles: BTreeMap<u32, ObjectStyle>,
+    cell_styles: BTreeMap<u32, TableStyle>,
+    table_styles: BTreeMap<u32, TableStyle>,
+    text_variables: Vec<TextVariable>,
+    hyperlinks: Vec<Hyperlink>,
+    text_sources: BTreeMap<u32, TextSource>,
+    destinations: Vec<Destination>,
+    bookmarks: BTreeMap<u32, Bookmark>,
+    cross_reference_formats: BTreeMap<u32, CrossReferenceFormat>,
+    /// Composite fonts: UID, name and entry UIDs.
+    composite_fonts: Vec<(u32, String, Vec<u32>)>,
+    composite_entries: HashMap<u32, CompositeFontEntry>,
+    cjk_tables: Vec<CjkTable>,
+    xml_tags: Vec<(String, Option<[f64; 3]>)>,
+    xml_tag_names: HashMap<u32, String>,
+    inks: Vec<Ink>,
+    color_groups: HashMap<u32, ColorGroup>,
+}
+
+/// The UID of the document object.
+const DOC: u32 = 1;
+
 impl<'a> Reader<'a> {
+    /// Read the document object and every class the converter knows.
+    /// An object that cannot be read is left out with a warning; the
+    /// warnings are in `Document::warnings`.
     pub fn document(&self, version: Version) -> Result<Document, Error> {
-        let doc = 1;
         let layers = self
-            .uid_list(doc, chunk::DOC_LAYERS)?
+            .uid_list(DOC, chunk::DOC_LAYERS)?
             .into_iter()
             .map(|uid| self.layer(uid))
             .collect::<Result<Vec<_>, _>>()?;
         let active_layer = self
-            .chunk(doc, chunk::DOC_ACTIVE_LAYER)?
+            .chunk(DOC, chunk::DOC_ACTIVE_LAYER)?
             .map(|d| Cursor::new(&d).u32())
             .transpose()?;
+        let (spreads, master_spreads) = self.document_spreads()?;
+        let stories = self.document_stories()?;
+        let mut objects = self.class_objects()?;
+        let xml_story = self.xml_story()?;
+        let mut stories = stories;
+        for story in &mut stories {
+            story.orientation = self.story_orientation(story.uid);
+        }
+        let xml = XmlStructure {
+            story: xml_story,
+            elements: self.xml_elements(&objects.xml_tag_names)?,
+        };
+        let tints = self.tints(&mut objects);
+        prune_style_groups(&mut objects.style_groups, |m| self.warn(m));
+        let preferences = self.document_preferences()?;
+        let prefs = self.prefs(version.major)?;
+        let toc_styles = self.toc_styles();
+        let named_grids = self.named_grids();
+        let index_groups = self.index_groups();
+        let constant_shade = self.constant_shade();
+        let assignments = self.assignments();
+        let users = self.users(DOC).unwrap_or_else(|e| {
+            self.warn(format!("document users left out: {e}"));
+            Vec::new()
+        });
+        let sections = self
+            .uid_list(DOC, chunk::DOC_SECTIONS)?
+            .into_iter()
+            .map(|uid| self.section(uid))
+            .collect::<Result<Vec<_>, _>>()?;
+        let bookmark_order = match self.chunk(DOC, hyperlink::chunk::DOCUMENT_LISTS)? {
+            Some(d) => hyperlink::document_bookmarks(&d, version.major)?,
+            None => Vec::new(),
+        };
+        let composite_fonts = objects
+            .composite_fonts
+            .into_iter()
+            .map(|(uid, name, entries)| CompositeFont {
+                uid,
+                name,
+                entries: entries
+                    .iter()
+                    .filter_map(|e| objects.composite_entries.get(e).cloned())
+                    .collect(),
+            })
+            .collect();
+        let color_groups = self
+            .color_group_order()?
+            .into_iter()
+            .filter_map(|u| objects.color_groups.remove(&u))
+            .collect();
+        let bullets = self.bullets()?;
+        Ok(Document {
+            version,
+            layers,
+            active_layer,
+            spreads,
+            master_spreads,
+            stories,
+            styles: objects.styles,
+            colors: objects.colors,
+            tints,
+            gradients: objects.gradients,
+            swatches: objects.swatches,
+            fonts: objects.fonts,
+            languages: objects.languages,
+            language_list: objects.language_list,
+            toc_styles,
+            named_grids,
+            index_groups,
+            constant_shade,
+            assignments,
+            style_groups: objects.style_groups,
+            object_styles: objects.object_styles,
+            cell_styles: objects.cell_styles,
+            table_styles: objects.table_styles,
+            users,
+            sections,
+            text_variables: objects.text_variables,
+            hyperlinks: objects.hyperlinks,
+            text_sources: objects.text_sources,
+            destinations: objects.destinations,
+            bookmarks: objects.bookmarks,
+            bookmark_order,
+            cross_reference_formats: objects.cross_reference_formats,
+            preferences,
+            prefs,
+            composite_fonts,
+            cjk_tables: objects.cjk_tables,
+            inks: objects.inks,
+            color_groups,
+            bullets,
+            xml_tags: objects.xml_tags,
+            xml,
+            // Last, so that it holds every warning of the model.
+            warnings: self.warnings.borrow().clone(),
+        })
+    }
+
+    /// The spreads and master spreads of the document, with the page
+    /// layout of each page resolved.
+    fn document_spreads(&self) -> Result<(Vec<Spread>, Vec<Spread>), Error> {
         let mut spreads = self
-            .uid_list(doc, chunk::DOC_SPREADS)?
+            .uid_list(DOC, chunk::DOC_SPREADS)?
             .into_iter()
             .map(|uid| self.spread(uid))
             .collect::<Result<Vec<_>, _>>()?;
         let mut master_spreads = self
-            .uid_list(doc, chunk::DOC_MASTER_SPREADS)?
+            .uid_list(DOC, chunk::DOC_MASTER_SPREADS)?
             .into_iter()
             .map(|uid| self.spread(uid))
             .collect::<Result<Vec<_>, _>>()?;
         resolve_page_layout(&mut spreads, &mut master_spreads);
-        let stories = self
-            .uid_list(doc, chunk::DOC_STORIES)?
+        Ok((spreads, master_spreads))
+    }
+
+    /// The stories the document lists.
+    fn document_stories(&self) -> Result<Vec<Story>, Error> {
+        self.uid_list(DOC, chunk::DOC_STORIES)?
             .into_iter()
             .filter(|&uid| self.class(uid) == Some(class::STORY))
             .map(|uid| self.story(uid))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut styles = BTreeMap::new();
-        let mut colors = Vec::new();
-        let mut tint_objects = Vec::new();
-        let mut gradients = Vec::new();
-        let mut swatches = BTreeMap::new();
-        let mut fonts = BTreeMap::new();
-        let mut languages = BTreeMap::new();
-        let mut language_list = Vec::new();
-        let mut style_groups = BTreeMap::new();
-        let mut object_styles = BTreeMap::new();
-        let mut cell_styles = BTreeMap::new();
-        let mut table_styles = BTreeMap::new();
-        let mut text_variables = Vec::new();
-        let mut hyperlinks = Vec::new();
-        let mut text_sources = BTreeMap::new();
-        let mut destinations = Vec::new();
-        let mut bookmarks = BTreeMap::new();
-        let mut cross_reference_formats = BTreeMap::new();
-        let mut composite_fonts = Vec::new();
-        let mut composite_entries = HashMap::new();
-        let mut cjk_tables = Vec::new();
-        let mut xml_tags = Vec::new();
-        let mut xml_tag_names = HashMap::new();
-        let mut inks = Vec::new();
-        let mut color_groups = HashMap::new();
-        for &(uid, cls) in self.db.classes() {
-            if self.db.object(uid)?.is_none() {
-                continue;
-            }
-            // An object that cannot be read is left out with a warning.
-            let read = (|| -> Result<(), Error> {
-                match cls {
-                    class::STYLE_ROOT_GROUP
-                    | class::OBJECT_STYLE_ROOT_GROUP
-                    | class::CELL_STYLE_ROOT_GROUP
-                    | class::TABLE_STYLE_ROOT_GROUP => {
-                        let kind = match self.chunk(uid, chunk::ROOT_GROUP_KIND)? {
-                            Some(d) => Cursor::new(&d).u32()?,
-                            None => 0,
-                        };
-                        let mut children = Vec::new();
-                        for id in [
-                            chunk::STYLE_ROOT_CHILDREN,
-                            chunk::OBJECT_STYLE_ROOT_CHILDREN,
-                            table::chunk::CELL_STYLE_ROOT_CHILDREN,
-                            table::chunk::TABLE_STYLE_ROOT_CHILDREN,
-                        ] {
-                            if children.is_empty() {
-                                children = self.children(uid, id)?;
-                            }
-                        }
-                        style_groups.insert(
-                            uid,
-                            StyleGroup {
-                                uid,
-                                name: String::new(),
-                                root: Some(kind),
-                                children,
-                            },
-                        );
-                    }
-                    class::STYLE_GROUP => {
-                        let name = match self.chunk(uid, chunk::STYLE_GROUP_NAME)? {
-                            Some(d) if d.len() > 1 => {
-                                let mut c = Cursor::new(&d);
-                                c.flag()?;
-                                c.string()?
-                            }
-                            _ => String::new(),
-                        };
-                        let children = self.children(uid, chunk::STYLE_GROUP_CHILDREN)?;
-                        style_groups.insert(
-                            uid,
-                            StyleGroup {
-                                uid,
-                                name,
-                                root: None,
-                                children,
-                            },
-                        );
-                    }
-                    class::OBJECT_STYLE => {
-                        if let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? {
-                            let mut c = Cursor::new(&d);
-                            let based_on = c.u32()?;
-                            let builtin = c.flag()? == 1;
-                            let name = c.string()?;
-                            object_styles.insert(
-                                uid,
-                                ObjectStyle {
-                                    uid,
-                                    name,
-                                    builtin,
-                                    based_on: uid_or_none(based_on),
-                                    fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
-                                        Some(d) => Attrs::parse_short(&d, List::ObjectStyleFitting)
-                                            .unwrap_or_default(),
-                                        None => Attrs::default(),
-                                    },
-                                    attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
-                                        Some(d) => Attrs::parse_short(&d, List::ObjectStyle)
-                                            .unwrap_or_default(),
-                                        None => Attrs::default(),
-                                    },
-                                    // The layout is known for these sizes
-                                    // only (`docs/format/big-endian.md`).
-                                    frame: match self.chunk(uid, chunk::OBJECT_STYLE_FRAME)? {
-                                        Some(d) if !matches!(d.len(), 106 | 142 | 162 | 222) => {
-                                            self.warn(format!(
-                                                "object style {uid}: text frame settings of {} bytes are not known; left out",
-                                                d.len()
-                                            ));
-                                            None
-                                        }
-                                        d => d,
-                                    },
-                                    story: self.chunk(uid, chunk::OBJECT_STYLE_STORY)?,
-                                    direction: match self
-                                        .chunk(uid, chunk::OBJECT_STYLE_DIRECTION)?
-                                    {
-                                        Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
-                                        _ => None,
-                                    },
-                                    text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
-                                    contour_type: match self
-                                        .chunk(uid, chunk::OBJECT_STYLE_CONTOUR)?
-                                    {
-                                        Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
-                                        _ => None,
-                                    },
-                                    enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
-                                        Some(d) => Some(Cursor::new(&d).u32_list()?),
-                                        None => None,
-                                    },
-                                    paragraph_style: match self
-                                        .chunk(uid, chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?
-                                    {
-                                        Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
-                                        _ => None,
-                                    },
-                                    anchor: self.chunk(uid, chunk::ANCHOR_SETTINGS)?,
-                                },
-                            );
-                        }
-                    }
-                    class::STYLE => {
-                        if let Some(style) = self.style(uid)? {
-                            styles.insert(uid, style);
-                        }
-                    }
-                    table::class::CELL_STYLE => {
-                        if let Some(s) = self.table_style(uid, table::chunk::CELL_STYLE_ATTRS)? {
-                            cell_styles.insert(uid, s);
-                        }
-                    }
-                    table::class::TABLE_STYLE => {
-                        if let Some(s) = self.table_style(uid, table::chunk::TABLE_STYLE_ATTRS)? {
-                            table_styles.insert(uid, s);
-                        }
-                    }
-                    color::class::COLOR => {
-                        if self.db.object(uid)?.is_none() {
-                            return Ok(());
-                        }
-                        let obj = self.object(uid)?;
-                        if let Some(c) = Color::read(uid, &obj)? {
-                            if c.model_name().is_none() {
-                                self.warn(format!(
-                                    "colour {uid}: colour model code {} is not known; left out",
-                                    c.model
-                                ));
-                            }
-                            swatches.insert(uid, c.reference());
-                            colors.push(c);
-                        } else if let Some(t) = Tint::read(uid, &obj)? {
-                            tint_objects.push(t);
-                        }
-                    }
-                    color::class::SWATCH_NONE => {
-                        swatches.insert(uid, "Swatch/None".into());
-                    }
-                    color::class::GRADIENT => {
-                        if let Some(g) = Gradient::read(uid, &*self.object(uid)?)? {
-                            for i in 1..g.stops.len() {
-                                if g.idml_midpoint(i).is_none() {
-                                    self.warn(format!(
-                                        "gradient {uid}: midpoint before stop {i} is not \
-                                         within 13–87 %; left out"
-                                    ));
-                                }
-                            }
-                            swatches.insert(uid, g.reference());
-                            gradients.push(g);
-                        }
-                    }
-                    class::FONT_FAMILY => match FontFamily::read(uid, &*self.object(uid)?) {
-                        Ok(Some(f)) => {
-                            if i32::try_from(f.writing_script).is_err() {
-                                self.warn(format!(
-                                    "font family {uid}: writing script {:#x} is not an IDML \
-                                     integer; left out",
-                                    f.writing_script
-                                ));
-                            }
-                            fonts.insert(uid, f);
-                        }
-                        Ok(None) => {}
-                        // Keep the name, which text formatting refers to.
-                        Err(e) => {
-                            self.warn(format!("font family {uid}: fonts left out: {e}"));
-                            if let Some(d) = self.chunk(uid, font::chunk::FAMILY)? {
-                                fonts.insert(
-                                    uid,
-                                    FontFamily {
-                                        uid,
-                                        name: find_string(&d, 0)?,
-                                        fonts: Vec::new(),
-                                        writing_script: 0,
-                                    },
-                                );
-                            }
-                        }
-                    },
-                    class::TEXT_VARIABLE => {
-                        if let Some(v) = TextVariable::read(uid, &*self.object(uid)?)? {
-                            text_variables.push(v);
-                        }
-                    }
-                    hyperlink::class::HYPERLINK => {
-                        if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?)? {
-                            hyperlinks.push(h);
-                        }
-                    }
-                    hyperlink::class::TEXT_SOURCE => {
-                        if let Some(s) = TextSource::read(uid, &*self.object(uid)?)? {
-                            text_sources.insert(uid, s);
-                        }
-                    }
-                    hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
-                        if let Some(d) = Destination::read(uid, cls, &*self.object(uid)?)? {
-                            if let hyperlink::DestinationKind::Page { zoom: None, .. } = d.kind {
-                                self.warn(format!(
-                                    "destination {uid}: view zoom is outside 5–4000 %; left out"
-                                ));
-                            }
-                            destinations.push(d);
-                        }
-                    }
-                    xref::CLASS => {
-                        if let Some(f) = CrossReferenceFormat::read(uid, &*self.object(uid)?)? {
-                            cross_reference_formats.insert(uid, f);
-                        }
-                    }
-                    hyperlink::class::BOOKMARK => {
-                        if let Some(b) = Bookmark::read(uid, &*self.object(uid)?)? {
-                            bookmarks.insert(uid, b);
-                        }
-                    }
-                    cjk::class::COMPOSITE_FONT => {
-                        if let Some((name, entries)) = CompositeFont::read(&*self.object(uid)?)? {
-                            composite_fonts.push((uid, name, entries));
-                        }
-                    }
-                    cjk::class::COMPOSITE_FONT_ENTRY => {
-                        if let Some(e) = CompositeFontEntry::read(uid, &*self.object(uid)?)? {
-                            composite_entries.insert(uid, e);
-                        }
-                    }
-                    c if c == cjk::class::MOJIKUMI || cjk::class::KINSOKU.contains(&c) => {
-                        if let Some(t) = CjkTable::read(uid, c, &*self.object(uid)?)? {
-                            cjk_tables.push(t);
-                        }
-                    }
-                    color::class::INK => {
-                        if let Some(i) = Ink::read(uid, &*self.object(uid)?)? {
-                            if i.neutral_density.is_none() {
-                                self.warn(format!(
-                                    "ink {uid}: neutral density is outside 0.001–10; left out"
-                                ));
-                            }
-                            inks.push(i);
-                        }
-                    }
-                    color::class::COLOR_GROUP => {
-                        if let Some(g) = ColorGroup::read(uid, &*self.object(uid)?)? {
-                            color_groups.insert(uid, g);
-                        }
-                    }
-                    class::XML_TAG => {
-                        // Chunk 0xBF2F: u32 length, then the name as text
-                        // segments; chunk 0x117: the UID of the tag's colour.
-                        if let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? {
-                            let mut c = Cursor::new(&d);
-                            let n = c.u32()? as usize;
-                            // Files from InDesign 2.0 to 4.0 hold a flag byte and
-                            // an in-object string instead.
-                            let name = match c.segments(n) {
-                                Ok(name) => name,
-                                Err(_) => {
-                                    let mut c = Cursor::new(&d);
-                                    c.flag()?;
-                                    c.string()?
-                                }
-                            };
-                            let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
-                                Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
-                                _ => None,
-                            };
-                            xml_tag_names.insert(uid, name.clone());
-                            xml_tags.push((name, color));
-                        }
-                    }
-                    class::LANGUAGE => {
-                        if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
-                            && d.len() > 1
-                        {
-                            let mut c = Cursor::new(&d);
-                            c.flag()?;
-                            let name = c.string()?;
-                            languages.insert(uid, name.clone());
-                            // Then the primary and secondary names, u16
-                            // ID, and two vendors (flag, u32, string).
-                            let rest = (|| -> Result<_, Error> {
-                                c.flag()?;
-                                let primary = c.string()?;
-                                c.flag()?;
-                                let sub = c.string()?;
-                                let id = c.u16()?;
-                                let mut vendor = || -> Result<(u8, String), Error> {
-                                    let flag = c.u8()?;
-                                    c.u32()?;
-                                    Ok((flag, c.string()?))
-                                };
-                                let spelling = vendor()?;
-                                let hyphenation = vendor()?;
-                                Ok((primary, sub, id, [spelling, hyphenation]))
-                            })();
-                            if let Ok((primary, sub, id, vendors)) = rest {
-                                language_list.push(Language {
-                                    uid,
-                                    name,
-                                    primary,
-                                    sub,
-                                    id,
-                                    vendors: Some(vendors),
-                                });
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-                Ok(())
-            })();
-            if let Err(e) = read {
-                self.warn(format!("object {uid} (class {cls:#x}) left out: {e}"));
-            }
-        }
-        // The backing story: the document's chunk 0xBF14 names it and the
-        // document node.
-        let xml_story = match self.chunk(doc, xml::chunk::NODE_REF)? {
+            .collect()
+    }
+
+    /// The backing story of the XML structure: the document's chunk
+    /// 0xBF14 names it and the document node.
+    fn xml_story(&self) -> Result<Option<Story>, Error> {
+        Ok(match self.chunk(DOC, xml::chunk::NODE_REF)? {
             Some(d) if d.len() >= 4 => {
                 let s = Cursor::new(&d).u32()?;
                 match self.class(s) {
@@ -482,24 +271,258 @@ impl<'a> Reader<'a> {
                 }
             }
             _ => None,
-        };
-        let mut stories = stories;
-        for story in &mut stories {
-            story.orientation = self.story_orientation(story.uid);
+        })
+    }
+
+    /// Assignment objects (class 0x1BE01), in UID order.
+    fn assignments(&self) -> Vec<u32> {
+        let mut a: Vec<u32> = self
+            .db
+            .classes()
+            .iter()
+            .filter(|&&(_, c)| c == class::ASSIGNMENT)
+            .map(|&(u, _)| u)
+            .collect();
+        a.sort_unstable();
+        a
+    }
+
+    /// Read every object of the class list whose class the converter
+    /// knows. An object that cannot be read is left out with a warning.
+    fn class_objects(&self) -> Result<ClassObjects, Error> {
+        let mut out = ClassObjects::default();
+        for &(uid, cls) in self.db.classes() {
+            if self.db.object(uid)?.is_none() {
+                continue;
+            }
+            if let Err(e) = self.class_object(&mut out, uid, cls) {
+                self.warn(format!("object {uid} (class {cls:#x}) left out: {e}"));
+            }
         }
-        let xml = XmlStructure {
-            story: xml_story,
-            elements: self.xml_elements(&xml_tag_names)?,
+        Ok(out)
+    }
+
+    /// Read one object of the class list into `out`.
+    fn class_object(&self, out: &mut ClassObjects, uid: u32, cls: u32) -> Result<(), Error> {
+        match cls {
+            class::STYLE_ROOT_GROUP
+            | class::OBJECT_STYLE_ROOT_GROUP
+            | class::CELL_STYLE_ROOT_GROUP
+            | class::TABLE_STYLE_ROOT_GROUP => {
+                out.style_groups.insert(uid, self.style_root_group(uid)?);
+            }
+            class::STYLE_GROUP => {
+                out.style_groups.insert(uid, self.style_group(uid)?);
+            }
+            class::OBJECT_STYLE => {
+                if let Some(s) = self.object_style(uid)? {
+                    out.object_styles.insert(uid, s);
+                }
+            }
+            class::STYLE => {
+                if let Some(style) = self.style(uid)? {
+                    out.styles.insert(uid, style);
+                }
+            }
+            table::class::CELL_STYLE => {
+                if let Some(s) = self.table_style(uid, table::chunk::CELL_STYLE_ATTRS)? {
+                    out.cell_styles.insert(uid, s);
+                }
+            }
+            table::class::TABLE_STYLE => {
+                if let Some(s) = self.table_style(uid, table::chunk::TABLE_STYLE_ATTRS)? {
+                    out.table_styles.insert(uid, s);
+                }
+            }
+            color::class::COLOR => self.color_object(out, uid)?,
+            color::class::SWATCH_NONE => {
+                out.swatches.insert(uid, "Swatch/None".into());
+            }
+            color::class::GRADIENT => {
+                if let Some(g) = self.gradient(uid)? {
+                    out.swatches.insert(uid, g.reference());
+                    out.gradients.push(g);
+                }
+            }
+            class::FONT_FAMILY => {
+                if let Some(f) = self.font_family(uid)? {
+                    out.fonts.insert(uid, f);
+                }
+            }
+            class::TEXT_VARIABLE => {
+                if let Some(v) = TextVariable::read(uid, &*self.object(uid)?)? {
+                    out.text_variables.push(v);
+                }
+            }
+            hyperlink::class::HYPERLINK => {
+                if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?)? {
+                    out.hyperlinks.push(h);
+                }
+            }
+            hyperlink::class::TEXT_SOURCE => {
+                if let Some(s) = TextSource::read(uid, &*self.object(uid)?)? {
+                    out.text_sources.insert(uid, s);
+                }
+            }
+            hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
+                if let Some(d) = self.destination(uid, cls)? {
+                    out.destinations.push(d);
+                }
+            }
+            xref::CLASS => {
+                if let Some(f) = CrossReferenceFormat::read(uid, &*self.object(uid)?)? {
+                    out.cross_reference_formats.insert(uid, f);
+                }
+            }
+            hyperlink::class::BOOKMARK => {
+                if let Some(b) = Bookmark::read(uid, &*self.object(uid)?)? {
+                    out.bookmarks.insert(uid, b);
+                }
+            }
+            cjk::class::COMPOSITE_FONT => {
+                if let Some((name, entries)) = CompositeFont::read(&*self.object(uid)?)? {
+                    out.composite_fonts.push((uid, name, entries));
+                }
+            }
+            cjk::class::COMPOSITE_FONT_ENTRY => {
+                if let Some(e) = CompositeFontEntry::read(uid, &*self.object(uid)?)? {
+                    out.composite_entries.insert(uid, e);
+                }
+            }
+            c if c == cjk::class::MOJIKUMI || cjk::class::KINSOKU.contains(&c) => {
+                if let Some(t) = CjkTable::read(uid, c, &*self.object(uid)?)? {
+                    out.cjk_tables.push(t);
+                }
+            }
+            color::class::INK => {
+                if let Some(i) = self.ink(uid)? {
+                    out.inks.push(i);
+                }
+            }
+            color::class::COLOR_GROUP => {
+                if let Some(g) = ColorGroup::read(uid, &*self.object(uid)?)? {
+                    out.color_groups.insert(uid, g);
+                }
+            }
+            class::XML_TAG => {
+                if let Some((name, color)) = self.xml_tag(uid)? {
+                    out.xml_tag_names.insert(uid, name.clone());
+                    out.xml_tags.push((name, color));
+                }
+            }
+            class::LANGUAGE => {
+                if let Some((name, language)) = self.language(uid)? {
+                    out.languages.insert(uid, name);
+                    out.language_list.extend(language);
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// A colour object (class 0x200): a colour or a tint.
+    fn color_object(&self, out: &mut ClassObjects, uid: u32) -> Result<(), Error> {
+        let obj = self.object(uid)?;
+        if let Some(c) = Color::read(uid, &obj)? {
+            if c.model_name().is_none() {
+                self.warn(format!(
+                    "colour {uid}: colour model code {} is not known; left out",
+                    c.model
+                ));
+            }
+            out.swatches.insert(uid, c.reference());
+            out.colors.push(c);
+        } else if let Some(t) = Tint::read(uid, &obj)? {
+            out.tints.push(t);
+        }
+        Ok(())
+    }
+
+    /// A gradient, with a warning for each midpoint IDML cannot hold.
+    fn gradient(&self, uid: u32) -> Result<Option<Gradient>, Error> {
+        let Some(g) = Gradient::read(uid, &*self.object(uid)?)? else {
+            return Ok(None);
         };
+        for i in 1..g.stops.len() {
+            if g.idml_midpoint(i).is_none() {
+                self.warn(format!(
+                    "gradient {uid}: midpoint before stop {i} is not \
+                     within 13–87 %; left out"
+                ));
+            }
+        }
+        Ok(Some(g))
+    }
+
+    /// A font family. If its fonts cannot be read, the family keeps its
+    /// name, which text formatting refers to.
+    fn font_family(&self, uid: u32) -> Result<Option<FontFamily>, Error> {
+        match FontFamily::read(uid, &*self.object(uid)?) {
+            Ok(Some(f)) => {
+                if i32::try_from(f.writing_script).is_err() {
+                    self.warn(format!(
+                        "font family {uid}: writing script {:#x} is not an IDML \
+                         integer; left out",
+                        f.writing_script
+                    ));
+                }
+                Ok(Some(f))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => {
+                self.warn(format!("font family {uid}: fonts left out: {e}"));
+                Ok(match self.chunk(uid, font::chunk::FAMILY)? {
+                    Some(d) => Some(FontFamily {
+                        uid,
+                        name: find_string(&d, 0)?,
+                        fonts: Vec::new(),
+                        writing_script: 0,
+                    }),
+                    None => None,
+                })
+            }
+        }
+    }
+
+    /// A page or URL destination.
+    fn destination(&self, uid: u32, cls: u32) -> Result<Option<Destination>, Error> {
+        let d = Destination::read(uid, cls, &*self.object(uid)?)?;
+        if let Some(hyperlink::DestinationKind::Page { zoom: None, .. }) =
+            d.as_ref().map(|d| &d.kind)
+        {
+            self.warn(format!(
+                "destination {uid}: view zoom is outside 5–4000 %; left out"
+            ));
+        }
+        Ok(d)
+    }
+
+    /// An ink, with a warning if its neutral density cannot be written.
+    fn ink(&self, uid: u32) -> Result<Option<Ink>, Error> {
+        let i = Ink::read(uid, &*self.object(uid)?)?;
+        if i.as_ref().is_some_and(|i| i.neutral_density.is_none()) {
+            self.warn(format!(
+                "ink {uid}: neutral density is outside 0.001–10; left out"
+            ));
+        }
+        Ok(i)
+    }
+
+    /// The tint swatches, with their IDML reference and name. Each tint
+    /// is added to `objects.swatches`; a tint whose base colour has no
+    /// name is left out with a warning.
+    fn tints(&self, objects: &mut ClassObjects) -> Vec<(Tint, String, String)> {
         let mut tints = Vec::new();
-        for t in tint_objects {
-            match colors
+        for t in std::mem::take(&mut objects.tints) {
+            match objects
+                .colors
                 .iter()
                 .find(|c| c.uid == t.base && !c.name.is_empty())
             {
                 Some(base) => {
                     let reference = t.reference(base);
-                    swatches.insert(t.uid, reference.clone());
+                    objects.swatches.insert(t.uid, reference.clone());
                     tints.push((t.clone(), reference, t.idml_name(base)));
                 }
                 None => self.warn(format!(
@@ -508,86 +531,32 @@ impl<'a> Reader<'a> {
                 )),
             }
         }
-        prune_style_groups(&mut style_groups, |m| self.warn(m));
-        let preferences = self.document_preferences()?;
-        let prefs = self.prefs(version.major)?;
-        Ok(Document {
-            version,
-            layers,
-            active_layer,
-            spreads,
-            master_spreads,
-            stories,
-            styles,
-            colors,
-            tints,
-            gradients,
-            swatches,
-            fonts,
-            languages,
-            language_list,
-            toc_styles: self.toc_styles(),
-            named_grids: self.named_grids(),
-            index_groups: self.index_groups(),
-            constant_shade: self.constant_shade(),
-            assignments: {
-                let mut a: Vec<u32> = self
-                    .db
-                    .classes()
-                    .iter()
-                    .filter(|&&(_, c)| c == class::ASSIGNMENT)
-                    .map(|&(u, _)| u)
-                    .collect();
-                a.sort_unstable();
-                a
-            },
-            style_groups,
-            object_styles,
-            cell_styles,
-            table_styles,
-            users: self.users(doc).unwrap_or_else(|e| {
-                self.warn(format!("document users left out: {e}"));
-                Vec::new()
-            }),
-            sections: self
-                .uid_list(doc, chunk::DOC_SECTIONS)?
-                .into_iter()
-                .map(|uid| self.section(uid))
-                .collect::<Result<Vec<_>, _>>()?,
-            text_variables,
-            hyperlinks,
-            text_sources,
-            destinations,
-            bookmarks,
-            bookmark_order: match self.chunk(doc, hyperlink::chunk::DOCUMENT_LISTS)? {
-                Some(d) => hyperlink::document_bookmarks(&d, version.major)?,
-                None => Vec::new(),
-            },
-            cross_reference_formats,
-            warnings: self.warnings.borrow().clone(),
-            preferences,
-            prefs,
-            composite_fonts: composite_fonts
-                .into_iter()
-                .map(|(uid, name, entries)| CompositeFont {
-                    uid,
-                    name,
-                    entries: entries
-                        .iter()
-                        .filter_map(|e| composite_entries.get(e).cloned())
-                        .collect(),
-                })
-                .collect(),
-            cjk_tables,
-            inks,
-            color_groups: self
-                .color_group_order()?
-                .into_iter()
-                .filter_map(|u| color_groups.remove(&u))
-                .collect(),
-            bullets: self.bullets()?,
-            xml_tags,
-            xml,
-        })
+        tints
+    }
+
+    /// An XML tag (class 0xBF19): its name and colour. Chunk 0xBF2F: u32
+    /// length, then the name as text segments; chunk 0x117: the UID of
+    /// the tag's colour.
+    fn xml_tag(&self, uid: u32) -> Result<Option<(String, Option<[f64; 3]>)>, Error> {
+        let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? else {
+            return Ok(None);
+        };
+        let mut c = Cursor::new(&d);
+        let n = c.u32()? as usize;
+        // Files from InDesign 2.0 to 4.0 hold a flag byte and an in-object
+        // string instead.
+        let name = match c.segments(n) {
+            Ok(name) => name,
+            Err(_) => {
+                let mut c = Cursor::new(&d);
+                c.flag()?;
+                c.string()?
+            }
+        };
+        let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
+            Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
+            _ => None,
+        };
+        Ok(Some((name, color)))
     }
 }

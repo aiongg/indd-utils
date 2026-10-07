@@ -289,3 +289,45 @@ impl<'a> Reader<'a> {
         out.into_iter().map(|(_, b, n)| (b, n)).collect()
     }
 }
+
+impl<'a> Reader<'a> {
+    /// A language object (class 0x2D07): its name, and the full language
+    /// if the rest of chunk 0x2D0F can be read. `None` if it has no name.
+    pub(super) fn language(&self, uid: u32) -> Result<Option<(String, Option<Language>)>, Error> {
+        let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)? else {
+            return Ok(None);
+        };
+        if d.len() <= 1 {
+            return Ok(None);
+        }
+        let mut c = Cursor::new(&d);
+        c.flag()?;
+        let name = c.string()?;
+        // Then the primary and secondary names, u16 ID, and two vendors
+        // (flag, u32, string).
+        let rest = (|| -> Result<_, Error> {
+            c.flag()?;
+            let primary = c.string()?;
+            c.flag()?;
+            let sub = c.string()?;
+            let id = c.u16()?;
+            let mut vendor = || -> Result<(u8, String), Error> {
+                let flag = c.u8()?;
+                c.u32()?;
+                Ok((flag, c.string()?))
+            };
+            let spelling = vendor()?;
+            let hyphenation = vendor()?;
+            Ok((primary, sub, id, [spelling, hyphenation]))
+        })();
+        let language = rest.ok().map(|(primary, sub, id, vendors)| Language {
+            uid,
+            name: name.clone(),
+            primary,
+            sub,
+            id,
+            vendors: Some(vendors),
+        });
+        Ok(Some((name, language)))
+    }
+}
