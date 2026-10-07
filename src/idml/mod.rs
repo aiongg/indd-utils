@@ -371,6 +371,9 @@ const TEXT_ATTRS: &[(u32, &str, TextKind, bool)] = &[
     ),
     (0x4265, "GridAlignFirstLineOnly", TextKind::Bool(1), false),
     (0x425E, "Tatechuyoko", TextKind::Bool(1), false),
+    (0x4279, "ShataiDegreeAngle", TextKind::Scale(100.0), false),
+    (0x427A, "ShataiAdjustTsume", TextKind::Bool(1), false),
+    (0x427B, "ShataiAdjustRotation", TextKind::Bool(1), false),
     (0x422D, "RubyFlag", TextKind::NonZero, false),
     (0x422E, "RubyString", TextKind::Text, false),
     (

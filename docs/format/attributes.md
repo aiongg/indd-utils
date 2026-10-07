@@ -208,6 +208,9 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x4265 | `GridAlignFirstLineOnly` | 1 = true | 81/81 styles |
 | 0x4266 | `GridAlignment` | 0 None, 1 AlignBaseline | 86/86 styles |
 | 0x425E | `Tatechuyoko` | 1 = true | root styles; 1 from a sample typeset vertically and its print PDF, see below |
+| 0x4279 | `ShataiDegreeAngle` | degrees, written ×100 | root styles; see below |
+| 0x427A | `ShataiAdjustTsume` | 1 = true | root styles; see below |
+| 0x427B | `ShataiAdjustRotation` | 1 = true | root styles and a sample typeset vertically; see below |
 | 0x422D | `RubyFlag` | number; written when not 0 | a sample and its print PDF; see below |
 | 0x422E | `RubyString` | u32 length, text segments; written when not empty | a sample and its print PDF; see below |
 | 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
@@ -411,6 +414,33 @@ evidence for 1 is a sample typeset vertically and its print PDF:
   matrix), side by side on one baseline, and the group is centred on the
   column's centre line to 0.01 pt. That is horizontal-in-vertical
   setting.
+
+**Shatai (0x4278 to 0x427B).** In every public file the root paragraph
+style stores 0x4278 = 0, 0x4279 = 45, 0x427A = 1 and 0x427B = 0, and
+IDML writes `ShataiMagnification="0"`, `ShataiDegreeAngle="4500"`,
+`ShataiAdjustTsume="true"` and `ShataiAdjustRotation="false"` on all 240
+root styles; no other public style or range sets them. Only 45 and 4500
+are not 0 or a boolean, so 0x4279 is the angle, written ×100. The rest
+of the evidence is a sample typeset vertically and its print PDF:
+
+- Runs set 0x4278 = 20, 0x4279 = 60 and 0x427A = 0. Their glyphs have
+  the text matrix (0.850, 0.0866, 0.0866, 0.950) × point size. That
+  matrix scales by 1 along the direction at 60° and by 0.80 across it:
+  a distortion of 20 % at 60°. So 0x4278 is the magnification in
+  percent and 0x4279 the angle in degrees.
+- A character style sets 0x4278 = 10, 0x4279 = 60 and 0x427B = 1. Its
+  glyphs have the matrix (0.9222, 0.0843, 0, 0.9759) × point size. This
+  is the 10 % distortion at 60°, turned so that the glyph's vertical
+  axis stays vertical (the third value is 0). The runs above, with
+  0x427B = 0, are not turned. So 0x427B is `ShataiAdjustRotation`.
+- That leaves 0x427A for `ShataiAdjustTsume`, which also matches the root
+  values (1 and `true`; 0x427B 0 and `false`). With 0 the glyphs keep
+  an advance of one em; no sample has 1 outside root styles.
+
+The converter writes the angle and the two booleans. It leaves out
+`ShataiMagnification`: the sample stores the percentage, but the root
+value 0 does not show the unit IDML uses, and the angle shows that it
+need not be the stored number.
 
 **`KerningValue` (0x1B13).** Every root paragraph style stores 1e8, and
 IDML writes no `KerningValue` on root styles; the converter leaves 1e8

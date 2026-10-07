@@ -6,9 +6,10 @@ now). Licence: MIT.
 
 ## Clean-room rules (read `CLEANROOM.md`)
 
-- Never commit anything from `corpus/`. It holds third-party sample files
-  without redistribution rights. Only files listed in
-  `tests/fixtures/README.md` may be committed.
+- Never commit downloaded sample files of any kind (INDD, IDML, PDF,
+  images, archives), whatever their licence. They can be downloaded
+  elsewhere; the repo records only how to get them. `corpus/` is
+  git-ignored and stays local.
 - Every fact about the INDD format goes in `docs/format/` with the evidence
   that supports it (which files, how many, what was compared). Code relies
   only on documented facts.
