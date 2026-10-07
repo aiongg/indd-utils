@@ -3740,10 +3740,19 @@ impl Writer<'_> {
             x.attr("ContentType", content);
         }
         self.item_attrs(x, &item.attrs);
-        if let Some(os) = item
+        let style = item
             .object_style
-            .and_then(|u| self.doc.object_styles.get(&u))
+            .and_then(|u| self.doc.object_styles.get(&u));
+        // An item without a stroke weight of its own and with the object
+        // style [None] has `StrokeWeight="1"` in IDML (objects.md, page
+        // item settings); groups vary.
+        if tag != "Group"
+            && item.attrs.0.iter().all(|(id, _)| *id != 0x6E65)
+            && style.is_some_and(|os| os.builtin && os.name == "[None]")
         {
+            x.attr("StrokeWeight", "1");
+        }
+        if let Some(os) = style {
             let name = if os.builtin {
                 format!("$ID/{}", os.name)
             } else {

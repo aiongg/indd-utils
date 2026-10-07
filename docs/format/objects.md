@@ -589,6 +589,18 @@ set the converter leaves both attributes out. In 14,918 items with
 chunk 0x1424 the master item is 0; in 197 of them the list still holds
 IDs, and IDML writes the attribute empty.
 
+**Stroke weight without an attribute.** An item whose attribute list has
+no stroke weight (attribute 0x6E65) and whose object style is `[None]`
+has `StrokeWeight="1"` in IDML: in the trustworthy pairs, 31,252 of
+31,252 polygons, 5,294 of 5,294 rectangles, 702 of 702 ovals, 214 of
+214 graphic lines and 4,248 of 4,263 text frames (15 have 0.28). With
+another object style the attribute is absent in IDML (the style supplies
+it), apart from 160 text frames with `[Normal Text Frame]` and 10 lines
+with styles of their own, which have 1. Groups vary (1,166 without the
+attribute, 625 with 1 and 30 with other values, in 200 of the pairs)
+and get none. The converter
+writes 1 for items other than groups with the style `[None]`.
+
 ## Text wrap
 
 Page items (class 0x6201 and groups, 0x401) and placed graphics have
