@@ -113,6 +113,13 @@ pub(super) fn text_wrap_offsets(wrap: Option<&TextWrap>) -> Vec<(&'static str, S
     ]
 }
 
+/// Corner option codes (`docs/format/attributes.md` and `objects.md`).
+pub(super) const CORNER_OPTIONS: &[(u32, &str)] = &[
+    (0, "None"),
+    (0x5A15, "RoundedCorner"),
+    (0x5A16, "InverseRoundedCorner"),
+];
+
 /// Codes of built-in stroke styles. See `docs/format/attributes.md`.
 pub(super) const STROKE_TYPES: &[(u32, &str)] = &[
     (0x5A29, "Solid"),
@@ -394,11 +401,7 @@ pub(super) const ITEM_ATTRS: &[(u32, &str, Kind)] = &[
     (0x6E64, "StrokeColor", Kind::Swatch),
     (0x6E65, "StrokeWeight", Kind::Number),
     (0x6E6D, "MiterLimit", Kind::Number),
-    (
-        0x6E6F,
-        "CornerOption",
-        Kind::Enum(&[(0x5A15, "RoundedCorner")]),
-    ),
+    (0x6E6F, "CornerOption", Kind::Enum(CORNER_OPTIONS)),
     (0x6E70, "CornerRadius", Kind::Number),
     (0x551F, "GradientFillLength", Kind::Number),
     (0x5520, "GradientFillStart", Kind::Point),

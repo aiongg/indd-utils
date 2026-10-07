@@ -40,7 +40,7 @@ list and absent from the IDML.
 | 0x6E64 | `StrokeColor` (swatch UID) | 78 of 82 |
 | 0x6E65 | `StrokeWeight` | 171 of 171 |
 | 0x6E6D | `MiterLimit` | 778 of 778 |
-| 0x6E6F | `CornerOption` (code 0x5A15 = RoundedCorner) | 20 of 23 |
+| 0x6E6F | `CornerOption`: code 0 = `None`, 0x5A15 = `RoundedCorner`, 0x5A16 = `InverseRoundedCorner` (the codes of object styles, `objects.md`) | 20 of 23 for 0x5A15; with all three codes, 1,876 of 1,995 rectangles, 504 of 520 text frames and 489 of 489 page item defaults in the trustworthy pairs |
 | 0x6E70 | `CornerRadius` | 213 of 216 |
 | 0x551F | `GradientFillLength` | all non-zero (30) |
 | 0x5520 | `GradientFillStart` (point) | all non-zero (30) |

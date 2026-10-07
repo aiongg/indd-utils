@@ -352,11 +352,6 @@ impl Writer<'_> {
                 attrs.push((name, num(v)));
             }
         }
-        match os.attrs.get(0x6E6F).and_then(Value::as_u32) {
-            Some(0) => attrs.push(("CornerOption", "None".into())),
-            Some(0x5A16) => attrs.push(("CornerOption", "InverseRoundedCorner".into())),
-            _ => {}
-        }
         match os.paragraph_style {
             Some(0) => attrs.push(("AppliedParagraphStyle", "n".into())),
             Some(p) if self.doc.styles.contains_key(&p) => {
@@ -380,13 +375,10 @@ impl Writer<'_> {
                 attrs.push((name, num(r)));
             }
         }
-        let corner_option = match corners([0x6E6F, 0x6E91, 0x6E8F, 0x6E90]).and_then(|v| v.as_u32())
-        {
-            Some(0) => Some("None"),
-            Some(0x5A15) => Some("RoundedCorner"),
-            Some(0x5A16) => Some("InverseRoundedCorner"),
-            _ => None,
-        };
+        let corner_option = corners([0x6E6F, 0x6E91, 0x6E8F, 0x6E90])
+            .and_then(|v| v.as_u32())
+            .and_then(|u| CORNER_OPTIONS.iter().find(|(k, _)| *k == u))
+            .map(|(_, n)| *n);
         if let Some(o) = corner_option {
             for name in [
                 "TopLeftCornerOption",
