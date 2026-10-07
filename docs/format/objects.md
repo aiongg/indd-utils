@@ -416,6 +416,13 @@ page of the DOM 7 files has it).
 | 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, 4 bytes |
 | 0xCD02 | Layout grid (`GridDataInformation`, below) |
 
+**Master spread colour.** IDML gives each `MasterSpread` a `PageColor`
+property equal to the `PageColor` of its pages, which is the same for all
+pages of a master in all 1,359 master spreads of the 654 pairs
+(`UseMasterColor` in 1,326, a named colour or `Nothing` in the others).
+The converter writes the pages' colour. Over all pairs this reproduces
+1,352 of 1,352 compared values.
+
 **Margins and columns.** IDML writes them as `MarginPreference`. The
 column edges are `ColumnsPositions` (left and right edge of each column,
 so `ColumnCount` is *n*/2), the gutter is `ColumnGutter`. A flag of 1

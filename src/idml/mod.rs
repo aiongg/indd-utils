@@ -178,6 +178,22 @@ fn style_shortcut(s: &crate::model::Style) -> (Option<String>, Option<String>) {
     }
 }
 
+/// The `PageColor` property of a page colour.
+fn page_color(c: &UiColorRef) -> Option<Node> {
+    let name = match c {
+        UiColorRef::UseMaster => "UseMasterColor",
+        UiColorRef::Nothing => "Nothing",
+        UiColorRef::Rgb(rgb) => return ui_color_property("PageColor", *rgb),
+        _ => return None,
+    };
+    Some(Node {
+        tag: "PageColor".into(),
+        attrs: vec![("type".into(), "enumeration".into())],
+        text: Some(name.into()),
+        children: Vec::new(),
+    })
+}
+
 /// Preference elements of `Resources/Preferences.xml` that `model::prefs`
 /// supplies values for.
 const PREFERENCE_TAGS: &[&str] = &[
@@ -4014,22 +4030,7 @@ impl Writer<'_> {
             }
         }
         x.attrs_missing(self.observed("Page").iter());
-        let color = match st.color {
-            UiColorRef::UseMaster => Some("UseMasterColor"),
-            UiColorRef::Nothing => Some("Nothing"),
-            _ => None,
-        };
-        let node = match (color, st.color) {
-            (Some(name), _) => Some(Node {
-                tag: "PageColor".into(),
-                attrs: vec![("type".into(), "enumeration".into())],
-                text: Some(name.into()),
-                children: Vec::new(),
-            }),
-            (None, UiColorRef::Rgb(rgb)) => ui_color_property("PageColor", rgb),
-            _ => None,
-        };
-        let mut props: Vec<Node> = node.into_iter().collect();
+        let mut props: Vec<Node> = page_color(&st.color).into_iter().collect();
         // A document page describes its numbering: section prefix, style,
         // continue, include prefix, page number (from DOM 20 twice) and
         // marker.
@@ -4159,6 +4160,18 @@ impl Writer<'_> {
             }
         }
         x.attrs_missing(self.observed(kind).iter());
+        // A master spread has the colour its pages share (objects.md).
+        if master
+            && let Some(first) = s.pages.first()
+            && s.pages
+                .iter()
+                .all(|p| p.settings.color == first.settings.color)
+            && let Some(n) = page_color(&first.settings.color)
+        {
+            x.start("Properties");
+            n.write(&mut x);
+            x.end();
+        }
         let major = self.doc.version.major;
         if !master && let Some(mut fp) = values::element("Spread/FlattenerPreference", major) {
             if let Some([line_art, gradient]) = s.flattener_resolution {
