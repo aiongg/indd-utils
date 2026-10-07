@@ -7,7 +7,9 @@ const USAGE: &str = "usage:
   indd objects <file.indd>         one line per object: UID, class, length, first bytes
   indd uids <file.indd>            one line per object: UID, class (no object data read)
   indd object <file.indd> <uid>    write one object's bytes to stdout
-  indd dump <file.indd> <uid>...   print objects' chunks in hex
+  indd dump [--full] <file.indd> <uid>...
+                                   print objects' chunks in hex (the first
+                                   120 bytes of each, or all with --full)
   indd xmp <file.indd>             write the document's XMP packet to stdout
   indd audit [--tsv] <file.indd>   what the converter does not read in a document";
 
@@ -21,11 +23,16 @@ fn main() -> ExitCode {
         (Some("uids"), 2) => uids(&args[1]),
         (Some("audit"), 2) => audit(&args[1], false),
         (Some("audit"), 3) if args[1] == "--tsv" => audit(&args[2], true),
+        (Some("dump"), n) if n > 3 && args[1] == "--full" => args[3..]
+            .iter()
+            .map(|a| parse_uid(a))
+            .collect::<Result<Vec<_>, _>>()
+            .and_then(|uids| dump(&args[2], &uids, usize::MAX)),
         (Some("dump"), n) if n > 2 => args[2..]
             .iter()
             .map(|a| parse_uid(a))
             .collect::<Result<Vec<_>, _>>()
-            .and_then(|uids| dump(&args[1], &uids)),
+            .and_then(|uids| dump(&args[1], &uids, 120)),
         (Some("object"), 3) => match args[2].parse() {
             Ok(uid) => object(&args[1], uid),
             Err(_) => Err(format!("not a UID: {}", args[2]).into()),
@@ -260,7 +267,8 @@ fn parse_uid(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
     parsed.map_err(|_| format!("not a UID: {s}").into())
 }
 
-fn dump(path: &str, uids: &[u32]) -> CliResult {
+/// Print the chunks of objects, at most `limit` bytes of each.
+fn dump(path: &str, uids: &[u32], limit: usize) -> CliResult {
     let bytes = std::fs::read(path)?;
     let c = indd::Container::parse(&bytes)?;
     let _order = indd::object::use_byte_order(c.header.byte_order);
@@ -284,10 +292,10 @@ fn dump(path: &str, uids: &[u32]) -> CliResult {
                     let hex: Vec<String> = ch
                         .data
                         .iter()
-                        .take(120)
+                        .take(limit)
                         .map(|b| format!("{b:02x}"))
                         .collect();
-                    let more = if ch.data.len() > 120 { " ..." } else { "" };
+                    let more = if ch.data.len() > limit { " ..." } else { "" };
                     writeln!(
                         out,
                         "  {:#07x} {:5}: {}{more}",

@@ -38,6 +38,12 @@ OUT = ROOT / "src" / "idml" / "root_values.xml"
 PREF_OUT = ROOT / "src" / "idml" / "preference_values.xml"
 OBJECT_OUT = ROOT / "src" / "idml" / "object_style_values.xml"
 
+# The generated files were made from the corpus pairs under this
+# directory, the whole corpus at the time. Later pairs are evidence for
+# tools/element_values.py; regenerating these files from them would drop
+# values that the larger corpus shows to vary (docs/format/idml-values.md).
+SOURCE = "third-party/"
+
 # Preference attributes the converter reads from the INDD.
 PREF_SKIP = {
     ("DocumentPreference", "PageHeight"), ("DocumentPreference", "PageWidth"),
@@ -97,14 +103,16 @@ def decoded_names():
 
 
 def corpus_idmls():
-    rows = (ROOT / "corpus" / "inventory.tsv").read_text().splitlines()[1:]
+    lines = (ROOT / "corpus" / "inventory.tsv").read_text().splitlines()
+    cols = lines[0].split("\t")
     seen, out, pairs = set(), [], 0
-    for row in rows:
-        path, _size, _valid, _order, _ver, _creator, dom = row.split("\t")
-        if not dom:
+    for line in lines[1:]:
+        row = dict(zip(cols, line.split("\t")))
+        path, dom = row["path"], row["idml_dom"]
+        if not dom or not dom[0].isdigit() or not path.startswith(SOURCE):
             continue
         pairs += 1
-        idml = (ROOT / "corpus" / path).with_suffix(".idml")
+        idml = ROOT / "corpus" / (row.get("idml") or str(Path(path).with_suffix(".idml")))
         digest = hashlib.md5(idml.read_bytes()).hexdigest()
         if digest not in seen:
             seen.add(digest)

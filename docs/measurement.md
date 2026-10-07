@@ -155,6 +155,11 @@ number of documents affected and the number of values wrong and missing.
 `compare.py` prints the top 30 keys by documents affected (`--gaps N`) and
 the top 15 by values.
 
+`values.tsv` and `values-all.tsv` list every key with its number of
+values and how many are reproduced, wrong and missing. Comparing them
+between two runs shows whether a change reproduces fewer values of any
+key.
+
 ## Audit: what the converter does not read
 
 `indd audit <file>` needs no reference IDML. It converts the file while

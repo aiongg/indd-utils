@@ -34,7 +34,8 @@ Last comes the headline (docs/measurement.md): value coverage, the share
 of reference values the conversion reproduces, over trustworthy pairs and
 over all pairs; document scores (pairs with coverage >= 99 % and >= 99.9 %);
 and the biggest gaps (--gaps N). pairs.tsv, gaps.tsv and gaps-all.tsv go to
---out (default target/compare).
+--out (default target/compare), with values.tsv and values-all.tsv, which
+list every key with its values and how many are reproduced.
 
 --shortfalls N lists the N element types and attributes that fall short
 (missing elements; wrong or missing attribute values; differing story
@@ -746,6 +747,17 @@ def write_gaps(path, st):
             f.write(f"{key[0]}\t{key[1]}\t{docs}\t{w}\t{m}\t{st.gap_total[key]}\n")
 
 
+def write_values(path, st):
+    """Every key with its values and how many are reproduced, for checking
+    that a change reproduces no fewer values of any key."""
+    with open(path, "w") as f:
+        f.write("tag\tkey\tvalues\treproduced\twrong\tmissing\n")
+        for key in sorted(st.gap_total):
+            w, m = st.gap_wrong[key], st.gap_missing[key]
+            f.write(f"{key[0]}\t{key[1]}\t{st.gap_total[key]}\t{st.gap_total[key] - w - m}"
+                    f"\t{w}\t{m}\n")
+
+
 def headline(args, every, trusted, pair_rows):
     """Print value coverage, document scores and the biggest gaps; write
     pairs.tsv, gaps.tsv (trustworthy pairs) and gaps-all.tsv to --out."""
@@ -758,6 +770,8 @@ def headline(args, every, trusted, pair_rows):
                     f"\t{'; '.join(reasons)}\n")
     write_gaps(out / "gaps.tsv", trusted)
     write_gaps(out / "gaps-all.tsv", every)
+    write_values(out / "values.tsv", trusted)
+    write_values(out / "values-all.tsv", every)
     print("\nheadline (docs/measurement.md):")
     for label, st in (("trustworthy pairs", trusted), ("all pairs", every)):
         n = st.docs or 1

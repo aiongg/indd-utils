@@ -33,11 +33,15 @@ character root styles, attributes in the text attribute table
 (`attributes.md`) are left out of the file, and any attribute the INDD
 supplies is written from the INDD.
 
-The corpus has 240 INDD files with an IDML, which are 88 distinct IDML
+The files were generated from the 240 INDD files with an IDML that the
+corpus had then (`SOURCE` in the tool), which are 88 distinct IDML
 files. Their DOM versions are 7 (1 file), 12 (7 files) and 15 to 20 (80
 files). Values that first appear after DOM 7 are written only for
 documents of that InDesign version or later (`MinimumVersion` in the
-file).
+file). The corpus has grown since; the later pairs are evidence for the
+values of other elements (below). Regenerating these files from all pairs
+would drop some values that the larger corpus shows to vary between
+documents, such as table style stroke weights.
 
 | Root style | Values | Same in | Written for version |
 |---|---|---|---|
