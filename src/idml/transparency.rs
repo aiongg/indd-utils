@@ -307,9 +307,13 @@ pub(super) fn write(
                 if matches!(kind, Kind::Swatch) && !inner_shadow_applied {
                     continue;
                 }
-                match attrs.get(id).and_then(|v| value(v, kind, swatches)) {
+                let Some(v) = attrs.get(id) else { continue };
+                match value(v, kind, swatches) {
                     Some(Ok(t)) => values.push((name, t)),
                     Some(Err(f)) => left_out.push((effect, name, f)),
+                    None if matches!(kind, Kind::Enum(_) | Kind::Bool) => {
+                        crate::audit::unknown_code(attrs.1, id, v.as_u32().unwrap_or(u32::MAX))
+                    }
                     None => {}
                 }
             }

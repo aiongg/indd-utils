@@ -127,6 +127,7 @@ impl Object {
 
     /// Data of the first chunk with this ID.
     pub fn chunk(&self, id: u32) -> Option<&[u8]> {
+        crate::audit::chunk_read(self.uid, id);
         self.chunks()?
             .into_iter()
             .find(|c| c.id == id)

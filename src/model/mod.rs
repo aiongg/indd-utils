@@ -22,6 +22,7 @@ pub use table::{Cell, CellFormat, Table, TableStyle};
 pub use variable::TextVariable;
 pub use xref::CrossReferenceFormat;
 
+use crate::audit::List;
 use crate::object::{Cursor, Object, i16_from, u16_from, u32_from};
 use crate::{Database, Error, Version};
 
@@ -689,6 +690,7 @@ impl<'a> Reader<'a> {
             .get(uid)?
             .ok_or_else(|| Error::Corrupt(format!("object {uid} has no data")))?;
         let obj = std::rc::Rc::new(obj);
+        crate::audit::object_read(uid);
         self.cache.borrow_mut().insert(uid, obj.clone());
         Ok(obj)
     }
@@ -840,11 +842,13 @@ impl<'a> Reader<'a> {
                                     builtin,
                                     based_on: uid_or_none(based_on),
                                     fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
-                                        Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
+                                        Some(d) => Attrs::parse_short(&d, List::ObjectStyleFitting)
+                                            .unwrap_or_default(),
                                         None => Attrs::default(),
                                     },
                                     attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
-                                        Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
+                                        Some(d) => Attrs::parse_short(&d, List::ObjectStyle)
+                                            .unwrap_or_default(),
                                         None => Attrs::default(),
                                     },
                                     // The layout is known for these sizes
@@ -1689,7 +1693,7 @@ impl<'a> Reader<'a> {
         }
         let paths = self.paths(uid)?;
         let attrs = match self.chunk(uid, chunk::ITEM_ATTRS)? {
-            Some(d) => Attrs::parse(&d).unwrap_or_default(),
+            Some(d) => Attrs::parse(&d, List::Item).unwrap_or_default(),
             None => Attrs::default(),
         };
         let object_style = match self.chunk(uid, chunk::ITEM_OBJECT_STYLE)? {
@@ -1813,6 +1817,7 @@ impl<'a> Reader<'a> {
         if uid == 0 || self.class(uid) != Some(class::RAW_DATA) {
             return Ok(None);
         }
+        crate::audit::object_read(uid);
         self.db.object(uid)
     }
 
@@ -1922,7 +1927,7 @@ impl<'a> Reader<'a> {
             Some(d) if d.len() >= 2 => {
                 let mut c = Cursor::new(&d);
                 let n = c.u16()? as usize;
-                Attrs::parse_text(&mut c, n).unwrap_or_default()
+                Attrs::parse_text(&mut c, n, List::Style).unwrap_or_default()
             }
             _ => Attrs::default(),
         };
@@ -2013,7 +2018,8 @@ impl<'a> Reader<'a> {
                         strand::PARAGRAPH_STYLE | strand::CHARACTER_STYLE => {
                             let style = rc.u32()?;
                             let n = rc.u16()? as usize;
-                            let attrs = Attrs::parse_text(&mut rc, n).unwrap_or_default();
+                            let attrs =
+                                Attrs::parse_text(&mut rc, n, List::Text).unwrap_or_default();
                             let list = if kind == strand::PARAGRAPH_STYLE {
                                 &mut para
                             } else {
@@ -2021,7 +2027,7 @@ impl<'a> Reader<'a> {
                             };
                             list.push((len, style, attrs));
                         }
-                        _ => {}
+                        _ => crate::audit::unknown_strand_kind(kind),
                     }
                 }
             }

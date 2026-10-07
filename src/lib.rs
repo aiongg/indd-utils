@@ -3,6 +3,7 @@
 //! The format is undocumented. Everything this crate knows about it is
 //! recorded in `docs/format/`; see `CLEANROOM.md` for how it was learned.
 
+pub mod audit;
 pub mod container;
 pub mod database;
 pub mod header;

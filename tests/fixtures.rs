@@ -199,3 +199,33 @@ fn style_kind_is_a_u16() {
     assert!(text.contains(r#"<CharacterStyle Self="CharacterStyle/abbr" Name="abbr">"#));
     assert!(!text.contains(r#"<CharacterStyle Self="ParagraphStyle/"#));
 }
+
+#[test]
+fn audit_accounts_for_every_object() {
+    let Some(root) = fixtures() else {
+        return;
+    };
+    for rel in [
+        "scml-template/scml.indt",
+        "lizdenys-minizine/indesign-minizine-template.indd",
+        "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
+    ] {
+        let bytes = std::fs::read(root.join(rel)).unwrap();
+        let a = indd::audit::audit(&bytes, rel).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        assert_eq!(a.error, None, "{rel}");
+        let c = indd::Container::parse(&bytes).unwrap();
+        let _order = indd::object::use_byte_order(c.header.byte_order);
+        let db = c.database().unwrap();
+        let with_data = db
+            .uids()
+            .filter(|&u| db.object(u).unwrap().is_some())
+            .count();
+        let audited: usize = a.classes.values().map(|c| c.objects).sum();
+        assert_eq!(audited, with_data, "{rel}");
+        // The document object is always read.
+        assert!(a.classes[&Some(0xE01)].read > 0, "{rel}");
+        // Auditing reports the same warnings as converting.
+        let warnings = indd::convert(&bytes, rel, std::io::sink()).unwrap();
+        assert_eq!(a.warnings, warnings, "{rel}");
+    }
+}

@@ -154,3 +154,29 @@ Each value that is not reproduced is counted against a key:
 number of documents affected and the number of values wrong and missing.
 `compare.py` prints the top 30 keys by documents affected (`--gaps N`) and
 the top 15 by values.
+
+## Audit: what the converter does not read
+
+`indd audit <file>` needs no reference IDML. It converts the file while
+recording which objects, chunks and attributes the converter reads
+(`src/audit.rs`), then lists what the file contains that was not read:
+
+| Item | Not read means |
+|---|---|
+| Class | No object of the class was read |
+| Chunk | In a class the converter reads, no object's chunk with this ID was looked up |
+| Byte-stream object | An object without chunks (such as embedded file data) was not read |
+| Attribute | An attribute ID in a list of this kind (page item, object style, style, text, table, cell) was never looked up |
+| Code | The converter looked up the attribute but has no IDML value for its code (an unknown enumeration value) |
+| Strand run kind | A strand holds run data of a kind the converter skips |
+
+It also lists the conversion's warnings. "Read" means looked up; a read
+value can still be converted wrongly, which `compare.py` measures. IDs are
+printed in hexadecimal and are not named.
+
+`indd audit --tsv` prints the same as tab-separated rows, including the
+items that were read. `tools/audit_corpus.py --exclude own/` audits every
+distinct INDD and INDT file in the corpus and ranks the items by the number
+of files in which they are not read, with the number of files in which
+they are read. It writes the full tables to `target/audit/` and takes
+about 20 seconds.

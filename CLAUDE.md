@@ -26,6 +26,9 @@ now). Licence: MIT.
 ## Layout
 
 - `src/header.rs`, `src/container.rs`: decoded layers (see `docs/format/`).
+- `src/audit.rs`: records what a conversion reads, for `indd audit`.
+- `docs/measurement.md`: how `compare.py` and the audit measure the
+  converter (stale pairs, value coverage, exclusions).
 - `tests/fixtures.rs`: smoke tests on open-licensed samples listed in
   `tests/fixtures/manifest.json`; they skip if `tests/fixtures/files/` is
   absent.
@@ -66,6 +69,11 @@ separately (rule and evidence: `docs/measurement.md`).
   in `docs/measurement.md`): `cargo build --release && python3 -I
   tools/compare.py --exclude own/`. It prints them last and writes
   `pairs.tsv`, `gaps.tsv` and `gaps-all.tsv` to `target/compare/`.
+- `indd audit <file>`: what the converter does not read in one document
+  (classes, chunks, attribute IDs, unknown codes, strand kinds) and its
+  warnings. `python3 -I tools/audit_corpus.py --exclude own/` ranks these
+  over the whole corpus by files affected (tables in `target/audit/`). Use
+  it to pick what to decode next.
 - `compare.py --all` also converts every other INDD/INDT under `corpus/`
   (any version, either byte order) and reports their failures; every run
   counts converter warnings by kind (`--warnings N` lists N kinds).

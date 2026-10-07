@@ -5,6 +5,7 @@
 //! u32 type, u16 length and data. The first value is the attribute's value.
 
 use crate::Error;
+use crate::audit::{self, List};
 use crate::object::{Cursor, f64_from, i32_from, u16_from, u32_from};
 
 /// Value type codes.
@@ -71,35 +72,46 @@ impl Value {
     }
 }
 
+/// Attribute IDs and values, and the kind of list they come from (for
+/// `indd audit`).
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct Attrs(pub Vec<(u32, Value)>);
+pub struct Attrs(pub Vec<(u32, Value)>, pub List);
 
 impl Attrs {
     pub fn get(&self, id: u32) -> Option<&Value> {
-        self.0.iter().find(|(a, _)| *a == id).map(|(_, v)| v)
+        let v = self.0.iter().find(|(a, _)| *a == id).map(|(_, v)| v);
+        if v.is_some() {
+            audit::attr_read(self.1, id);
+        }
+        v
     }
 
     /// A page item list (chunk 0x6E03): u32 count, then records.
-    pub fn parse(data: &[u8]) -> Result<Attrs, Error> {
+    pub fn parse(data: &[u8], list: List) -> Result<Attrs, Error> {
         let mut c = Cursor::new(data);
         let n = c.u32()? as usize;
-        Attrs::records(&mut c, n, decode)
+        Attrs::records(&mut c, n, decode, list)
     }
 
     /// A page item attribute list with a u16 count, as object styles hold.
-    pub fn parse_short(data: &[u8]) -> Result<Attrs, Error> {
+    pub fn parse_short(data: &[u8], list: List) -> Result<Attrs, Error> {
         let mut c = Cursor::new(data);
         let n = c.u16()? as usize;
-        Attrs::records(&mut c, n, decode)
+        Attrs::records(&mut c, n, decode, list)
     }
 
     /// A text attribute list: `count` records at the cursor. Text value
     /// types differ per attribute, so values are decoded by length.
-    pub fn parse_text(c: &mut Cursor, count: usize) -> Result<Attrs, Error> {
-        Attrs::records(c, count, decode_text)
+    pub fn parse_text(c: &mut Cursor, count: usize, list: List) -> Result<Attrs, Error> {
+        Attrs::records(c, count, decode_text, list)
     }
 
-    fn records(c: &mut Cursor, n: usize, decode: fn(u32, &[u8]) -> Value) -> Result<Attrs, Error> {
+    fn records(
+        c: &mut Cursor,
+        n: usize,
+        decode: fn(u32, &[u8]) -> Value,
+        list: List,
+    ) -> Result<Attrs, Error> {
         let mut out = Vec::with_capacity(n.min(1024));
         for _ in 0..n {
             let id = c.u32()?;
@@ -128,7 +140,8 @@ impl Attrs {
                 out.push((id, v));
             }
         }
-        Ok(Attrs(out))
+        audit::attrs_parsed(list, out.iter().map(|(id, _)| *id));
+        Ok(Attrs(out, list))
     }
 }
 
@@ -173,7 +186,7 @@ mod tests {
         d.extend_from_slice(&0x6E63u32.to_le_bytes());
         d.extend_from_slice(&6u16.to_le_bytes());
         d.extend_from_slice(&[0; 6]);
-        let a = Attrs::parse(&d).unwrap();
+        let a = Attrs::parse(&d, List::Item).unwrap();
         assert_eq!(a.get(0x6E65), Some(&Value::Double(0.25)));
     }
 
@@ -192,7 +205,7 @@ mod tests {
         d.extend_from_slice(&0x6E63u32.to_le_bytes());
         d.extend_from_slice(&6u16.to_le_bytes());
         d.extend_from_slice(&[0; 6]);
-        let a = Attrs::parse(&d).unwrap();
+        let a = Attrs::parse(&d, List::Item).unwrap();
         assert_eq!(a.get(0x6E6E), Some(&Value::RefOrCode(0, 0x5A39)));
     }
 }

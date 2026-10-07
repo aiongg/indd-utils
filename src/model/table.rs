@@ -2,6 +2,7 @@
 
 use super::{Attrs, Reader, TextRun, Value};
 use crate::Error;
+use crate::audit::List;
 use crate::object::{Cursor, f64_at};
 
 pub mod class {
@@ -114,7 +115,7 @@ fn groups(data: &[u8]) -> Result<Vec<(usize, Attrs)>, Error> {
         let count = c.u32()? as usize;
         c.u16()?;
         let na = c.u16()? as usize;
-        let attrs = Attrs::parse_text(&mut c, na)?;
+        let attrs = Attrs::parse_text(&mut c, na, List::Table)?;
         c.skip(8)?;
         out.push((count, attrs));
     }
@@ -142,7 +143,7 @@ impl Reader<'_> {
             Some(d) if d.len() >= 2 => {
                 let mut c = Cursor::new(&d);
                 let n = c.u16()? as usize;
-                Attrs::parse_text(&mut c, n)?
+                Attrs::parse_text(&mut c, n, List::Table)?
             }
             _ => Attrs::default(),
         })
@@ -279,7 +280,7 @@ impl Reader<'_> {
                     let columns = g.u32()? as usize;
                     let attrs = if g.u16()? != 0 {
                         let na = g.u16()? as usize;
-                        Attrs::parse_text(&mut g, na)?
+                        Attrs::parse_text(&mut g, na, List::Cell)?
                     } else {
                         Attrs::default()
                     };

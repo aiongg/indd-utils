@@ -557,6 +557,20 @@ use crate::object::{
     Cursor, f64_bytes, f64_from, i32_bytes, u16_bytes, u16_from, u32_at, u32_bytes,
 };
 
+/// Report an attribute value that the converter has no IDML value for to
+/// `indd audit`: its code, or for a stroke type the code in its first four
+/// bytes.
+fn unknown_code(attrs: &Attrs, id: u32, v: &Value) {
+    let code = v
+        .as_u32()
+        .or_else(|| match v {
+            Value::RefOrCode(_, code) => Some(*code),
+            _ => u32_at(&raw_bytes(v), 0),
+        })
+        .unwrap_or(u32::MAX);
+    crate::audit::unknown_code(attrs.1, id, code);
+}
+
 /// The bytes of a value as stored: list values of two, four or eight bytes
 /// are decoded as numbers by the attribute reader.
 fn raw_bytes(v: &Value) -> Vec<u8> {
@@ -1503,6 +1517,9 @@ impl Writer<'_> {
                 TextKind::BulletChar => bullet_char(&raw_bytes(v)).map(|a| ("", a)),
                 _ => self.text_value(kind, v).map(|(t, s)| (t, s.into())),
             };
+            if out.is_none() && matches!(kind, TextKind::Enum(_)) {
+                unknown_code(attrs, id, v);
+            }
             if let Some((ty, value)) = out {
                 if in_props {
                     props.push((name, ty, value));
@@ -1789,8 +1806,12 @@ impl Writer<'_> {
                     _ => None,
                 },
             };
-            if let Some(t) = text {
-                out.push((name, t));
+            match text {
+                Some(t) => out.push((name, t)),
+                None if matches!(kind, AttrKind::Enum(_) | AttrKind::Builtin(..)) => {
+                    unknown_code(attrs, id, v)
+                }
+                None => {}
             }
         }
         out
@@ -1836,8 +1857,11 @@ impl Writer<'_> {
                             .map(|s| Self::table_style_ref("CellStyle", s)),
                     },
                     _ => self.table_value(v, kind),
-                }?;
-                Some((name, t))
+                };
+                if t.is_none() && matches!(kind, CellKind::Enum(_) | CellKind::StrokeType) {
+                    unknown_code(attrs, id, v);
+                }
+                Some((name, t?))
             })
             .collect()
     }
@@ -1847,10 +1871,16 @@ impl Writer<'_> {
         let mut out = Vec::new();
         for &(id, names, kind) in CELL_ATTRS {
             let Some(v) = attrs.get(id) else { continue };
-            if let Some(t) = self.table_value(v, kind) {
-                for &name in names {
-                    out.push((name, t.clone()));
+            match self.table_value(v, kind) {
+                Some(t) => {
+                    for &name in names {
+                        out.push((name, t.clone()));
+                    }
                 }
+                None if matches!(kind, CellKind::Enum(_) | CellKind::StrokeType) => {
+                    unknown_code(attrs, id, v)
+                }
+                None => {}
             }
         }
         out

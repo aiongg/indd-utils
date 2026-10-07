@@ -8,7 +8,8 @@ const USAGE: &str = "usage:
   indd uids <file.indd>            one line per object: UID, class (no object data read)
   indd object <file.indd> <uid>    write one object's bytes to stdout
   indd dump <file.indd> <uid>...   print objects' chunks in hex
-  indd xmp <file.indd>             write the document's XMP packet to stdout";
+  indd xmp <file.indd>             write the document's XMP packet to stdout
+  indd audit [--tsv] <file.indd>   what the converter does not read in a document";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -18,6 +19,8 @@ fn main() -> ExitCode {
         (Some("objects"), 2) => objects(&args[1]),
         (Some("xmp"), 2) => xmp(&args[1]),
         (Some("uids"), 2) => uids(&args[1]),
+        (Some("audit"), 2) => audit(&args[1], false),
+        (Some("audit"), 3) if args[1] == "--tsv" => audit(&args[2], true),
         (Some("dump"), n) if n > 2 => args[2..]
             .iter()
             .map(|a| parse_uid(a))
@@ -91,6 +94,129 @@ fn objects(path: &str) -> CliResult {
         let head: Vec<String> = data.iter().take(24).map(|b| format!("{b:02x}")).collect();
         let class = db.class_of(uid).map_or("-".into(), |c| format!("{c:#x}"));
         writeln!(out, "{uid}\t{class}\t{}\t{}", data.len(), head.join(" "))?;
+    }
+    Ok(())
+}
+
+fn hex(class: Option<u32>) -> String {
+    class.map_or("-".into(), |c| format!("{c:#x}"))
+}
+
+/// Print what the converter does not read in a document: classes, chunks,
+/// attributes, codes and strand kinds it never looks at, and its warnings.
+fn audit(path: &str, tsv: bool) -> CliResult {
+    let bytes = std::fs::read(path)?;
+    let name = std::path::Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned());
+    let a = indd::audit::audit(&bytes, &name)?;
+    let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+    if tsv {
+        if let Some(e) = &a.error {
+            writeln!(out, "error\t{e}")?;
+        }
+        for (class, c) in &a.classes {
+            writeln!(out, "class\t{}\t{}\t{}", hex(*class), c.objects, c.read)?;
+        }
+        for ((class, id), (n, read)) in &a.chunks {
+            writeln!(out, "chunk\t{}\t{id:#x}\t{n}\t{read}", hex(*class))?;
+        }
+        for (class, n) in &a.unread_streams {
+            writeln!(out, "stream\t{}\t{n}", hex(*class))?;
+        }
+        for ((list, id), (n, read)) in &a.attrs {
+            writeln!(
+                out,
+                "attr\t{}\t{id:#x}\t{n}\t{}",
+                list.name(),
+                u8::from(*read)
+            )?;
+        }
+        for ((list, id, code), n) in &a.unknown_codes {
+            writeln!(out, "code\t{}\t{id:#x}\t{code:#x}\t{n}", list.name())?;
+        }
+        for (kind, n) in &a.unknown_strand_kinds {
+            writeln!(out, "strand\t{kind:#x}\t{n}")?;
+        }
+        for w in &a.warnings {
+            writeln!(out, "warning\t{}", w.replace(['\t', '\n'], " "))?;
+        }
+        return Ok(());
+    }
+    writeln!(out, "{path}")?;
+    if let Some(e) = &a.error {
+        writeln!(out, "conversion failed: {e}")?;
+    }
+    let objects: usize = a.classes.values().map(|c| c.objects).sum();
+    let read: usize = a.classes.values().map(|c| c.read).sum();
+    writeln!(
+        out,
+        "objects: {objects} in {} classes; {read} read",
+        a.classes.len()
+    )?;
+    let unread: Vec<_> = a.classes.iter().filter(|(_, c)| c.read == 0).collect();
+    writeln!(out, "classes not read ({}; class: objects):", unread.len())?;
+    for (class, c) in unread {
+        writeln!(out, "  {:>8}: {}", hex(*class), c.objects)?;
+    }
+    let partly: Vec<_> = a
+        .classes
+        .iter()
+        .filter(|(_, c)| c.read > 0 && c.read < c.objects)
+        .collect();
+    writeln!(
+        out,
+        "classes partly read ({}; class: objects read of objects):",
+        partly.len()
+    )?;
+    for (class, c) in partly {
+        writeln!(out, "  {:>8}: {} of {}", hex(*class), c.read, c.objects)?;
+    }
+    let chunks: Vec<_> = a.unread_chunks().collect();
+    writeln!(
+        out,
+        "chunks never read in read classes ({}; class/chunk: objects):",
+        chunks.len()
+    )?;
+    for ((class, id), n) in &chunks {
+        writeln!(out, "  {:>8}/{id:#x}: {n}", hex(*class))?;
+    }
+    writeln!(
+        out,
+        "byte-stream objects not read ({}; class: objects):",
+        a.unread_streams.len()
+    )?;
+    for (class, n) in &a.unread_streams {
+        writeln!(out, "  {:>8}: {n}", hex(*class))?;
+    }
+    let attrs: Vec<_> = a.unread_attrs().collect();
+    writeln!(
+        out,
+        "attributes never looked up ({}; list, ID: occurrences):",
+        attrs.len()
+    )?;
+    for ((list, id), n) in &attrs {
+        writeln!(out, "  {:>20}, {id:#x}: {n}", list.name())?;
+    }
+    writeln!(
+        out,
+        "unknown codes ({}; list, attribute ID, code: occurrences):",
+        a.unknown_codes.len()
+    )?;
+    for ((list, id, code), n) in &a.unknown_codes {
+        writeln!(out, "  {:>20}, {id:#x}, {code:#x}: {n}", list.name())?;
+    }
+    writeln!(
+        out,
+        "strand run kinds not read ({}; kind: runs):",
+        a.unknown_strand_kinds.len()
+    )?;
+    for (kind, n) in &a.unknown_strand_kinds {
+        writeln!(out, "  {kind:#x}: {n}")?;
+    }
+    writeln!(out, "warnings ({}):", a.warnings.len())?;
+    for w in &a.warnings {
+        writeln!(out, "  {w}")?;
     }
     Ok(())
 }
