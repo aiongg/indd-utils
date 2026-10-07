@@ -71,8 +71,10 @@ fn fixture_containers() {
 }
 
 #[test]
-fn little_endian_fixture_objects_read() {
+fn fixture_objects_read() {
     for rel in [
+        "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
+        "xmp-toolkit-bluesquare/BlueSquare.indd",
         "scml-template/scml.indt",
         "bootstrap3-template/bootstrap3-indesign-template.indd",
         "lizdenys-minizine/indesign-minizine-template.indd",
@@ -89,10 +91,48 @@ fn little_endian_fixture_objects_read() {
 }
 
 #[test]
-fn big_endian_database_is_reported_unsupported() {
-    let bytes = std::fs::read(fixture("xmp-toolkit-bluesquare/BlueSquare.indd")).unwrap();
-    let c = indd::Container::parse(&bytes).unwrap();
-    assert!(matches!(c.database(), Err(indd::Error::Unsupported(_))));
+fn big_endian_fixtures_convert() {
+    // InDesign 3.0 and 4.0. Neither has an IDML, so check values that can
+    // be seen otherwise: the flyer's print PDF shows a letter-size page and
+    // these headings; BlueSquare is a letter-size page with one blue square.
+    // Fonts, the XML root element and colour names exercise big-endian
+    // strings, and the font records of both versions.
+    for (rel, expected) in [
+        (
+            "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
+            &[
+                "DOMVersion=\"3.0\"",
+                "GeometricBounds=\"0 0 792 612\"",
+                "<Content>Ned the Narcoleptic</Content>",
+                "<Content>The Dream Job!</Content>",
+                // A forced line break, as in the PDF.
+                "<Content>Neddy Buys\u{2028}a New Pillow</Content>",
+                "PostScriptName=\"Times-Roman\"",
+                "MarkupTag=\"XMLTag/Root\"",
+            ][..],
+        ),
+        (
+            "xmp-toolkit-bluesquare/BlueSquare.indd",
+            &[
+                "DOMVersion=\"4.0\"",
+                "GeometricBounds=\"0 0 792 612\"",
+                "<Rectangle Self=\"uad\"",
+                "PostScriptName=\"Times-Roman\"",
+                "Version=\"5.0d10e1\"",
+                "Name=\"C=100 M=90 Y=10 K=0\"",
+                "MarkupTag=\"XMLTag/Root\"",
+            ][..],
+        ),
+    ] {
+        let bytes = std::fs::read(fixture(rel)).unwrap();
+        let mut out = Vec::new();
+        indd::convert(&bytes, "test.indd", &mut out).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        assert_eq!(&out[..4], b"PK\x03\x04", "{rel}");
+        let text = String::from_utf8_lossy(&out);
+        for e in expected {
+            assert!(text.contains(e), "{rel}: no {e}");
+        }
+    }
 }
 
 #[test]

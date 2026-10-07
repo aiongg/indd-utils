@@ -2,7 +2,7 @@
 //! (class 0xCA64). See `docs/format/text-variables.md`.
 
 use crate::Error;
-use crate::object::{Cursor, Object};
+use crate::object::{Cursor, Object, u32_at, u32_from};
 
 pub mod chunk {
     /// Definition: name, text, type and settings.
@@ -76,11 +76,11 @@ fn parse(uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
         && match kind {
             // Dates: the first u32 is 0 or 0xCAB3 in the samples.
             0xCAA1 | 0xCAAB | 0xCAAC => {
-                (zero(&rest[..4]) || rest[..4] == [0xB3, 0xCA, 0, 0]) && zero(&rest[4..])
+                (zero(&rest[..4]) || u32_at(rest, 0) == Some(0xCAB3)) && zero(&rest[4..])
             }
-            0xCAC0 => rest[..4] == [0x64, 0x8C, 0, 0] && zero(&rest[4..]),
+            0xCAC0 => u32_at(rest, 0) == Some(0x8C64) && zero(&rest[4..]),
             0xCAAA => {
-                style = Some(u32::from_le_bytes(rest[4..8].try_into().unwrap()));
+                style = Some(u32_from(rest[4..8].try_into().unwrap()));
                 zero(&rest[..4]) && zero(&rest[8..])
             }
             _ => zero(rest) && text.is_empty(),
@@ -106,7 +106,11 @@ pub struct Instance {
 impl Instance {
     pub fn read(uid: u32, obj: &Object) -> Result<Instance, Error> {
         let name = match obj.chunk(chunk::INSTANCE_NAME) {
-            Some(d) if d.len() > 1 => Cursor::new(&d[1..]).string()?,
+            Some(d) if d.len() > 1 => {
+                let mut c = Cursor::new(d);
+                c.flag()?;
+                c.string()?
+            }
             _ => String::new(),
         };
         Ok(Instance { uid, name })

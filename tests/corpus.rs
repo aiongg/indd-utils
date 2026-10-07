@@ -86,7 +86,7 @@ fn every_corpus_container_has_xmp() {
 }
 
 #[test]
-fn every_little_endian_corpus_object_reads() {
+fn every_corpus_object_reads() {
     let Some(root) = corpus_root() else {
         eprintln!("corpus/ not present; skipping");
         return;
@@ -99,9 +99,6 @@ fn every_little_endian_corpus_object_reads() {
     for p in &files {
         let bytes = std::fs::read(p).unwrap();
         let c = indd::Container::parse(&bytes).unwrap();
-        if c.header.byte_order != indd::ByteOrder::Little {
-            continue;
-        }
         let result = c.database().and_then(|db| {
             for uid in db.uids() {
                 db.object(uid)?;
@@ -123,7 +120,7 @@ fn every_little_endian_corpus_object_reads() {
 }
 
 #[test]
-fn every_little_endian_corpus_file_converts() {
+fn every_corpus_file_converts() {
     let Some(root) = corpus_root() else {
         eprintln!("corpus/ not present; skipping");
         return;
@@ -133,10 +130,6 @@ fn every_little_endian_corpus_file_converts() {
     let mut failures = Vec::new();
     for p in &files {
         let bytes = std::fs::read(p).unwrap();
-        let c = indd::Container::parse(&bytes).unwrap();
-        if c.header.byte_order != indd::ByteOrder::Little {
-            continue;
-        }
         if let Err(e) = indd::convert(&bytes, "test.indd", std::io::sink()) {
             failures.push(format!("{}: {e}", p.display()));
         }

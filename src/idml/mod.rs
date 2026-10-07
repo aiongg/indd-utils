@@ -67,8 +67,8 @@ fn anchored_settings(d: &[u8]) -> Vec<(&'static str, String)> {
     if d.len() < 54 {
         return out;
     }
-    let y = f64::from_le_bytes(d[0..8].try_into().unwrap());
-    let align = match u16::from_le_bytes([d[52], d[53]]) {
+    let y = f64_from(d[0..8].try_into().unwrap());
+    let align = match u16_from([d[52], d[53]]) {
         0 => Some("TopAlign"),
         1 => Some("CenterAlign"),
         2 => Some("BottomAlign"),
@@ -535,18 +535,20 @@ const CELL_NO_STROKE_TYPE: u32 = 0x1040C;
 use values::Node;
 use xml::Xml;
 
-use crate::object::Cursor;
+use crate::object::{
+    Cursor, f64_bytes, f64_from, i32_bytes, u16_bytes, u16_from, u32_at, u32_bytes,
+};
 
 /// The bytes of a value as stored: list values of two, four or eight bytes
 /// are decoded as numbers by the attribute reader.
 fn raw_bytes(v: &Value) -> Vec<u8> {
     match v {
-        Value::Double(f) => f.to_le_bytes().to_vec(),
-        Value::Int(i) => i.to_le_bytes().to_vec(),
-        Value::Enum(e) => e.to_le_bytes().to_vec(),
-        Value::Ref(r) => r.to_le_bytes().to_vec(),
-        Value::Point(a, b) => [a.to_le_bytes(), b.to_le_bytes()].concat(),
-        Value::RefOrCode(r, _) => r.to_le_bytes().to_vec(),
+        Value::Double(f) => f64_bytes(*f).to_vec(),
+        Value::Int(i) => i32_bytes(*i).to_vec(),
+        Value::Enum(e) => u16_bytes(*e).to_vec(),
+        Value::Ref(r) => u32_bytes(*r).to_vec(),
+        Value::Point(a, b) => [f64_bytes(*a), f64_bytes(*b)].concat(),
+        Value::RefOrCode(r, _) => u32_bytes(*r).to_vec(),
         Value::Other(_, b) => b.clone(),
     }
 }
@@ -1479,7 +1481,7 @@ impl Writer<'_> {
                 .map(|f| ("unit", num(f))),
             TextKind::Point => match raw_bytes(v).as_slice() {
                 b if b.len() == 16 => {
-                    let f = |o: usize| f64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+                    let f = |o: usize| f64_from(b[o..o + 8].try_into().unwrap());
                     Some(("unit", nums(&[f(0), f(8)])))
                 }
                 _ => None,
@@ -1806,10 +1808,7 @@ impl Writer<'_> {
                     .map(|(_, n)| n.to_string()),
                 CellKind::StrokeType => {
                     let b = raw_bytes(v);
-                    let word = |i: usize| {
-                        b.get(i..i + 4)
-                            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
-                    };
+                    let word = |i: usize| u32_at(&b, i);
                     match (word(0), word(4)) {
                         (Some(CELL_NO_STROKE_TYPE), Some(0)) => Some("n".to_string()),
                         (Some(code), Some(0)) => STROKE_TYPES
@@ -2289,7 +2288,7 @@ impl Writer<'_> {
         if let Some(d) = &os.story
             && d.len() >= 16
         {
-            let h = |o: usize| u16::from_le_bytes([d[o], d[o + 1]]);
+            let h = |o: usize| u16_from([d[o], d[o + 1]]);
             match h(14) {
                 0 => story.push(("FrameType", "Unknown".to_string())),
                 1 => story.push(("FrameType", "TextFrameType".to_string())),
@@ -2788,10 +2787,10 @@ impl Writer<'_> {
             x.attr("ItemLayer", uref(Some(g.layer)));
         }
         match g.guide_type {
-            0 => {
+            Some(0) => {
                 x.attr("GuideType", "Ruler");
             }
-            1 => {
+            Some(1) => {
                 x.attr("GuideType", "Liquid");
             }
             _ => {}
@@ -3534,7 +3533,7 @@ mod tests {
             fit_to_page: true,
             view_threshold: 0.05,
             color: 6,
-            guide_type: 0,
+            guide_type: Some(0),
             layer: 0xcc,
         };
         let mut x = Xml::new();

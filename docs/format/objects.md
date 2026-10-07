@@ -33,13 +33,16 @@ class IDs; a chunk often lists objects of the class with the same number
 
 ## Primitive encodings
 
-All little-endian.
+Object data is in the byte order of the header's flag (`header.md`).
+All samples except two are little-endian, and the examples here are
+little-endian. Big-endian data and the layouts of InDesign 3.0 and 4.0
+are in `big-endian.md`.
 
 - **UID lists:** u32 count, then that many u32 UIDs.
 - **Matrices:** six f64, in IDML `ItemTransform` order (a b c d tx ty).
 - **Text segments:** a u16 header, flags in bits 14–15 and a count in bits
   0–13. 0x4000: *count* single-byte characters follow. 0x8000: *count*
-  UTF-16LE code units follow. A text of *n* code units is a sequence of
+  UTF-16 code units follow. A text of *n* code units is a sequence of
   segments adding up to *n*. Example: "WOMEN’S\r" is
   `05 40 "WOMEN" 01 80 19 20 02 40 "S\r"`.
 - **In-object strings:** u8 2, u8 (usually 0, meaning unknown), u16 length
@@ -92,8 +95,9 @@ is IDML `ItemLayer`. IDML writes a guide as a `Guide` element inside a
 
 **Evidence.** The 137 distinct little-endian files hold 847 guides; 815
 have this 52-byte record. The other 32 are in one InDesign 7.0 file with
-no IDML and have a 40-byte record; the converter leaves them out with a
-warning. In the corpus pairs, 71 IDML guides in 33 distinct files have an
+no IDML and have a 40-byte record, the first 40 bytes of the layout
+above; the InDesign 3.0 and 4.0 files have it too (`big-endian.md`). The
+converter reads it and leaves out `GuideType`. In the corpus pairs, 71 IDML guides in 33 distinct files have an
 INDD object with the same UID. Two more pairs have the same number of
 guides on both sides but different UIDs (the IDML was exported from
 another save) and are not used. For the 71:
@@ -147,6 +151,10 @@ the name as an in-object string. The internal layer is named
 | 0x140F | u32 applied master spread, u16 (unknown), matrix `MasterPageTransform` |
 | 0x5CC | Matrix: `ItemTransform` |
 | 0x5DD | Four f64: left, top, right, bottom. IDML `GeometricBounds` is top, left, bottom, right. |
+
+Files from InDesign 3.0 and 4.0 store the page transform and bounds in
+chunks 0x151 and 0x154, and chunk 0x140F has no matrix
+(`big-endian.md`).
 | 0x51A | Margins: four f64 (left, top, right, bottom), u16 own-margins flag |
 | 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, 4 bytes |
 | 0xCD02 | Layout grid (`GridDataInformation`, below) |
@@ -613,8 +621,11 @@ of each pair are equal in every style. The converter writes the four
 corner radii, and the four corner options, only when all four values
 are equal (336 of 337 styles).
 
-**Text frame settings (chunk 0x1B924).** 222 bytes; 162 or 106 in files
-from older versions.
+**Text frame settings (chunk 0x1B924).** 222 bytes; 162, 142 or 106 in
+files from older versions (942, 48, 66 and 61 object styles in the
+little-endian corpus). The converter reads it only with these sizes.
+The InDesign 4.0 file has 104 bytes, with another layout; the converter
+leaves it out with a warning (`big-endian.md`).
 
 | Offset | Contents | Attribute |
 |---|---|---|
@@ -703,7 +714,8 @@ Evidence:
   page. A section ends where the next one starts; that gives IDML
   `Length`.
 - The style is 0x4C15 in all 423 sections of the 250 distinct
-  little-endian files, and those in the pairs are `Arabic`.
+  little-endian files, and those in the pairs are `Arabic`. The
+  InDesign 3.0 file stores 0x4C06 (`big-endian.md`).
 - Style 0x4C17 is lower-case Roman. No pair has it. The evidence is a
   sample and its print PDF. The PDF's page labels (`/PageLabels` in the
   document catalog) give the pages of the sample's 0x4C17 sections style
@@ -724,7 +736,9 @@ One object of class 0x2202 holds document-wide preferences. Chunk 0x533
 2 for facing pages and 1 otherwise, four f64 bleeds from offset 70, u32
 intent at 142 (0 print, 1 web, 2 mobile). All values match the 75 pairs.
 The four bleeds are equal in every sample, so their order (written as top,
-bottom, inside, outside) is not verified.
+bottom, inside, outside) is not verified. Files from InDesign 3.0 to 7.5
+have a shorter chunk with another layout; the converter leaves it out
+with a warning (`big-endian.md`).
 
 ## Text frame preferences
 
@@ -895,7 +909,8 @@ the other is in the pair whose IDML names the family `Minion Pro (OTF)`
 
 ## XML tags (0xBF19)
 
-Chunk 0xBF2F is a u32 length and the tag name as text segments; chunk
+Chunk 0xBF2F is a u32 length and the tag name as text segments (in the
+InDesign 3.0 and 4.0 files, an in-object string; `big-endian.md`); chunk
 0x117 is the UID of the tag's colour, an object of class 0x1F11 whose
 chunk 0x1F01 holds u32 colour space 5 (RGB), u16 3 and three f64
 fractions, as for swatches. IDML writes each tag as an `XMLTag` in

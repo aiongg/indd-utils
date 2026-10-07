@@ -91,6 +91,7 @@ pub fn read_header(path: impl AsRef<std::path::Path>) -> Result<Header, Error> {
 /// Returns warnings about content that could not be converted.
 pub fn convert(indd: &[u8], name: &str, out: impl std::io::Write) -> Result<Vec<String>, Error> {
     let container = Container::parse(indd)?;
+    let _order = object::use_byte_order(container.header.byte_order);
     let db = container.database()?;
     let doc = model::Reader::new(&db).document(container.header.version)?;
     idml::write(&doc, name, out)?;

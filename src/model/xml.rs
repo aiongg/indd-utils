@@ -112,11 +112,21 @@ fn parse_node(kind: u32, body: &[u8]) -> Result<Node, Error> {
         }
     }
     let data = node.ok_or_else(|| Error::Corrupt("XML node without chunk 0xBF0D".into()))?;
-    // u32 tag, u32 content, 22 bytes, parent, self, child list.
+    // u32 tag, u32 content, 22 bytes (20 in a file from InDesign 4.0, 4 in
+    // one from 3.0), parent, self, child list.
+    let fixed = [22, 20, 4]
+        .into_iter()
+        .find(|&n| {
+            let mut c = Cursor::new(data);
+            c.skip(n + 24).is_ok()
+                && c.u32()
+                    .is_ok_and(|k| (k as usize).checked_mul(8) == Some(c.remaining()))
+        })
+        .ok_or_else(|| Error::Corrupt("XML node of unknown layout".into()))?;
     let mut c = Cursor::new(data);
     let tag = c.u32()?;
     let content = c.u32()?;
-    c.skip(22)?;
+    c.skip(fixed)?;
     let mut key = || -> Result<Key, Error> { Ok((c.u32()?, c.u32()?)) };
     let parent = key()?;
     let me = key()?;

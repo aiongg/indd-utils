@@ -40,6 +40,9 @@ Strings are in-object strings (`objects.md`).
 | u32 | Font type: 1 `TrueType`, 6 `OpenTypeCFF`, 7 `OpenTypeCID`, 8 `OpenTypeTT` | `FontType` |
 | u32 *n*, segments | Version: *n* UTF-16 code units as text segments | `Version` |
 
+In files from InDesign 3.0 and 4.0 the PostScript name is a byte and an
+in-object string, and InDesign 3.0 has no version (`big-endian.md`).
+
 **Matches.**
 
 - Font count: 629 of 630 families. The other family has 9 fonts in the

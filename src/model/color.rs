@@ -85,7 +85,7 @@ impl Gradient {
         let midpoints = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
         let kind = c.u32()?;
         let mut nc = Cursor::new(name);
-        let builtin_name = nc.u8()? == 1;
+        let builtin_name = nc.flag()? == 1;
         let name = nc.string()?;
         let flags = nc.u32()?;
         Ok(Some(Gradient {
@@ -262,7 +262,7 @@ impl Color {
             return Ok(None);
         };
         let mut c = Cursor::new(name);
-        let builtin_name = c.u8()? == 1;
+        let builtin_name = c.flag()? == 1;
         let name_str = c.string()?;
         let flags = c.u32()?;
         let mut v = Cursor::new(value);
@@ -349,7 +349,7 @@ impl Ink {
             return Ok(None);
         };
         let mut c = Cursor::new(d);
-        let builtin = c.u8()? == 1;
+        let builtin = c.flag()? == 1;
         let name = c.string()?;
         let end = c.pos();
         if d.len() < end + 48 {

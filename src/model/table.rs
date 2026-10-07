@@ -2,7 +2,7 @@
 
 use super::{Attrs, Reader, TextRun, Value};
 use crate::Error;
-use crate::object::Cursor;
+use crate::object::{Cursor, f64_at};
 
 pub mod class {
     pub const CELL_STYLE: u32 = 0x2021A;
@@ -160,21 +160,14 @@ impl Reader<'_> {
         };
         let based_on = Cursor::new(&data[4.min(data.len())..]).u32()?;
         // A flag byte (1 = built-in name), then a non-empty in-object string.
-        let Some((at, name)) = (12..data.len().saturating_sub(6)).find_map(|i| {
-            if data[i] > 2 || data[i + 1] != 2 {
-                return None;
-            }
-            match Cursor::new(&data[i + 1..]).string() {
-                Ok(n) if !n.is_empty() => Some((i, n)),
-                _ => None,
-            }
-        }) else {
+        let Some((_, builtin, name)) = super::find_flagged_string(&data, 12, |n| !n.is_empty())
+        else {
             return Ok(None);
         };
         Ok(Some(TableStyle {
             uid,
             name,
-            builtin: data[at] == 1,
+            builtin,
             based_on: super::uid_or_none(based_on),
             attrs: self.counted_attrs(uid, attrs_chunk)?,
         }))
@@ -358,10 +351,7 @@ fn raw_attrs(c: &mut Cursor, n: usize) -> Result<Vec<(u32, Vec<u8>)>, Error> {
 
 /// Text area width and height of a cell record.
 fn cell_size(v: &[u8]) -> Option<(f64, f64)> {
-    let f = |o: usize| {
-        v.get(o..o + 8)
-            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
-    };
+    let f = |o: usize| f64_at(v, o);
     Some((f(32)?, f(40)?))
 }
 

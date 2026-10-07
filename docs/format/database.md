@@ -5,13 +5,15 @@ see `container.md`) hold an object database: every object has a UID and a
 byte stream, and the streams are found through a B+ tree. This layout is
 our own analysis of the corpus. It is implemented in `src/database.rs`.
 
-Everything here is little-endian and has been checked only on
-little-endian files (InDesign 7.5–21.6).
+Everything here is little-endian, also in the two big-endian files
+(InDesign 3.0 and 4.0), whose byte order flag applies to object data only
+(`big-endian.md`).
 
 **Evidence.** The reader in `src/database.rs` checks every rule below
-while it reads. It reads every object of all 351 little-endian corpus files
-without a single inconsistency (`tests/corpus.rs`,
-`every_little_endian_corpus_object_reads`). The worked example is a blank
+while it reads. It reads every object of every corpus file and fixture, both
+big-endian files included, without a single inconsistency
+(`tests/corpus.rs`, `every_corpus_object_reads`; `tests/fixtures.rs`,
+`fixture_objects_read`). The worked example is a blank
 InDesign 19.0 document with 246 database pages.
 
 ## Page trailer
@@ -166,7 +168,6 @@ names. Example: the last segment of an object of 1983 bytes is split into
 
 ## Open questions
 
-- Byte order of these structures in big-endian files.
 - The checksum algorithm at 0xFFC.
 - The remaining master page fields.
 - What the high UIDs (from 0x80000000) are.

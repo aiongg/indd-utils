@@ -52,7 +52,14 @@ impl FontFamily {
         let Some(data) = obj.chunk(chunk::FAMILY) else {
             return Ok(None);
         };
-        let mut family = parse(uid, data)?;
+        // Files from InDesign 3.0 and 4.0 use older font records; one is
+        // taken only if it reads the chunk to its end.
+        let mut family = match parse(uid, data, Record::Current) {
+            Ok(f) => f,
+            Err(e) => parse(uid, data, Record::Version4)
+                .or_else(|_| parse(uid, data, Record::Version3))
+                .map_err(|_| e)?,
+        };
         if let Some(ids) = obj.chunk(chunk::TYPEKIT_IDS) {
             for (font, id) in family.fonts.iter_mut().zip(typekit_ids(ids)?) {
                 font.typekit_id = id;
@@ -62,9 +69,19 @@ impl FontFamily {
     }
 }
 
+/// Layouts of the font record.
+#[derive(Clone, Copy, PartialEq)]
+enum Record {
+    Current,
+    /// The PostScript name is a u8 and a string.
+    Version4,
+    /// As `Version4`, without the version.
+    Version3,
+}
+
 /// Chunk 0x3E05: u8, u16, name, u8, native name, 6 bytes, u16 font count,
 /// font records, u32 writing script.
-fn parse(uid: u32, data: &[u8]) -> Result<FontFamily, Error> {
+fn parse(uid: u32, data: &[u8], record: Record) -> Result<FontFamily, Error> {
     let mut c = Cursor::new(data);
     c.skip(3)?;
     let name = c.string()?;
@@ -76,8 +93,13 @@ fn parse(uid: u32, data: &[u8]) -> Result<FontFamily, Error> {
     for _ in 0..count {
         c.skip(1)?;
         let style = c.string()?;
-        let n = c.u16()? as usize;
-        let postscript_name = c.bytes(n)?.iter().map(|&b| b as char).collect();
+        let postscript_name = if record != Record::Current {
+            c.skip(1)?;
+            c.string()?
+        } else {
+            let n = c.u16()? as usize;
+            c.bytes(n)?.iter().map(|&b| b as char).collect()
+        };
         c.skip(1)?;
         let full_name = c.string()?;
         c.skip(1)?;
@@ -85,7 +107,10 @@ fn parse(uid: u32, data: &[u8]) -> Result<FontFamily, Error> {
         c.skip(1)?;
         let full_name_native = c.string()?;
         let font_type = c.u32()?;
-        let n = c.u32()? as usize;
+        let n = match record {
+            Record::Version3 => 0,
+            _ => c.u32()? as usize,
+        };
         let version = if n == 0 {
             String::new()
         } else {
@@ -103,6 +128,9 @@ fn parse(uid: u32, data: &[u8]) -> Result<FontFamily, Error> {
         });
     }
     let writing_script = c.u32()?;
+    if record != Record::Current && c.remaining() != 0 {
+        return Err(Error::Corrupt(format!("font family {uid}: unknown record")));
+    }
     Ok(FontFamily {
         uid,
         name,
@@ -118,7 +146,7 @@ fn typekit_ids(data: &[u8]) -> Result<Vec<String>, Error> {
     let n = c.u32()?;
     let mut out = Vec::new();
     for _ in 0..n {
-        let key = c.u8()? == 1;
+        let key = c.flag()? == 1;
         let s = c.string()?;
         out.push(if key { format!("$ID/{s}") } else { s });
     }
@@ -159,7 +187,7 @@ mod tests {
         d.extend(0x400Bu16.to_le_bytes());
         d.extend(b"Version 2.1");
         d.extend(1u32.to_le_bytes());
-        let f = parse(0x9E, &d).unwrap();
+        let f = parse(0x9E, &d, Record::Current).unwrap();
         assert_eq!(f.name, "Myriad Pro");
         assert_eq!(f.writing_script, 1);
         let font = &f.fonts[0];

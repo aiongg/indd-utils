@@ -5,7 +5,7 @@
 //! u32 type, u16 length and data. The first value is the attribute's value.
 
 use crate::Error;
-use crate::object::Cursor;
+use crate::object::{Cursor, f64_from, i32_from, u16_from, u32_from};
 
 /// Value type codes.
 pub mod ty {
@@ -61,7 +61,11 @@ impl Value {
     /// A string value: a flag byte, then an in-object string.
     pub fn as_string(&self) -> Option<String> {
         match self {
-            Value::Other(_, b) if b.len() > 1 => Cursor::new(&b[1..]).string().ok(),
+            Value::Other(_, b) if b.len() > 1 => {
+                let mut c = Cursor::new(b);
+                c.flag().ok()?;
+                c.string().ok()
+            }
             _ => None,
         }
     }
@@ -114,7 +118,7 @@ impl Attrs {
                 match (i, &first) {
                     (0, _) => first = Some(decode(t, data)),
                     (1, Some(Value::Ref(r))) if t == ty::CODE && len == 4 => {
-                        let code = u32::from_le_bytes(data.try_into().unwrap());
+                        let code = u32_from(data.try_into().unwrap());
                         first = Some(Value::RefOrCode(*r, code));
                     }
                     _ => {}
@@ -130,24 +134,24 @@ impl Attrs {
 
 fn decode_text(t: u32, data: &[u8]) -> Value {
     match data.len() {
-        8 => Value::Double(f64::from_le_bytes(data.try_into().unwrap())),
-        4 => Value::Ref(u32::from_le_bytes(data.try_into().unwrap())),
-        2 => Value::Enum(u16::from_le_bytes(data.try_into().unwrap())),
+        8 => Value::Double(f64_from(data.try_into().unwrap())),
+        4 => Value::Ref(u32_from(data.try_into().unwrap())),
+        2 => Value::Enum(u16_from(data.try_into().unwrap())),
         _ => Value::Other(t, data.to_vec()),
     }
 }
 
 fn decode(t: u32, data: &[u8]) -> Value {
-    let f64_at = |o: usize| f64::from_le_bytes(data[o..o + 8].try_into().unwrap());
+    let f64_at = |o: usize| f64_from(data[o..o + 8].try_into().unwrap());
     match (t, data.len()) {
         (ty::DOUBLE, 8) => Value::Double(f64_at(0)),
-        (ty::INT, 4) => Value::Int(i32::from_le_bytes(data.try_into().unwrap())),
-        (ty::ENUM, 2) => Value::Enum(u16::from_le_bytes(data.try_into().unwrap())),
-        (ty::REF, 4) => Value::Ref(u32::from_le_bytes(data.try_into().unwrap())),
+        (ty::INT, 4) => Value::Int(i32_from(data.try_into().unwrap())),
+        (ty::ENUM, 2) => Value::Enum(u16_from(data.try_into().unwrap())),
+        (ty::REF, 4) => Value::Ref(u32_from(data.try_into().unwrap())),
         (ty::POINT, 16) => Value::Point(f64_at(0), f64_at(8)),
         // Other 4-byte types are references or codes (for example a
         // corner effect ID); keep the number.
-        (_, 4) => Value::Ref(u32::from_le_bytes(data.try_into().unwrap())),
+        (_, 4) => Value::Ref(u32_from(data.try_into().unwrap())),
         _ => Value::Other(t, data.to_vec()),
     }
 }

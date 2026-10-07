@@ -3,7 +3,70 @@
 //! Most objects are a sequence of chunks: u32 chunk ID, u32 length, data.
 //! Some objects (embedded files, the XMP packet) are plain byte streams.
 
-use crate::Error;
+use std::cell::Cell;
+
+use crate::{ByteOrder, Error};
+
+thread_local! {
+    static BIG_ENDIAN: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Object data is in the file's byte order (`docs/format/objects.md`).
+/// Everything that decodes object data on this thread uses the byte order
+/// set here, until the returned guard is dropped.
+pub fn use_byte_order(order: ByteOrder) -> ByteOrderGuard {
+    ByteOrderGuard(BIG_ENDIAN.replace(order == ByteOrder::Big))
+}
+
+/// Restores the previous byte order when dropped.
+pub struct ByteOrderGuard(bool);
+
+impl Drop for ByteOrderGuard {
+    fn drop(&mut self) {
+        BIG_ENDIAN.set(self.0);
+    }
+}
+
+/// Whether object data on this thread is big-endian.
+pub fn big_endian() -> bool {
+    BIG_ENDIAN.get()
+}
+
+macro_rules! decoders {
+    ($($name:ident, $enc:ident: $t:ty;)*) => {$(
+        /// Decode object data in the current byte order.
+        pub fn $name(b: [u8; size_of::<$t>()]) -> $t {
+            if big_endian() { <$t>::from_be_bytes(b) } else { <$t>::from_le_bytes(b) }
+        }
+        /// Encode a value as object data in the current byte order.
+        pub fn $enc(v: $t) -> [u8; size_of::<$t>()] {
+            if big_endian() { v.to_be_bytes() } else { v.to_le_bytes() }
+        }
+    )*};
+}
+
+decoders! {
+    u16_from, u16_bytes: u16;
+    i16_from, i16_bytes: i16;
+    u32_from, u32_bytes: u32;
+    i32_from, i32_bytes: i32;
+    f64_from, f64_bytes: f64;
+}
+
+/// Decode a u32 at `offset`, if there are four bytes there.
+pub fn u32_at(b: &[u8], offset: usize) -> Option<u32> {
+    Some(u32_from(b.get(offset..offset + 4)?.try_into().ok()?))
+}
+
+/// Decode an f64 at `offset`, if there are eight bytes there.
+pub fn f64_at(b: &[u8], offset: usize) -> Option<f64> {
+    Some(f64_from(b.get(offset..offset + 8)?.try_into().ok()?))
+}
+
+/// Decode a u16 at `offset`, if there are two bytes there.
+pub fn u16_at(b: &[u8], offset: usize) -> Option<u16> {
+    Some(u16_from(b.get(offset..offset + 2)?.try_into().ok()?))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chunk<'a> {
@@ -18,8 +81,8 @@ pub fn chunks(bytes: &[u8]) -> Option<Vec<Chunk<'_>>> {
     let mut pos = 0;
     while pos < bytes.len() {
         let head = bytes.get(pos..pos + 8)?;
-        let id = u32::from_le_bytes(head[..4].try_into().unwrap());
-        let len = u32::from_le_bytes(head[4..].try_into().unwrap()) as usize;
+        let id = u32_from(head[..4].try_into().unwrap());
+        let len = u32_from(head[4..].try_into().unwrap()) as usize;
         let data = bytes.get(pos + 8..pos + 8 + len)?;
         out.push(Chunk { id, data });
         pos += 8 + len;
@@ -49,11 +112,14 @@ impl Object {
     }
 }
 
-/// Little-endian cursor over chunk data.
+/// Cursor over object data, in the byte order set by [`use_byte_order`].
 #[derive(Debug, Clone)]
 pub struct Cursor<'a> {
     data: &'a [u8],
     pos: usize,
+    /// Big-endian data: [`Cursor::flag`] has read the tag of the next
+    /// string.
+    tag_read: bool,
 }
 
 fn short(what: &str, pos: usize) -> Error {
@@ -62,7 +128,11 @@ fn short(what: &str, pos: usize) -> Error {
 
 impl<'a> Cursor<'a> {
     pub fn new(data: &'a [u8]) -> Cursor<'a> {
-        Cursor { data, pos: 0 }
+        Cursor {
+            data,
+            pos: 0,
+            tag_read: false,
+        }
     }
 
     pub fn pos(&self) -> usize {
@@ -91,19 +161,19 @@ impl<'a> Cursor<'a> {
     }
 
     pub fn u16(&mut self) -> Result<u16, Error> {
-        Ok(u16::from_le_bytes(self.bytes(2)?.try_into().unwrap()))
+        Ok(u16_from(self.bytes(2)?.try_into().unwrap()))
     }
 
     pub fn u32(&mut self) -> Result<u32, Error> {
-        Ok(u32::from_le_bytes(self.bytes(4)?.try_into().unwrap()))
+        Ok(u32_from(self.bytes(4)?.try_into().unwrap()))
     }
 
     pub fn i32(&mut self) -> Result<i32, Error> {
-        Ok(i32::from_le_bytes(self.bytes(4)?.try_into().unwrap()))
+        Ok(i32_from(self.bytes(4)?.try_into().unwrap()))
     }
 
     pub fn f64(&mut self) -> Result<f64, Error> {
-        Ok(f64::from_le_bytes(self.bytes(8)?.try_into().unwrap()))
+        Ok(f64_from(self.bytes(8)?.try_into().unwrap()))
     }
 
     /// A u32 count followed by that many u32 values.
@@ -120,7 +190,7 @@ impl<'a> Cursor<'a> {
 
     /// Text made of `chars` UTF-16 code units, stored as segments. Each
     /// segment is a u16 header, flags in the top two bits and a count in
-    /// the rest: 0x4000 = single-byte characters, 0x8000 = UTF-16LE code
+    /// the rest: 0x4000 = single-byte characters, 0x8000 = UTF-16 code
     /// units.
     pub fn segments(&mut self, chars: usize) -> Result<String, Error> {
         Ok(String::from_utf16_lossy(&self.segment_units(chars)?))
@@ -163,15 +233,42 @@ impl<'a> Cursor<'a> {
         Ok(units)
     }
 
+    /// The flag byte before a string (see [`Cursor::string`]).
+    pub fn flag(&mut self) -> Result<u8, Error> {
+        if big_endian() && self.data.get(self.pos) == Some(&2) && self.remaining() >= 2 {
+            self.tag_read = true;
+            self.pos += 2;
+            return Ok(self.data[self.pos - 1]);
+        }
+        self.u8()
+    }
+
     /// A string stored inside object data: u8 2, a u8 whose meaning is
     /// unknown (usually 0), u16 length in UTF-16 code units, then segments.
+    ///
+    /// The byte before the 2 is often a flag (1 = the string is a built-in
+    /// key), and the two bytes form a u16 with the 2 in the high byte. In
+    /// big-endian data the 2 therefore comes first: read such a flag with
+    /// [`Cursor::flag`]. If the caller skipped the byte before the string
+    /// instead, the 2 is that byte (`docs/format/big-endian.md`).
     pub fn string(&mut self) -> Result<String, Error> {
         let start = self.pos;
-        let tag = self.u8()?;
-        if tag != 2 {
-            return Err(Error::Corrupt(format!(
-                "string tag {tag} at {start}, expected 2"
-            )));
+        if big_endian() {
+            if !std::mem::take(&mut self.tag_read) {
+                let before = start.checked_sub(1).map(|i| self.data[i]);
+                if before != Some(2) && self.u8()? != 2 {
+                    return Err(Error::Corrupt(format!("no string tag at {start}")));
+                }
+                // The flag.
+                self.u8()?;
+            }
+        } else {
+            let tag = self.u8()?;
+            if tag != 2 {
+                return Err(Error::Corrupt(format!(
+                    "string tag {tag} at {start}, expected 2"
+                )));
+            }
         }
         self.u8()?;
         let n = self.u16()? as usize;
@@ -223,5 +320,26 @@ mod tests {
             2, 0, 7, 0, 7, 0x40, b'R', b'e', b'g', b'u', b'l', b'a', b'r',
         ];
         assert_eq!(Cursor::new(&data).string().unwrap(), "Regular");
+    }
+
+    #[test]
+    fn decodes_big_endian_data() {
+        let _order = use_byte_order(ByteOrder::Big);
+        // A colour name from the InDesign 4.0 fixture: 2, flag 0, 0, length
+        // 5, then a single-byte segment, and a u32 after it.
+        let data = [
+            2, 0, 0, 0, 5, 0x40, 5, b'B', b'l', b'a', b'c', b'k', 0, 0, 0, 0x0A,
+        ];
+        let mut c = Cursor::new(&data);
+        assert_eq!(c.flag().unwrap(), 0);
+        assert_eq!(c.string().unwrap(), "Black");
+        assert_eq!(c.u32().unwrap(), 10);
+        // Code that skips the flag byte skips the 2 instead.
+        let mut c = Cursor::new(&data);
+        c.skip(1).unwrap();
+        assert_eq!(c.string().unwrap(), "Black");
+        // UTF-16 code units are big-endian too.
+        let data = [0x80, 0x01, 0x5C, 0x0F];
+        assert_eq!(Cursor::new(&data).segments(1).unwrap(), "\u{5C0F}");
     }
 }

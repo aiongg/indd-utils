@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use super::num;
 use super::xml::Xml;
 use crate::model::{Attrs, Value};
+use crate::object::{f64_from, u32_at};
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -225,11 +226,11 @@ struct Stop {
 /// position of the midpoint to the next stop (0–1, absolute), f64 opacity
 /// in percent.
 fn stops(data: &[u8]) -> Option<Vec<Stop>> {
-    let n = u32::from_le_bytes(data.get(..4)?.try_into().ok()?) as usize;
+    let n = u32_at(data, 0)? as usize;
     if n == 0 || data.len() != 4 + n * 24 {
         return None;
     }
-    let f = |i: usize| f64::from_le_bytes(data[4 + i * 8..12 + i * 8].try_into().unwrap());
+    let f = |i: usize| f64_from(data[4 + i * 8..12 + i * 8].try_into().unwrap());
     Some(
         (0..n)
             .map(|i| {

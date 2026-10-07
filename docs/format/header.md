@@ -6,7 +6,7 @@ Offsets are from the start of the file.
 |---|---|---|---|
 | 0x00 | 16 | Fixed signature `06 06 ED F5 D8 1D 46 E5 BD 31 EF E7 FE 74 B7 1D` | Identical in all 352 corpus files |
 | 0x10 | 8 | ASCII `DOCUMENT` | All 352 files |
-| 0x18 | 1 | Byte order: `01` = little-endian, `02` = big-endian. The XMP Toolkit calls it the object stream byte order. | 351 corpus files are `01`. The `02` files (`opf-neddy-flyer`, InDesign 3.0, and `xmp-toolkit-bluesquare`, 4.0) store the version below big-endian. |
+| 0x18 | 1 | Byte order: `01` = little-endian, `02` = big-endian. The XMP Toolkit calls it the object stream byte order. | 351 corpus files are `01`. The `02` files (`opf-neddy-flyer`, InDesign 3.0, and `xmp-toolkit-bluesquare`, 4.0) store the version below big-endian. The flag applies to object data only (`big-endian.md`). |
 | 0x1D | 4 | Major version, u32 in the byte order above | Matches the major version in the document's XMP `CreatorTool` in all 352 files |
 | 0x21 | 4 | Minor version, u32 | Matches the minor version in `CreatorTool` (for example 18.5, 21.3) in all files where `CreatorTool` states one, except two where the header is one higher (header 18.2 / XMP 18.1, header 21.1 / XMP 21.0). The header probably records the last save and the XMP an earlier one. |
 

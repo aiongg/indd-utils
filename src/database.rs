@@ -2,12 +2,13 @@
 //! `docs/format/database.md`.
 //!
 //! Every object has a UID and a byte stream. The streams are found through
-//! a B+ tree keyed by (UID, segment). Little-endian files only.
+//! a B+ tree keyed by (UID, segment). These structures are little-endian
+//! in every file, whatever the byte order of the object data.
 
 use std::collections::BTreeMap;
 
 use crate::container::PAGE_SIZE;
-use crate::{ByteOrder, Container, Error};
+use crate::{Container, Error};
 
 /// Page types, from the u32 at 0xFF4 of every database page.
 pub mod page_type {
@@ -84,9 +85,6 @@ fn corrupt(msg: impl Into<String>) -> Error {
 
 impl<'a> Database<'a> {
     pub fn open(container: &Container<'a>) -> Result<Database<'a>, Error> {
-        if container.header.byte_order != ByteOrder::Little {
-            return Err(Error::Unsupported("big-endian database"));
-        }
         let master = container.active * PAGE_SIZE;
         let mut db = Database {
             bytes: container.bytes,

@@ -43,7 +43,7 @@ impl BuildingBlock {
 
 /// A flag byte (1 = built-in key, written with `$ID/`), then a string.
 fn keyed_string(c: &mut Cursor) -> Result<String, Error> {
-    let key = c.u8()? == 1;
+    let key = c.flag()? == 1;
     let s = c.string()?;
     Ok(if key { format!("$ID/{s}") } else { s })
 }

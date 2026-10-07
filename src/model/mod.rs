@@ -22,7 +22,7 @@ pub use table::{Cell, CellFormat, Table, TableStyle};
 pub use variable::TextVariable;
 pub use xref::CrossReferenceFormat;
 
-use crate::object::{Cursor, Object};
+use crate::object::{Cursor, Object, i16_from, u16_from, u32_from};
 use crate::{Database, Error, Version};
 
 /// Class IDs.
@@ -84,6 +84,8 @@ pub mod chunk {
     pub const PAGE_MASTER: u32 = 0x140F;
     pub const PAGE_TRANSFORM: u32 = 0x5CC;
     pub const PAGE_BOUNDS: u32 = 0x5DD;
+    /// Page bounds in files from InDesign 3.0 and 4.0.
+    pub const OLD_PAGE_BOUNDS: u32 = 0x154;
     pub const PAGE_MARGINS: u32 = 0x51A;
     pub const PAGE_COLUMNS: u32 = 0x528;
     pub const PAGE_GRID: u32 = 0xCD02;
@@ -389,8 +391,8 @@ pub struct Guide {
     pub view_threshold: f64,
     /// Colour code (6 in every sample).
     pub color: u32,
-    /// 0 ruler guide, 1 liquid guide.
-    pub guide_type: u32,
+    /// 0 ruler guide, 1 liquid guide; none in 40-byte records.
+    pub guide_type: Option<u32>,
     /// Document layer.
     pub layer: u32,
 }
@@ -752,234 +754,267 @@ impl<'a> Reader<'a> {
             if self.db.object(uid)?.is_none() {
                 continue;
             }
-            match cls {
-                class::STYLE_ROOT_GROUP
-                | class::OBJECT_STYLE_ROOT_GROUP
-                | class::CELL_STYLE_ROOT_GROUP
-                | class::TABLE_STYLE_ROOT_GROUP => {
-                    let kind = match self.chunk(uid, chunk::ROOT_GROUP_KIND)? {
-                        Some(d) => Cursor::new(&d).u32()?,
-                        None => 0,
-                    };
-                    let mut children = Vec::new();
-                    for id in [
-                        chunk::STYLE_ROOT_CHILDREN,
-                        chunk::OBJECT_STYLE_ROOT_CHILDREN,
-                        table::chunk::CELL_STYLE_ROOT_CHILDREN,
-                        table::chunk::TABLE_STYLE_ROOT_CHILDREN,
-                    ] {
-                        if children.is_empty() {
-                            children = self.children(uid, id)?;
+            // An object that cannot be read is left out with a warning.
+            let read = (|| -> Result<(), Error> {
+                match cls {
+                    class::STYLE_ROOT_GROUP
+                    | class::OBJECT_STYLE_ROOT_GROUP
+                    | class::CELL_STYLE_ROOT_GROUP
+                    | class::TABLE_STYLE_ROOT_GROUP => {
+                        let kind = match self.chunk(uid, chunk::ROOT_GROUP_KIND)? {
+                            Some(d) => Cursor::new(&d).u32()?,
+                            None => 0,
+                        };
+                        let mut children = Vec::new();
+                        for id in [
+                            chunk::STYLE_ROOT_CHILDREN,
+                            chunk::OBJECT_STYLE_ROOT_CHILDREN,
+                            table::chunk::CELL_STYLE_ROOT_CHILDREN,
+                            table::chunk::TABLE_STYLE_ROOT_CHILDREN,
+                        ] {
+                            if children.is_empty() {
+                                children = self.children(uid, id)?;
+                            }
                         }
-                    }
-                    style_groups.insert(
-                        uid,
-                        StyleGroup {
+                        style_groups.insert(
                             uid,
-                            name: String::new(),
-                            root: Some(kind),
-                            children,
-                        },
-                    );
-                }
-                class::STYLE_GROUP => {
-                    let name = match self.chunk(uid, chunk::STYLE_GROUP_NAME)? {
-                        Some(d) if d.len() > 1 => Cursor::new(&d[1..]).string()?,
-                        _ => String::new(),
-                    };
-                    let children = self.children(uid, chunk::STYLE_GROUP_CHILDREN)?;
-                    style_groups.insert(
-                        uid,
-                        StyleGroup {
-                            uid,
-                            name,
-                            root: None,
-                            children,
-                        },
-                    );
-                }
-                class::OBJECT_STYLE => {
-                    if let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? {
-                        let mut c = Cursor::new(&d);
-                        let based_on = c.u32()?;
-                        let builtin = c.u8()? == 1;
-                        let name = c.string()?;
-                        object_styles.insert(
-                            uid,
-                            ObjectStyle {
+                            StyleGroup {
                                 uid,
-                                name,
-                                builtin,
-                                based_on: uid_or_none(based_on),
-                                fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
-                                    Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
-                                    None => Attrs::default(),
-                                },
-                                attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
-                                    Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
-                                    None => Attrs::default(),
-                                },
-                                frame: self.chunk(uid, chunk::OBJECT_STYLE_FRAME)?,
-                                story: self.chunk(uid, chunk::OBJECT_STYLE_STORY)?,
-                                direction: match self.chunk(uid, chunk::OBJECT_STYLE_DIRECTION)? {
-                                    Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
-                                    _ => None,
-                                },
-                                text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
-                                contour_type: match self.chunk(uid, chunk::OBJECT_STYLE_CONTOUR)? {
-                                    Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
-                                    _ => None,
-                                },
-                                enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
-                                    Some(d) => Some(Cursor::new(&d).u32_list()?),
-                                    None => None,
-                                },
-                                paragraph_style: match self
-                                    .chunk(uid, chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?
-                                {
-                                    Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
-                                    _ => None,
-                                },
-                                anchor: self.chunk(uid, chunk::ANCHOR_SETTINGS)?,
+                                name: String::new(),
+                                root: Some(kind),
+                                children,
                             },
                         );
                     }
-                }
-                class::STYLE => {
-                    if let Some(style) = self.style(uid)? {
-                        styles.insert(uid, style);
-                    }
-                }
-                table::class::CELL_STYLE => {
-                    if let Some(s) = self.table_style(uid, table::chunk::CELL_STYLE_ATTRS)? {
-                        cell_styles.insert(uid, s);
-                    }
-                }
-                table::class::TABLE_STYLE => {
-                    if let Some(s) = self.table_style(uid, table::chunk::TABLE_STYLE_ATTRS)? {
-                        table_styles.insert(uid, s);
-                    }
-                }
-                color::class::COLOR => {
-                    if self.db.object(uid)?.is_none() {
-                        continue;
-                    }
-                    let obj = self.object(uid)?;
-                    if let Some(c) = Color::read(uid, &obj)? {
-                        swatches.insert(uid, c.reference());
-                        colors.push(c);
-                    } else if let Some(t) = Tint::read(uid, &obj)? {
-                        tint_objects.push(t);
-                    }
-                }
-                color::class::SWATCH_NONE => {
-                    swatches.insert(uid, "Swatch/None".into());
-                }
-                color::class::GRADIENT => {
-                    if let Some(g) = Gradient::read(uid, &*self.object(uid)?)? {
-                        swatches.insert(uid, g.reference());
-                        gradients.push(g);
-                    }
-                }
-                class::FONT_FAMILY => match FontFamily::read(uid, &*self.object(uid)?) {
-                    Ok(Some(f)) => {
-                        fonts.insert(uid, f);
-                    }
-                    Ok(None) => {}
-                    // Keep the name, which text formatting refers to.
-                    Err(e) => {
-                        self.warn(format!("font family {uid}: fonts left out: {e}"));
-                        if let Some(d) = self.chunk(uid, font::chunk::FAMILY)? {
-                            fonts.insert(
+                    class::STYLE_GROUP => {
+                        let name = match self.chunk(uid, chunk::STYLE_GROUP_NAME)? {
+                            Some(d) if d.len() > 1 => {
+                                let mut c = Cursor::new(&d);
+                                c.flag()?;
+                                c.string()?
+                            }
+                            _ => String::new(),
+                        };
+                        let children = self.children(uid, chunk::STYLE_GROUP_CHILDREN)?;
+                        style_groups.insert(
+                            uid,
+                            StyleGroup {
                                 uid,
-                                FontFamily {
+                                name,
+                                root: None,
+                                children,
+                            },
+                        );
+                    }
+                    class::OBJECT_STYLE => {
+                        if let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? {
+                            let mut c = Cursor::new(&d);
+                            let based_on = c.u32()?;
+                            let builtin = c.flag()? == 1;
+                            let name = c.string()?;
+                            object_styles.insert(
+                                uid,
+                                ObjectStyle {
                                     uid,
-                                    name: find_string(&d, 0)?,
-                                    fonts: Vec::new(),
-                                    writing_script: 0,
+                                    name,
+                                    builtin,
+                                    based_on: uid_or_none(based_on),
+                                    fitting: match self.chunk(uid, chunk::OBJECT_STYLE_FITTING)? {
+                                        Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
+                                        None => Attrs::default(),
+                                    },
+                                    attrs: match self.chunk(uid, chunk::OBJECT_STYLE_ATTRS)? {
+                                        Some(d) => Attrs::parse_short(&d).unwrap_or_default(),
+                                        None => Attrs::default(),
+                                    },
+                                    // The layout is known for these sizes
+                                    // only (`docs/format/big-endian.md`).
+                                    frame: match self.chunk(uid, chunk::OBJECT_STYLE_FRAME)? {
+                                        Some(d) if !matches!(d.len(), 106 | 142 | 162 | 222) => {
+                                            self.warn(format!(
+                                                "object style {uid}: text frame settings of {} bytes are not known; left out",
+                                                d.len()
+                                            ));
+                                            None
+                                        }
+                                        d => d,
+                                    },
+                                    story: self.chunk(uid, chunk::OBJECT_STYLE_STORY)?,
+                                    direction: match self
+                                        .chunk(uid, chunk::OBJECT_STYLE_DIRECTION)?
+                                    {
+                                        Some(d) if d.len() >= 2 => Some(Cursor::new(&d).u16()?),
+                                        _ => None,
+                                    },
+                                    text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
+                                    contour_type: match self
+                                        .chunk(uid, chunk::OBJECT_STYLE_CONTOUR)?
+                                    {
+                                        Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                                        _ => None,
+                                    },
+                                    enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
+                                        Some(d) => Some(Cursor::new(&d).u32_list()?),
+                                        None => None,
+                                    },
+                                    paragraph_style: match self
+                                        .chunk(uid, chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?
+                                    {
+                                        Some(d) if d.len() >= 4 => Some(Cursor::new(&d).u32()?),
+                                        _ => None,
+                                    },
+                                    anchor: self.chunk(uid, chunk::ANCHOR_SETTINGS)?,
                                 },
                             );
                         }
                     }
-                },
-                class::TEXT_VARIABLE => {
-                    if let Some(v) = TextVariable::read(uid, &*self.object(uid)?)? {
-                        text_variables.push(v);
+                    class::STYLE => {
+                        if let Some(style) = self.style(uid)? {
+                            styles.insert(uid, style);
+                        }
                     }
-                }
-                hyperlink::class::HYPERLINK => {
-                    if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?)? {
-                        hyperlinks.push(h);
+                    table::class::CELL_STYLE => {
+                        if let Some(s) = self.table_style(uid, table::chunk::CELL_STYLE_ATTRS)? {
+                            cell_styles.insert(uid, s);
+                        }
                     }
-                }
-                hyperlink::class::TEXT_SOURCE => {
-                    if let Some(s) = TextSource::read(uid, &*self.object(uid)?)? {
-                        text_sources.insert(uid, s);
+                    table::class::TABLE_STYLE => {
+                        if let Some(s) = self.table_style(uid, table::chunk::TABLE_STYLE_ATTRS)? {
+                            table_styles.insert(uid, s);
+                        }
                     }
-                }
-                hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
-                    if let Some(d) = Destination::read(uid, cls, &*self.object(uid)?)? {
-                        destinations.push(d);
+                    color::class::COLOR => {
+                        if self.db.object(uid)?.is_none() {
+                            return Ok(());
+                        }
+                        let obj = self.object(uid)?;
+                        if let Some(c) = Color::read(uid, &obj)? {
+                            swatches.insert(uid, c.reference());
+                            colors.push(c);
+                        } else if let Some(t) = Tint::read(uid, &obj)? {
+                            tint_objects.push(t);
+                        }
                     }
-                }
-                xref::CLASS => {
-                    if let Some(f) = CrossReferenceFormat::read(uid, &*self.object(uid)?)? {
-                        cross_reference_formats.insert(uid, f);
+                    color::class::SWATCH_NONE => {
+                        swatches.insert(uid, "Swatch/None".into());
                     }
-                }
-                hyperlink::class::BOOKMARK => {
-                    if let Some(b) = Bookmark::read(uid, &*self.object(uid)?)? {
-                        bookmarks.insert(uid, b);
+                    color::class::GRADIENT => {
+                        if let Some(g) = Gradient::read(uid, &*self.object(uid)?)? {
+                            swatches.insert(uid, g.reference());
+                            gradients.push(g);
+                        }
                     }
-                }
-                cjk::class::COMPOSITE_FONT => {
-                    if let Some((name, entries)) = CompositeFont::read(&*self.object(uid)?)? {
-                        composite_fonts.push((uid, name, entries));
+                    class::FONT_FAMILY => match FontFamily::read(uid, &*self.object(uid)?) {
+                        Ok(Some(f)) => {
+                            fonts.insert(uid, f);
+                        }
+                        Ok(None) => {}
+                        // Keep the name, which text formatting refers to.
+                        Err(e) => {
+                            self.warn(format!("font family {uid}: fonts left out: {e}"));
+                            if let Some(d) = self.chunk(uid, font::chunk::FAMILY)? {
+                                fonts.insert(
+                                    uid,
+                                    FontFamily {
+                                        uid,
+                                        name: find_string(&d, 0)?,
+                                        fonts: Vec::new(),
+                                        writing_script: 0,
+                                    },
+                                );
+                            }
+                        }
+                    },
+                    class::TEXT_VARIABLE => {
+                        if let Some(v) = TextVariable::read(uid, &*self.object(uid)?)? {
+                            text_variables.push(v);
+                        }
                     }
-                }
-                cjk::class::COMPOSITE_FONT_ENTRY => {
-                    if let Some(e) = CompositeFontEntry::read(uid, &*self.object(uid)?)? {
-                        composite_entries.insert(uid, e);
+                    hyperlink::class::HYPERLINK => {
+                        if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?)? {
+                            hyperlinks.push(h);
+                        }
                     }
-                }
-                c if c == cjk::class::MOJIKUMI || cjk::class::KINSOKU.contains(&c) => {
-                    if let Some(t) = CjkTable::read(uid, c, &*self.object(uid)?)? {
-                        cjk_tables.push(t);
+                    hyperlink::class::TEXT_SOURCE => {
+                        if let Some(s) = TextSource::read(uid, &*self.object(uid)?)? {
+                            text_sources.insert(uid, s);
+                        }
                     }
-                }
-                color::class::INK => {
-                    if let Some(i) = Ink::read(uid, &*self.object(uid)?)? {
-                        inks.push(i);
+                    hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
+                        if let Some(d) = Destination::read(uid, cls, &*self.object(uid)?)? {
+                            destinations.push(d);
+                        }
                     }
-                }
-                color::class::COLOR_GROUP => {
-                    if let Some(g) = ColorGroup::read(uid, &*self.object(uid)?)? {
-                        color_groups.insert(uid, g);
+                    xref::CLASS => {
+                        if let Some(f) = CrossReferenceFormat::read(uid, &*self.object(uid)?)? {
+                            cross_reference_formats.insert(uid, f);
+                        }
                     }
-                }
-                class::XML_TAG => {
-                    // Chunk 0xBF2F: u32 length, then the name as text
-                    // segments; chunk 0x117: the UID of the tag's colour.
-                    if let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? {
-                        let mut c = Cursor::new(&d);
-                        let n = c.u32()? as usize;
-                        let name = c.segments(n)?;
-                        let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
-                            Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
-                            _ => None,
-                        };
-                        xml_tag_names.insert(uid, name.clone());
-                        xml_tags.push((name, color));
+                    hyperlink::class::BOOKMARK => {
+                        if let Some(b) = Bookmark::read(uid, &*self.object(uid)?)? {
+                            bookmarks.insert(uid, b);
+                        }
                     }
-                }
-                class::LANGUAGE => {
-                    if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
-                        && d.len() > 1
-                    {
-                        languages.insert(uid, Cursor::new(&d[1..]).string()?);
+                    cjk::class::COMPOSITE_FONT => {
+                        if let Some((name, entries)) = CompositeFont::read(&*self.object(uid)?)? {
+                            composite_fonts.push((uid, name, entries));
+                        }
                     }
+                    cjk::class::COMPOSITE_FONT_ENTRY => {
+                        if let Some(e) = CompositeFontEntry::read(uid, &*self.object(uid)?)? {
+                            composite_entries.insert(uid, e);
+                        }
+                    }
+                    c if c == cjk::class::MOJIKUMI || cjk::class::KINSOKU.contains(&c) => {
+                        if let Some(t) = CjkTable::read(uid, c, &*self.object(uid)?)? {
+                            cjk_tables.push(t);
+                        }
+                    }
+                    color::class::INK => {
+                        if let Some(i) = Ink::read(uid, &*self.object(uid)?)? {
+                            inks.push(i);
+                        }
+                    }
+                    color::class::COLOR_GROUP => {
+                        if let Some(g) = ColorGroup::read(uid, &*self.object(uid)?)? {
+                            color_groups.insert(uid, g);
+                        }
+                    }
+                    class::XML_TAG => {
+                        // Chunk 0xBF2F: u32 length, then the name as text
+                        // segments; chunk 0x117: the UID of the tag's colour.
+                        if let Some(d) = self.chunk(uid, chunk::XML_TAG_NAME)? {
+                            let mut c = Cursor::new(&d);
+                            let n = c.u32()? as usize;
+                            // Files from InDesign 3.0 and 4.0 hold an in-object
+                            // string instead.
+                            let name = match c.segments(n) {
+                                Ok(name) => name,
+                                Err(_) => Cursor::new(&d).string()?,
+                            };
+                            let color = match self.chunk(uid, chunk::XML_TAG_COLOR)? {
+                                Some(d) if d.len() >= 4 => self.ui_color(Cursor::new(&d).u32()?)?,
+                                _ => None,
+                            };
+                            xml_tag_names.insert(uid, name.clone());
+                            xml_tags.push((name, color));
+                        }
+                    }
+                    class::LANGUAGE => {
+                        if let Some(d) = self.chunk(uid, chunk::LANGUAGE_NAME)?
+                            && d.len() > 1
+                        {
+                            let mut c = Cursor::new(&d);
+                            c.flag()?;
+                            languages.insert(uid, c.string()?);
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
+                Ok(())
+            })();
+            if let Err(e) = read {
+                self.warn(format!("object {uid} (class {cls:#x}) left out: {e}"));
             }
         }
         // The backing story: the document's chunk 0xBF14 names it and the
@@ -1015,6 +1050,7 @@ impl<'a> Reader<'a> {
                 )),
             }
         }
+        let preferences = self.document_preferences()?;
         Ok(Document {
             version,
             layers,
@@ -1049,7 +1085,7 @@ impl<'a> Reader<'a> {
             },
             cross_reference_formats,
             warnings: self.warnings.borrow().clone(),
-            preferences: self.document_preferences()?,
+            preferences,
             composite_fonts: composite_fonts
                 .into_iter()
                 .map(|(uid, name, entries)| CompositeFont {
@@ -1114,7 +1150,7 @@ impl<'a> Reader<'a> {
             let kind = c.u32()?;
             let value = c.u32()?;
             let font = c.u32()?;
-            let builtin = c.u8()? == 1;
+            let builtin = c.flag()? == 1;
             let style = c.string()?;
             c.u8()?;
             out.push(Bullet {
@@ -1157,6 +1193,10 @@ impl<'a> Reader<'a> {
             return Ok(None);
         };
         if d.len() < 146 {
+            self.warn(format!(
+                "document preferences of {} bytes are not known; left out",
+                d.len()
+            ));
             return Ok(None);
         }
         let f = |o: usize| Cursor::new(&d[o..]).f64();
@@ -1301,12 +1341,13 @@ impl<'a> Reader<'a> {
 
     /// A ruler guide from chunk 0x3308: f64 position, u32 owner (page or
     /// spread), u16 orientation (1 horizontal), f64 view threshold, u32
-    /// colour, u16 fit to page, f64, u32, u32 guide type, f64.
+    /// colour, u16 fit to page, f64, u32, u32 guide type, f64. Records of
+    /// 40 bytes, from InDesign 3.0 to 7.0, end before the guide type.
     fn guide(&self, uid: u32, layer: u32) -> Result<Option<Guide>, Error> {
         let Some(d) = self.chunk(uid, chunk::GUIDE)? else {
             return Ok(None);
         };
-        if d.len() < 52 {
+        if d.len() != 40 && d.len() < 52 {
             self.warn(format!(
                 "guide {uid}: guide record of {} bytes is not known; left out",
                 d.len()
@@ -1324,7 +1365,7 @@ impl<'a> Reader<'a> {
             view_threshold: f(14)?,
             color: u(22)?,
             fit_to_page: h(26)? == 1,
-            guide_type: u(40)?,
+            guide_type: if d.len() >= 52 { Some(u(40)?) } else { None },
             layer,
         }))
     }
@@ -1342,10 +1383,17 @@ impl<'a> Reader<'a> {
     }
 
     fn page(&self, uid: u32) -> Result<Page, Error> {
-        let transform = Matrix::read(&mut Cursor::new(
-            &self.required(uid, chunk::PAGE_TRANSFORM)?,
-        ))?;
-        let b = self.required(uid, chunk::PAGE_BOUNDS)?;
+        // Files from InDesign 3.0 and 4.0 store the transform and bounds in
+        // the chunks page items use (docs/format/big-endian.md).
+        let transform = match self.chunk(uid, chunk::PAGE_TRANSFORM)? {
+            Some(d) => d,
+            None => self.required(uid, chunk::ITEM_TRANSFORM)?,
+        };
+        let transform = Matrix::read(&mut Cursor::new(&transform))?;
+        let b = match self.chunk(uid, chunk::PAGE_BOUNDS)? {
+            Some(d) => d,
+            None => self.required(uid, chunk::OLD_PAGE_BOUNDS)?,
+        };
         let mut c = Cursor::new(&b);
         let bounds = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
         let (master, master_transform) = match self.chunk(uid, chunk::PAGE_MASTER)? {
@@ -1353,7 +1401,12 @@ impl<'a> Reader<'a> {
                 let mut c = Cursor::new(&d);
                 let m = c.u32()?;
                 c.skip(2)?;
-                (uid_or_none(m), Matrix::read(&mut c)?)
+                // The matrix is missing in files from InDesign 3.0 and 4.0.
+                let t = match c.remaining() {
+                    0 => Matrix::IDENTITY,
+                    _ => Matrix::read(&mut c)?,
+                };
+                (uid_or_none(m), t)
             }
             None => (None, Matrix::IDENTITY),
         };
@@ -1617,7 +1670,7 @@ impl<'a> Reader<'a> {
                         tolerance: f(4)?,
                         inset: f(12)?,
                         threshold: d[20],
-                        index: i16::from_le_bytes([d[23], d[24]]),
+                        index: i16_from([d[23], d[24]]),
                         high_resolution: d[25],
                     })
                 }
@@ -1735,13 +1788,10 @@ impl<'a> Reader<'a> {
         // InDesign 13 and earlier, so locate the name by its structure: a
         // flag byte (1 = built-in name), then an in-object string. The u32
         // before the flag is 1 for paragraph styles and 0 for character styles.
-        let Some(at) = (12..data.len().saturating_sub(6)).find(|&i| {
-            data[i] <= 2 && data[i + 1] == 2 && Cursor::new(&data[i + 1..]).string().is_ok()
-        }) else {
+        let Some((at, builtin, name)) = find_flagged_string(&data, 12, |_| true) else {
             return Err(Error::Corrupt(format!("style {uid}: no name")));
         };
         let paragraph = Cursor::new(&data[at - 4..]).u32()? != 0;
-        let name = Cursor::new(&data[at + 1..]).string()?;
         let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {
             Some(d) if d.len() >= 2 => {
                 let mut c = Cursor::new(&d);
@@ -1753,7 +1803,7 @@ impl<'a> Reader<'a> {
         Ok(Some(Style {
             uid,
             name,
-            builtin: data[at] == 1,
+            builtin,
             paragraph,
             based_on: uid_or_none(based_on),
             next: uid_or_none(next),
@@ -1776,6 +1826,10 @@ impl<'a> Reader<'a> {
         let mut sources = Vec::new();
         let mut marker_strand = None;
         for strand in strands {
+            // A strand without data occurs in a file from InDesign 3.0.
+            if self.db.object(strand)?.is_none() {
+                continue;
+            }
             if self.class(strand) == Some(xml::class::MARKER_STRAND) {
                 marker_strand = Some(strand);
             }
@@ -1783,7 +1837,7 @@ impl<'a> Reader<'a> {
                 && let Some(tree) = self.chunk(strand, hyperlink::chunk::RANGE_TREE)?
                 && tree.len() >= 4
             {
-                let first = u32::from_le_bytes(tree[..4].try_into().unwrap());
+                let first = u32_from(tree[..4].try_into().unwrap());
                 let pages = |uid| self.chunk(uid, hyperlink::chunk::RANGE_PAGE);
                 match hyperlink::source_ranges(first, pages) {
                     Ok(r) => sources.extend(r),
@@ -2242,14 +2296,53 @@ fn resolve_page_layout(spreads: &mut [Spread], masters: &mut [Spread]) {
     }
 }
 
+/// Find a flag byte (1 = built-in name) followed by an in-object string
+/// that `accept` takes, at or after `from`. Returns the offset of the pair,
+/// whether the flag is 1, and the string. In big-endian data the flag and
+/// the string's tag (2) are swapped (`docs/format/big-endian.md`).
+fn find_flagged_string(
+    data: &[u8],
+    from: usize,
+    accept: impl Fn(&str) -> bool,
+) -> Option<(usize, bool, String)> {
+    let big = crate::object::big_endian();
+    (from..data.len().saturating_sub(6)).find_map(|i| {
+        let header = match big {
+            false => data[i] <= 2 && data[i + 1] == 2,
+            true => data[i] == 2 && data[i + 1] <= 2,
+        };
+        if !header {
+            return None;
+        }
+        let mut c = Cursor::new(&data[i..]);
+        let builtin = c.flag().ok()? == 1;
+        let s = c.string().ok()?;
+        accept(&s).then_some((i, builtin, s))
+    })
+}
+
 /// Find the first in-object string at or after `from`.
 fn find_string(data: &[u8], from: usize) -> Result<String, Error> {
+    if crate::object::big_endian() {
+        // The tag (2), the byte before it in little-endian data, then the
+        // rest of the header (`Cursor::string`).
+        for i in from..data.len().saturating_sub(5) {
+            if data[i] == 2
+                && data[i + 1] <= 2
+                && u16_from([data[i + 3], data[i + 4]]) > 0
+                && let Ok(s) = Cursor::new(&data[i..]).string()
+            {
+                return Ok(s);
+            }
+        }
+        return Ok(String::new());
+    }
     for i in from..data.len().saturating_sub(4) {
         if data[i] == 2 && data[i + 1] == 0 {
-            let n = u16::from_le_bytes([data[i + 2], data[i + 3]]) as usize;
+            let n = u16_from([data[i + 2], data[i + 3]]) as usize;
             if n > 0
                 && i + 6 <= data.len()
-                && (data[i + 5] & 0xC0) != 0
+                && (u16_from([data[i + 4], data[i + 5]]) & 0xC000) != 0
                 && let Ok(s) = Cursor::new(&data[i..]).string()
             {
                 return Ok(s);

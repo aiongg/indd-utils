@@ -2,7 +2,7 @@
 //! See `docs/format/fonts.md` and `docs/format/objects.md`.
 
 use crate::Error;
-use crate::object::Cursor;
+use crate::object::{Cursor, u16_from};
 
 pub mod class {
     pub const COMPOSITE_FONT: u32 = 0xCB02;
@@ -26,7 +26,7 @@ pub mod chunk {
 /// A name stored as a flag byte (1 = built-in key, `$ID/` in IDML) and an
 /// in-object string.
 fn flagged_name(c: &mut Cursor) -> Result<String, Error> {
-    let builtin = c.u8()? == 1;
+    let builtin = c.flag()? == 1;
     let name = c.string()?;
     Ok(if builtin { format!("$ID/{name}") } else { name })
 }
@@ -121,7 +121,7 @@ impl CompositeFont {
         let name = flagged_name(&mut c)?;
         let start = c.pos();
         let Some(p) = (start..d.len().saturating_sub(1)).find(|&p| {
-            let n = u16::from_le_bytes([d[p], d[p + 1]]) as usize;
+            let n = u16_from([d[p], d[p + 1]]) as usize;
             n > 0 && p + 2 + 4 * n == d.len()
         }) else {
             return Ok(Some((name, Vec::new())));

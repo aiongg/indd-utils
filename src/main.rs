@@ -113,6 +113,7 @@ fn parse_uid(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
 fn dump(path: &str, uids: &[u32]) -> CliResult {
     let bytes = std::fs::read(path)?;
     let c = indd::Container::parse(&bytes)?;
+    let _order = indd::object::use_byte_order(c.header.byte_order);
     let db = c.database()?;
     let mut out = std::io::stdout().lock();
     for &uid in uids {

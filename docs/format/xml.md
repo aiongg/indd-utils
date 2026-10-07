@@ -35,7 +35,8 @@ length and data. Two parts are used:
 
 All 510 nodes have part 0xBF0D of exactly this size, and the 22 bytes are
 the same in all of them. The own key names the story whose store holds
-the node (510 of 510).
+the node (510 of 510). In the InDesign 3.0 and 4.0 files the 22 bytes
+are 4 and 20 bytes (`big-endian.md`).
 
 **References to nodes.** Chunk 0xBF14 is a node key:
 
