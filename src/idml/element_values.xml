@@ -33,6 +33,8 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<MasterSpread OverriddenPageItemProps="" ItemTransform="1 0 0 1 0 0" />
 		<Page AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName" GridStartingPoint="TopOutside" />
 		<Layer ShowGuides="true" Expendable="true" />
+		<Gradient ColorEditable="true" ColorRemovable="true" SwatchCreatorID="7937" />
+		<Swatch ColorEditable="false" ColorRemovable="false" Visible="true" SwatchCreatorID="7937" />
 		<Document>
 			<ConditionalTextPreference Present="true" ShowConditionIndicators="ShowIndicators" ActiveConditionSet="n" />
 			<LinkedStoryOption UpdateWhileSaving="false" WarnOnUpdateOfEditedStory="true" RemoveForcedLineBreaks="false" />
@@ -85,11 +87,22 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			</ObjectExportOption>
 		</TextFrame>
 		<Page SnapshotBlendingMode="IgnoreLayoutSnapshots" OptionalPage="false" />
+		<Tint ColorOverride="Normal" AlternateSpace="NoAlternateColor" AlternateColorValue="" ColorEditable="true" ColorRemovable="true" Visible="true" SwatchCreatorID="7937" />
 		<Document>
 			<LinkedStoryOption Present="true" ApplyStyleMappings="false" />
 			<LinkedPageItemOption Present="true" UpdateLinkWhileSaving="false" WarnOnUpdateOfEditedPageItem="true" PreserveSizeAndShape="false" PreserveAppearance="false" PreserveInteractivity="false" PreserveFrameContent="false" PreserveOthers="false" />
 			<TaggedPDFPreference Present="true" />
 		</Document>
+	</Values>
+	<Values MinimumVersion="9">
+		<ObjectStyle>
+			<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
+				<Properties>
+					<AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+					<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+				</Properties>
+			</ObjectExportOption>
+		</ObjectStyle>
 	</Values>
 	<Values MinimumVersion="10">
 		<TextFrame>
@@ -110,6 +123,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Group>
 			<ObjectExportOption EpubType="$ID/" />
 		</Group>
+		<ObjectStyle>
+			<ObjectExportOption EpubType="$ID/" />
+		</ObjectStyle>
 		<Document>
 			<HTMLFXLExportPreference EpubPageRange="" EpubPageRangeFormat="ExportAllPages" />
 		</Document>
@@ -121,6 +137,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		</Document>
 	</Values>
 	<Values MinimumVersion="12">
+		<TextFrame>
+			<TextFrameFootnoteOptionsObject SpanFootnotesAcross="false" MinimumSpacingOption="12" SpaceBetweenFootnotes="6" />
+		</TextFrame>
 		<Document>
 			<TextFrameFootnoteOptionsObject Present="true" EnableOverrides="false" SpanFootnotesAcross="false" MinimumSpacingOption="12" SpaceBetweenFootnotes="6" />
 		</Document>
@@ -142,6 +161,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Document>
 			<AdjustLayoutPreference Present="true" AllowLockedObjectsToAdjust="true" ImposeFontSizeRestriction="false" MinimumFontSize="6" MaximumFontSize="324" />
 		</Document>
+	</Values>
+	<Values MinimumVersion="18">
+		<Tint ConvertToHsb="false" />
 	</Values>
 	<Values MinimumVersion="19">
 		<Spread SpreadHidden="false" />
@@ -165,7 +187,30 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Group FlexItemWidthMode="FlexFixed" FlexItemHeightMode="FlexFixed">
 			<ObjectExportOption EpubAriaRole="$ID/" />
 		</Group>
+		<ObjectStyle>
+			<ObjectExportOption EpubAriaRole="$ID/" />
+		</ObjectStyle>
 	</Values>
+	<WhenWritten MinimumVersion="7">
+		<TextFrame>
+			<TextFramePreference VerticalThreshold="0" />
+		</TextFrame>
+	</WhenWritten>
+	<WhenWritten MinimumVersion="8">
+		<TextFrame>
+			<TextFramePreference UseFlexibleColumnWidth="false" />
+		</TextFrame>
+	</WhenWritten>
+	<WhenWritten MinimumVersion="13">
+		<TextFrame>
+			<TextFramePreference FootnotesEnableOverrides="false" FootnotesSpanAcrossColumns="false" />
+		</TextFrame>
+	</WhenWritten>
+	<WhenWritten MinimumVersion="15">
+		<TextFrame>
+			<TextFramePreference ColumnRuleOffset="0" ColumnRuleTopInset="0" ColumnRuleInsetChainOverride="true" ColumnRuleBottomInset="0" ColumnRuleStrokeType="StrokeStyle/$ID/Solid" ColumnRuleStrokeTint="100" ColumnRuleOverprintOverride="false" />
+		</TextFrame>
+	</WhenWritten>
 	<List Tag="TrapPreset" MinimumVersion="7">
 		<TrapPreset Self="TrapPreset/$ID/k[No Trap Preset]" Name="$ID/k[No Trap Preset]" DefaultTrapWidth="0.25" BlackWidth="0.5" TrapJoin="MiterEndJoin" TrapEnd="MiterTrapEnds" ObjectsToImages="true" ImagesToImages="true" InternalImages="false" OneBitImages="true" ImagePlacement="CenterEdges" StepThreshold="10" BlackColorThreshold="100" BlackDensity="1.6" SlidingTrapThreshold="70" ColorReduction="100" />
 		<TrapPreset Self="TrapPreset/$ID/kDefaultTrapStyleName" Name="$ID/kDefaultTrapStyleName" DefaultTrapWidth="0.25" BlackWidth="0.5" TrapJoin="MiterEndJoin" TrapEnd="MiterTrapEnds" ObjectsToImages="true" ImagesToImages="true" InternalImages="false" OneBitImages="true" ImagePlacement="CenterEdges" StepThreshold="10" BlackColorThreshold="100" BlackDensity="1.6" SlidingTrapThreshold="70" ColorReduction="100" />

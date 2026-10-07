@@ -195,6 +195,19 @@ fn applies(block: &Node, major: u32) -> bool {
 /// InDesign version `major`, from `element_values.xml`. `None` if the
 /// file has no values for it.
 pub fn element(path: &str, major: u32) -> Option<Node> {
+    blocks_element("Values", path, major)
+}
+
+/// The values of attributes that only some elements on `path` have, for
+/// the converter to write where it writes the attribute (`WhenWritten`
+/// blocks of `element_values.xml`).
+pub fn when_written(path: &str, major: u32) -> Vec<(String, String)> {
+    blocks_element("WhenWritten", path, major)
+        .map(|n| n.attrs)
+        .unwrap_or_default()
+}
+
+fn blocks_element(block_tag: &str, path: &str, major: u32) -> Option<Node> {
     let (parent, child) = match path.split_once('/') {
         Some((p, c)) => (p, Some(c)),
         None => (path, None),
@@ -203,7 +216,7 @@ pub fn element(path: &str, major: u32) -> Option<Node> {
     for block in element_values()
         .children
         .iter()
-        .filter(|b| b.tag == "Values")
+        .filter(|b| b.tag == block_tag)
     {
         if !applies(block, major) {
             continue;
@@ -417,6 +430,10 @@ mod tests {
         // Export options differ between versions.
         assert!(new.attr("EpubType").is_some());
         assert_eq!(list("TrapPreset", 21).len(), 2);
+        let tfp = when_written("TextFrame/TextFramePreference", 21);
+        assert!(tfp.iter().any(|(k, _)| k == "ColumnRuleOffset"));
+        let tfp = when_written("TextFrame/TextFramePreference", 14);
+        assert!(!tfp.iter().any(|(k, _)| k == "ColumnRuleOffset"));
         let en = keyed("Language", "$ID/English: USA").unwrap();
         assert_eq!(en.attr("DoubleQuotes"), Some("\u{201C}\u{201D}"));
         let w = present("Document/WatermarkPreference", 21).unwrap();

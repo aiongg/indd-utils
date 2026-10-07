@@ -156,6 +156,12 @@ pub mod chunk {
     /// Bullet characters, in the preferences object.
     pub const BULLETS: u32 = 0x1A488;
     pub const FRAME_COLUMNS: u32 = 0x2D1;
+    pub const FRAME_COLUMN_RULE: u32 = 0x22646;
+    pub const FRAME_COLUMN_RULE_OVERRIDE: u32 = 0x2265A;
+    pub const FRAME_FOOTNOTES: u32 = 0x22608;
+    pub const FRAME_IGNORE_WRAP: u32 = 0x3730;
+    /// Inset spacing of a text frame (on the frame, not its columns).
+    pub const FRAME_INSET: u32 = 0x3723;
     pub const FRAME_JUSTIFICATION: u32 = 0x2CE;
     /// Matrix of a multi-column frame; its first four values give the
     /// text orientation.
@@ -688,7 +694,25 @@ pub struct TextFramePreferences {
     pub vertical_justification: u16,
     pub vertical_balance_columns: bool,
     pub auto_sizing_type: u16,
-    pub auto_sizing_reference_point: u32,
+    pub auto_sizing_reference_point: u16,
+    /// Chunk 0x2D1: u8 at 12 and, in 40-byte chunks, f64 at 32.
+    pub use_fixed_width: bool,
+    pub max_width: Option<f64>,
+    /// Chunk 0x2CE (48 bytes): u16 at 26 and f64 at 28 (minimum height),
+    /// u16 at 36 and f64 at 38 (minimum width), u16 at 46 (no line
+    /// breaks).
+    pub minimum_sizes: Option<([bool; 2], [f64; 2], bool)>,
+    /// Chunk 0x3730: u16 ignore text wrap.
+    pub ignore_wrap: Option<bool>,
+    /// Column rule (chunk 0x22646): f64 width at 28, u32 colour at 36.
+    pub column_rule: Option<(f64, u32)>,
+    /// Chunk 0x2265A: all zero in every sample but one.
+    pub column_rule_override: Option<bool>,
+    /// Footnote options (chunk 0x22608): u32, f64 minimum spacing, f64
+    /// space between.
+    pub footnotes: Option<[f64; 2]>,
+    /// Inset spacing (the frame's chunk 0x3723): top, left, bottom, right.
+    pub inset: [f64; 4],
 }
 
 /// A style group: a root group of styles, or a named group in it.
@@ -1496,7 +1520,13 @@ impl<'a> Reader<'a> {
         }))
     }
 
-    fn text_frame_preferences(&self, mcf: u32) -> Result<Option<TextFramePreferences>, Error> {
+    /// Text frame settings of frame `frame`, from its multi-column frame
+    /// `mcf` and the frame itself.
+    fn text_frame_preferences(
+        &self,
+        frame: u32,
+        mcf: u32,
+    ) -> Result<Option<TextFramePreferences>, Error> {
         let (Some(cols), Some(just)) = (
             self.chunk(mcf, chunk::FRAME_COLUMNS)?,
             self.chunk(mcf, chunk::FRAME_JUSTIFICATION)?,
@@ -1506,6 +1536,40 @@ impl<'a> Reader<'a> {
         if cols.len() < 22 || just.len() < 28 {
             return Ok(None);
         }
+        let minimum_sizes = (just.len() >= 48).then(|| {
+            let flag = |at| u16_at(&just, at).is_some_and(|v| v != 0);
+            (
+                [flag(26), flag(36)],
+                [
+                    f64_at(&just, 28).unwrap_or(0.0),
+                    f64_at(&just, 38).unwrap_or(0.0),
+                ],
+                flag(46),
+            )
+        });
+        let column_rule = match self.chunk(mcf, chunk::FRAME_COLUMN_RULE)? {
+            Some(d) => match (f64_at(&d, 28), u32_at(&d, 36)) {
+                (Some(w), Some(c)) => Some((w, c)),
+                _ => None,
+            },
+            None => None,
+        };
+        let footnotes = match self.chunk(mcf, chunk::FRAME_FOOTNOTES)? {
+            Some(d) => match (f64_at(&d, 4), f64_at(&d, 12)) {
+                (Some(a), Some(b)) => Some([a, b]),
+                _ => None,
+            },
+            None => None,
+        };
+        // The frame's chunk 0x3723: f64, u32, then four f64: left, top,
+        // right, bottom.
+        let inset = match self.chunk(frame, chunk::FRAME_INSET)? {
+            Some(d) if d.len() >= 44 => {
+                let f = |at| f64_at(&d, at).unwrap_or(0.0);
+                [f(20), f(12), f(36), f(28)]
+            }
+            _ => [0.0; 4],
+        };
         Ok(Some(TextFramePreferences {
             column_count: Cursor::new(&cols).u32()?,
             column_gutter: Cursor::new(&cols[4..]).f64()?,
@@ -1514,7 +1578,24 @@ impl<'a> Reader<'a> {
             vertical_justification: Cursor::new(&just[2..]).u16()?,
             vertical_balance_columns: Cursor::new(&just[20..]).u16()? != 0,
             auto_sizing_type: Cursor::new(&just[22..]).u16()?,
-            auto_sizing_reference_point: Cursor::new(&just[24..]).u32()?,
+            auto_sizing_reference_point: Cursor::new(&just[24..]).u16()?,
+            use_fixed_width: cols.get(12).is_some_and(|&b| b != 0),
+            max_width: if cols.len() >= 40 {
+                f64_at(&cols, 32)
+            } else {
+                None
+            },
+            minimum_sizes,
+            ignore_wrap: self
+                .chunk(mcf, chunk::FRAME_IGNORE_WRAP)?
+                .and_then(|d| u16_at(&d, 0))
+                .map(|v| v != 0),
+            column_rule,
+            column_rule_override: self
+                .chunk(mcf, chunk::FRAME_COLUMN_RULE_OVERRIDE)?
+                .map(|d| d.iter().any(|&b| b != 0)),
+            footnotes,
+            inset,
         }))
     }
 
@@ -2032,7 +2113,7 @@ impl<'a> Reader<'a> {
             if let Some(g) = self.graphic(child)? {
                 graphics.push(g);
             } else if self.class(child) == Some(class::MULTI_COLUMN_FRAME) {
-                frame_prefs = self.text_frame_preferences(child)?;
+                frame_prefs = self.text_frame_preferences(uid, child)?;
                 frame_mcf = Some(child);
                 text_column = self
                     .children(child, chunk::ITEM_HIERARCHY)?

@@ -2830,7 +2830,12 @@ impl Writer<'_> {
         x.end().end();
     }
 
-    fn text_frame_preference(x: &mut Xml, p: &TextFramePreferences) {
+    fn text_frame_preference(
+        x: &mut Xml,
+        p: &TextFramePreferences,
+        major: u32,
+        swatch: impl Fn(u32) -> Option<String>,
+    ) {
         const POINTS: [&str; 9] = [
             "TopLeftPoint",
             "TopCenterPoint",
@@ -2871,6 +2876,64 @@ impl Writer<'_> {
         }
         if let Some(v) = POINTS.get(p.auto_sizing_reference_point as usize) {
             x.attr("AutoSizingReferencePoint", *v);
+        }
+        if let Some(w) = p.max_width {
+            x.attr("TextColumnMaxWidth", num(w));
+        }
+        x.attr("UseFixedColumnWidth", p.use_fixed_width.to_string());
+        if let Some(([use_height, use_width], [height, width], no_breaks)) = p.minimum_sizes {
+            x.attr("UseMinimumHeightForAutoSizing", use_height.to_string())
+                .attr("MinimumHeightForAutoSizing", num(height))
+                .attr("UseMinimumWidthForAutoSizing", use_width.to_string())
+                .attr("MinimumWidthForAutoSizing", num(width))
+                .attr("UseNoLineBreaksForAutoSizing", no_breaks.to_string());
+        }
+        if let Some(v) = p.ignore_wrap {
+            x.attr("IgnoreWrap", v.to_string());
+        }
+        // Values every IDML of the version has where it writes them; they
+        // also say from which version the column rule and footnote
+        // settings exist (idml-values.md).
+        let written = values::when_written("TextFrame/TextFramePreference", major);
+        let has = |k: &str| written.iter().any(|(n, _)| n == k);
+        if has("ColumnRuleOffset") {
+            let (width, color) = match p.column_rule {
+                Some((w, c)) => (w, swatch(c)),
+                // Without the chunk (objects.md).
+                None => (1.0, Some("Color/Black".to_string())),
+            };
+            x.attr("ColumnRuleStrokeWidth", num(width));
+            if let Some(c) = color {
+                x.attr("ColumnRuleStrokeColor", c);
+            }
+            if p.column_rule_override != Some(true) {
+                x.attr("ColumnRuleOverride", "false");
+            }
+        }
+        if has("FootnotesEnableOverrides") {
+            let [spacing, between] = p.footnotes.unwrap_or([12.0, 6.0]);
+            x.attr("FootnotesMinimumSpacing", num(spacing))
+                .attr("FootnotesSpaceBetween", num(between));
+        }
+        x.attrs_missing(written.iter());
+        if major >= 11 {
+            let [top, left, bottom, right] = p.inset;
+            let item = |v: f64| Node {
+                tag: "ListItem".into(),
+                attrs: vec![("type".into(), "unit".into())],
+                text: Some(num(v)),
+                children: Vec::new(),
+            };
+            Self::properties_with(
+                x,
+                &[],
+                &[Node {
+                    tag: "InsetSpacing".into(),
+                    attrs: vec![("type".into(), "list".into())],
+                    text: None,
+                    children: vec![item(top), item(left), item(bottom), item(right)],
+                }],
+            );
         }
         x.end();
     }
@@ -3148,7 +3211,10 @@ impl Writer<'_> {
             ..
         } = &item.kind
         {
-            Self::text_frame_preference(x, p);
+            Self::text_frame_preference(x, p, self.doc.version.major, |u| match u {
+                0 => Some("n".to_string()),
+                u => self.doc.swatches.get(&u).cloned(),
+            });
         }
         let frame = matches!(
             item.kind,

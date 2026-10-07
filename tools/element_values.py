@@ -24,6 +24,8 @@ LISTS are elements with `Self` whose whole list (every element, with all
 attributes and children, in order) is the same in every file of a range;
 the converter writes the list. KEYED values depend only on another
 attribute of the element, such as the quotes of a language on its name.
+WHEN_WRITTEN values are those of attributes that only some elements have
+(`WhenWritten` blocks); the converter writes them where it decides to.
 
 EXPLAINED lists values that are the same in nearly every element; the
 others are values the converter reads from the INDD (the reason says
@@ -63,6 +65,8 @@ ELEMENTS = [
     "Oval/ObjectExportOption", "Polygon/ObjectExportOption",
     "GraphicLine/ObjectExportOption", "Group/ObjectExportOption",
     "Spread", "MasterSpread", "Page", "Spread/FlattenerPreference", "Layer",
+    "TextFrame/TextFramePreference", "TextFrame/TextFrameFootnoteOptionsObject",
+    "Color", "Tint", "Gradient", "Swatch", "Guide", "ObjectStyle/ObjectExportOption",
     "Document/ConditionalTextPreference", "Document/EndnoteOption",
     "Document/TextFrameFootnoteOptionsObject", "Document/LinkedStoryOption",
     "Document/LinkedPageItemOption", "Document/WatermarkPreference",
@@ -79,6 +83,20 @@ LISTS = ["TrapPreset"]
 # MIN_KEYED_FILES files.
 KEYED = {"Language": ("Name", ["SingleQuotes", "DoubleQuotes"])}
 MIN_KEYED_FILES = 3
+# Attributes that only some elements have, which the converter writes
+# where it decides to (for example from DOM 15 on, or when a chunk is
+# there): a value is kept when every element that has the attribute has
+# the same value. path -> attributes.
+WHEN_WRITTEN = {
+    "TextFrame/TextFramePreference": [
+        "ColumnRuleOffset", "ColumnRuleTopInset", "ColumnRuleBottomInset",
+        "ColumnRuleInsetChainOverride", "ColumnRuleStrokeTint",
+        "ColumnRuleStrokeType", "ColumnRuleOverprintOverride",
+        "FootnotesEnableOverrides", "FootnotesSpanAcrossColumns",
+        "VerticalThreshold", "UseFlexibleColumnWidth",
+        "MinimumFirstBaselineOffset",
+    ],
+}
 # Values that are nearly constant; the exceptions are read from the INDD.
 # (path, key) -> reason, as recorded in docs/format/idml-values.md.
 EXPLAINED = {}
@@ -208,6 +226,7 @@ def analyse(scans):
                 else:
                     status[(path, k)][dom]["=" + vals[0]] += 1
     kept = defaultdict(list)  # path -> [(key, first, last, value, files)]
+    written = defaultdict(list)  # the same, for WHEN_WRITTEN
     left_out = defaultdict(list)
     for (path, key), by_dom in status.items():
         if key[1:] in SKIP and key.startswith("@"):
@@ -220,6 +239,13 @@ def analyse(scans):
             n = present[path].get(d, 0)
             s = by_dom.get(d, Counter())
             if not n or not s:
+                continue
+            if key[1:] in WHEN_WRITTEN.get(path, ()) and key.startswith("@"):
+                c = {v for v in elements[(path, key)][d] if v is not None}
+                if len(c) == 1:
+                    per_dom[d] = next(iter(c))
+                elif c:
+                    varies = True
                 continue
             if (path, key) in EXPLAINED:
                 c = elements[(path, key)][d]
@@ -236,13 +262,14 @@ def analyse(scans):
             left_out[path].append(key)
             continue
         rs = ranges(per_dom, {d: present[path].get(d, 0) for d in doms}, newest)
+        target = written if key[1:] in WHEN_WRITTEN.get(path, ()) else kept
         for first, last, v, n in rs:
-            kept[path].append((key, first, last, v, n))
+            target[path].append((key, first, last, v, n))
     presence = {}
     for path in SINGLETONS:
         per_dom = {d: (True if present[path].get(d, 0) == files[d] else None) for d in doms}
         presence[path] = ranges(per_dom, files, newest)
-    return doms, files, kept, left_out, presence, order, elements, counts
+    return doms, files, kept, left_out, presence, order, elements, counts, written
 
 
 def analyse_lists(scans, doms):
@@ -304,7 +331,27 @@ def analyse_keyed(scans):
     return out
 
 
-def write(kept, presence, lists, order, keyed):
+def write(kept, presence, lists, order, keyed, written):
+    s = HEADER + "<ElementValues>\n"
+    s += blocks_xml("Values", kept, presence, order)
+    s += blocks_xml("WhenWritten", written, {}, order)
+    for tag, rs in lists.items():
+        for first, last, lst, _n in rs:
+            gate = f' MinimumVersion="{first}"' + (f' MaximumVersion="{last}"' if last else "")
+            s += f'\t<List Tag="{tag}"{gate}>\n'
+            s += "".join(f"\t\t{e}\n" for e in lst)
+            s += "\t</List>\n"
+    for tag, rows in keyed.items():
+        key = KEYED[tag][0]
+        s += f'\t<Keyed Tag="{tag}" Key="{key}">\n'
+        for k, attrs, _n in rows:
+            a = "".join(f" {n}={quoteattr(v)}" for n, v in [(key, k)] + attrs)
+            s += f"\t\t<{tag}{a} />\n"
+        s += "\t</Keyed>\n"
+    OUT.write_text(s + "</ElementValues>\n")
+
+
+def blocks_xml(block_tag, kept, presence, order):
     blocks = defaultdict(lambda: defaultdict(list))  # (first,last) -> path -> [(key,v)]
     for path, items in kept.items():
         for key, first, last, v, _n in items:
@@ -312,10 +359,10 @@ def write(kept, presence, lists, order, keyed):
     for path, rs in presence.items():
         for first, last, _v, _n in rs:
             blocks[(first, last)].setdefault(path, [])
-    s = HEADER + "<ElementValues>\n"
+    s = ""
     for (first, last) in sorted(blocks, key=lambda r: (r[0], r[1] or 999)):
         gate = f' MinimumVersion="{first}"' + (f' MaximumVersion="{last}"' if last else "")
-        s += f"\t<Values{gate}>\n"
+        s += f"\t<{block_tag}{gate}>\n"
         by_parent = OrderedDict()
         for path in ELEMENTS:
             if path not in blocks[(first, last)]:
@@ -345,28 +392,15 @@ def write(kept, presence, lists, order, keyed):
             for child, ca, cp in n["children"]:
                 s += node_xml(child, ca, cp, "\t\t\t")
             s += f"\t\t</{parent}>\n"
-        s += "\t</Values>\n"
-    for tag, rs in lists.items():
-        for first, last, lst, _n in rs:
-            gate = f' MinimumVersion="{first}"' + (f' MaximumVersion="{last}"' if last else "")
-            s += f'\t<List Tag="{tag}"{gate}>\n'
-            s += "".join(f"\t\t{e}\n" for e in lst)
-            s += "\t</List>\n"
-    for tag, rows in keyed.items():
-        key = KEYED[tag][0]
-        s += f'\t<Keyed Tag="{tag}" Key="{key}">\n'
-        for k, attrs, _n in rows:
-            a = "".join(f" {n}={quoteattr(v)}" for n, v in [(key, k)] + attrs)
-            s += f"\t\t<{tag}{a} />\n"
-        s += "\t</Keyed>\n"
-    OUT.write_text(s + "</ElementValues>\n")
+        s += f"\t</{block_tag}>\n"
+    return s
 
 
 def main():
     idmls = corpus_idmls()
     with ProcessPoolExecutor() as pool:
         scans = list(pool.map(scan, idmls, chunksize=4))
-    doms, files, kept, left_out, presence, order, elements, counts = analyse(scans)
+    doms, files, kept, left_out, presence, order, elements, counts, written = analyse(scans)
     print(f"{len(idmls)} distinct IDML files; files per DOM version: "
           + ", ".join(f"{d}: {files[d]}" for d in doms))
     if "--key" in sys.argv:
@@ -388,6 +422,9 @@ def main():
                    if len(c) > 1]
             print(f"  {key[1:] if key[0] == '@' else key}: {k}/{n} {k / n:.4f} {str(v)[:40]!r}  {' '.join(odd)}")
         return
+    for path, items in written.items():
+        print(f"{path}: when written: " + ", ".join(
+            f"{k[1:]}={v!r} {f}{'' if l is None else f'-{l}'}" for k, f, l, v, _ in items))
     for path in ELEMENTS:
         items = kept.get(path, [])
         by_range = Counter((f, l, n) for _, f, l, _, n in items)
@@ -409,7 +446,7 @@ def main():
         n_attrs = Counter(n for _, attrs, _ in rows for n, _ in attrs)
         print(f"keyed {tag} by {KEYED[tag][0]}: {len(rows)} values, kept {dict(n_attrs)}")
     if "--write" in sys.argv:
-        write(kept, presence, lists, order, keyed)
+        write(kept, presence, lists, order, keyed, written)
         print(f"wrote {OUT.relative_to(ROOT)}")
 
 

@@ -274,6 +274,25 @@ converter writes the list (a `List` block of the values file). A
 document with trap presets of its own would have more; the corpus has
 none, so their INDD objects are not decoded.
 
+### Values written where the converter writes the attribute
+
+Some attributes are only on some elements; IDML writes them where a
+frame's value differs from its object style, or from some version on.
+For these the tool keeps a value when every element that has the
+attribute has the same value (`WhenWritten` blocks). The converter
+writes them on every text frame of those versions:
+
+| `TextFramePreference` values | Versions |
+|---|---|
+| `VerticalThreshold="0"` | 7 on |
+| `UseFlexibleColumnWidth="false"` | 8 on |
+| `FootnotesEnableOverrides`, `FootnotesSpanAcrossColumns` (`false`) | 13 on |
+| `ColumnRuleOffset`, `ColumnRuleTopInset`, `ColumnRuleBottomInset` (`0`), `ColumnRuleInsetChainOverride="true"`, `ColumnRuleStrokeTint="100"`, `ColumnRuleStrokeType="StrokeStyle/$ID/Solid"`, `ColumnRuleOverprintOverride="false"` | 15 on |
+
+The first version of the column rule and footnote values is also where
+the converter starts writing the column rule and footnote values it
+reads from the INDD (`objects.md`, text frame preferences).
+
 ### Export options of page items
 
 `ObjectExportOption` of page items has different attributes in

@@ -1036,9 +1036,44 @@ From the frame's multi-column frame object (class 0x263):
 | 0x2CE | u16 2 | `VerticalJustification`: 0 Top, 1 Center, 2 Bottom, 3 Justify (350/350) |
 | 0x2CE | u16 20 | `VerticalBalanceColumns` (18/18) |
 | 0x2CE | u16 22 | `AutoSizingType`: 0 Off, 1 HeightOnly, 2 WidthOnly, 3 HeightAndWidth (61/61) |
-| 0x2CE | u32 24 | `AutoSizingReferencePoint`: 0–8, top-left to bottom-right by rows (58/58) |
+| 0x2CE | u16 24 | `AutoSizingReferencePoint`: 0–8, top-left to bottom-right by rows (58/58) |
+| 0x2CE | u16 26, f64 28 | `UseMinimumHeightForAutoSizing`, `MinimumHeightForAutoSizing` |
+| 0x2CE | u16 36, f64 38 | `UseMinimumWidthForAutoSizing`, `MinimumWidthForAutoSizing` |
+| 0x2CE | u16 46 | `UseNoLineBreaksForAutoSizing` |
+| 0x2D1 | u8 12 | `UseFixedColumnWidth` |
+| 0x2D1 | f64 32 | `TextColumnMaxWidth` (in 40-byte chunks) |
+| 0x3730 | u16 | `IgnoreWrap` |
+| 0x22646 | f64 28, u32 36 | `ColumnRuleStrokeWidth`, `ColumnRuleStrokeColor` (a swatch; 0 = `n`) |
+| 0x22608 | f64 4, f64 12 | `FootnotesMinimumSpacing`, `FootnotesSpaceBetween` |
 
-Inset spacing is 0 in every sample and not located.
+The frame itself (class 0x6201) holds the inset spacing in chunk 0x3723
+(44 bytes): f64, u32, then four f64 (left, top, right, bottom). IDML
+writes `InsetSpacing` as a list of top, left, bottom and right.
+
+Evidence over the text frames of the trustworthy pairs that the
+converter writes (`TextFramePreference` values reproduced): the
+auto-sizing minimums and their flags 4,069 to 4,071 of 4,069 to 4,071
+each (5 frames with 108 pt minimums, 4 without line breaks),
+`UseFixedColumnWidth` 747 of 747 (9 true), `TextColumnMaxWidth` 23,043
+of 23,043 (one frame with 210.24; the 30-byte chunks of DOM 7 files have
+no such field and their IDML no such attribute), `IgnoreWrap` 643 of the
+817 frames that have it (74 true; 174 frames without the chunk have
+`false` in IDML and are left without it), column rule width and colour
+7,277 and 7,323 of 7,277 and 7,323, footnote spacings 4,351 of 4,351
+each. Without chunk 0x22646 the IDML has width 1 and `Color/Black`
+(2,816 frames); without chunk 0x22608, 12 and 6 (1,430 frames). The
+column rule and footnote settings are written from the versions in
+which IDML has them (`idml-values.md`).
+
+`InsetSpacing`: 16,560 of 18,091 frames. IDML gives 870 frames a single
+number instead of a list (the first f64 of chunk 0x3723 in most of
+them); what decides this was not found, and the converter writes the
+list for every frame from DOM 11 on. DOM 7 to 10 files give most frames
+no `InsetSpacing` at all, and the converter writes none for them.
+
+`ColumnRuleOverride`: chunk 0x2265A is all zero in the frames of the
+pairs except one, whose IDML has `true`; the converter writes `false`
+for zero chunks and frames without it (7,247 of 7,248).
 
 **Text orientation (chunk 0x2DE).** The multi-column frame holds a
 matrix (six f64) in chunk 0x2DE. Its first four values are 1 0 0 1 for
