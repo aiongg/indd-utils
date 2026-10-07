@@ -62,6 +62,10 @@ separately (rule and evidence: `docs/measurement.md`).
   measure of progress; run it after every change. It reports all pairs and
   the trustworthy ones (`--stale N` lists stale pairs, `--trusted` limits
   the tables to trustworthy pairs).
+- Headline numbers (value coverage, document scores, ranked gaps; defined
+  in `docs/measurement.md`): `cargo build --release && python3 -I
+  tools/compare.py --exclude own/`. It prints them last and writes
+  `pairs.tsv`, `gaps.tsv` and `gaps-all.tsv` to `target/compare/`.
 - `compare.py --all` also converts every other INDD/INDT under `corpus/`
   (any version, either byte order) and reports their failures; every run
   counts converter warnings by kind (`--warnings N` lists N kinds).

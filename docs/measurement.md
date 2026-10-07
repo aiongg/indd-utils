@@ -98,3 +98,59 @@ difference is a converter error and not an edit.
 trustworthy pairs. `--stale N` lists N stale pairs with their reasons;
 `--trusted` restricts the element tables, shortfalls and attribute details
 to trustworthy pairs.
+
+## Headline metric
+
+`compare.py` ends with a headline over trustworthy pairs, followed by the
+same numbers over all pairs.
+
+### Value coverage
+
+A **value** is one of these, in the reference IDML:
+
+| Value | Counted once per | Reproduced when |
+|---|---|---|
+| Element presence | Element with `Self`; the first child without `Self` of each tag, if it has attributes (counted as `Parent/Child`); in a child without attributes, its children with attributes (`Parent/Child/Grandchild`); each preference element | The output has an element with the same tag and `Self` (of the parent, for children) |
+| Attribute | Attribute other than `Self` | The output's attribute is equal, with numbers compared to 6 significant digits |
+| `<Properties>` child | Child of `Properties` (`P.Name`) | Equal text and attributes; a structured child (`PathGeometry`, lists) is compared as a whole |
+| Story text | Story | The text, with paragraph breaks, is identical |
+| Text range | Start of a paragraph and character style range | The output has a range starting at the same offset |
+| Text range attribute | Attribute or `Properties` child of the range | Equal |
+
+When an element is not produced, its presence and all its values count as
+not reproduced. When a story's text differs, its text ranges cannot be
+lined up, so all their values count as not reproduced.
+
+**Value coverage** is reproduced values divided by all values, summed over
+pairs, so each value counts once and large documents weigh more. Per-pair
+coverage is the same ratio within one pair. `target/compare/pairs.tsv`
+lists every pair with its coverage and stale reasons (`--out DIR` changes
+the directory).
+
+**Document score** is the share of trustworthy pairs whose coverage is at
+least 99 %, and at least 99.9 %.
+
+### Values left out
+
+Some values describe the computer that exported the IDML or the IDML
+package itself, not the document. No INDD file can supply them, so they
+are left out of the counts (`EXCLUDED` in `compare.py`).
+
+| Element | Value | Why it cannot come from the INDD |
+|---|---|---|
+| `Font` | `Status` | It records whether the font is installed on the computer that exported the IDML. The same document gives a different value on another computer. |
+| `idPkg:Story`, `idPkg:Spread` and the other part references in `designmap.xml` | `src` | The file names of the parts inside the IDML package. The IDML writer chooses them; they are not document content. |
+
+A value enters this list only with a reason of this kind. Values that are
+hard to decode, or that the converter does not write yet, stay in the
+counts.
+
+### Gap list
+
+Each value that is not reproduced is counted against a key:
+(element, attribute), (element, `(element not produced)`), or
+(`TextRange`, `(story text differs)`). `gaps.tsv` (trustworthy pairs) and
+`gaps-all.tsv` (all pairs) in the output directory list every key with the
+number of documents affected and the number of values wrong and missing.
+`compare.py` prints the top 30 keys by documents affected (`--gaps N`) and
+the top 15 by values.

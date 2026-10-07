@@ -13,6 +13,7 @@ Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
                                    [--schemas DIR --jing DIR] [--bin PATH]
                                    [--all] [--exclude PREFIX]... [--jobs N]
                                    [--shortfalls N] [--trusted] [--stale N]
+                                   [--gaps N] [--out DIR]
 Run from the repository root after `cargo build --release`. With --schemas
 and --jing, also validates every output with tools/validate.sh, in batches
 of VALIDATE_BATCH files (one Jing run per schema for a whole batch). --bin runs
@@ -29,6 +30,12 @@ INDD; rule and evidence in docs/measurement.md). Totals are printed for all
 pairs and for trustworthy pairs; --trusted limits the element tables,
 shortfalls and details to trustworthy pairs, --stale N lists stale pairs.
 
+Last comes the headline (docs/measurement.md): value coverage, the share
+of reference values the conversion reproduces, over trustworthy pairs and
+over all pairs; document scores (pairs with coverage >= 99 % and >= 99.9 %);
+and the biggest gaps (--gaps N). pairs.tsv, gaps.tsv and gaps-all.tsv go to
+--out (default target/compare).
+
 --shortfalls N lists the N element types and attributes that fall short
 (missing elements; wrong or missing attribute values; differing story
 text) in the most documents.
@@ -38,6 +45,8 @@ Embedded file data (`Contents`) is compared by digest, so it is reported as
 """
 
 import argparse
+import fnmatch
+import functools
 import hashlib
 import os
 import re
@@ -303,11 +312,63 @@ def props(el):
     return a
 
 
+# Values left out of value coverage because they cannot be derived from an
+# INDD file: (tag pattern, attribute or P.<Properties child>, reason), tag
+# patterns as in fnmatch. docs/measurement.md explains each entry.
+EXCLUDED = [
+    ("Font", "Status", "whether the font is installed on the exporting computer"),
+    ("Document/{http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging}*", "src",
+     "file names of the package parts, chosen by the IDML writer"),
+]
+
+
+@functools.cache
+def excluded(tag, key):
+    return any(k == key and fnmatch.fnmatchcase(tag, t) for t, k, _ in EXCLUDED)
+
+
+def tree(el):
+    """An element with its attributes, text and descendants as one string,
+    numbers normalised: the value of a structured <Properties> child such as
+    PathGeometry."""
+    attrs = ",".join(f"{k}={norm(v)}" for k, v in sorted(el.attrib.items()) if k != "type")
+    kids = ",".join(tree(c) for c in el)
+    return f"{el.tag}({attrs})[{kids}]{norm((el.text or '').strip())}"
+
+
+def values(tag, el):
+    """The values of an element that value coverage counts: attributes and
+    <Properties> children, without Self and without EXCLUDED values."""
+    a = props(el)
+    p = el.find("Properties")
+    if p is not None:
+        for c in p:
+            if c.get("type") != "list" and len(c):
+                a["P." + c.tag] = tree(c)
+    return {k: v for k, v in a.items() if k != "Self" and not excluded(tag, k)}
+
+
+# Gap keys for values that could not be compared one by one.
+NO_ELEMENT = "(element not produced)"
+NO_TEXT = "(story text differs)"
+ELEMENT = "(element)"
+
+
 class Stats:
     """Comparison counts over a set of pairs."""
 
     def __init__(self):
         self.docs = 0
+        # Value coverage: reference values, and those reproduced exactly.
+        self.values = 0
+        self.reproduced = 0
+        # (tag, key) -> values wrong / missing, and documents affected.
+        self.gap_wrong = Counter()
+        self.gap_missing = Counter()
+        self.gap_docs = Counter()
+        self.gap_total = Counter()
+        # (pair, reproduced, values) for each pair.
+        self.pairs = []
         self.found = Counter()
         self.total = Counter()
         self.attr_ok = defaultdict(Counter)
@@ -316,12 +377,35 @@ class Stats:
 
     def add(self, other):
         self.docs += other.docs
+        self.values += other.values
+        self.reproduced += other.reproduced
+        for c in ("gap_wrong", "gap_missing", "gap_docs", "gap_total"):
+            getattr(self, c).update(getattr(other, c))
+        self.pairs += other.pairs
         self.found.update(other.found)
         self.total.update(other.total)
         for k, c in other.attr_ok.items():
             self.attr_ok[k].update(c)
         self.story_ok.update(other.story_ok)
         self.short_docs.update(other.short_docs)
+
+    def coverage(self):
+        return self.reproduced / self.values if self.values else 1.0
+
+    def quantile(self, q):
+        """Value coverage of the pair at quantile q (0 = lowest)."""
+        cov = sorted(ok / n if n else 1.0 for _, ok, n in self.pairs)
+        return cov[min(len(cov) - 1, int(q * len(cov)))] if cov else 1.0
+
+    def document_score(self, at_least):
+        """Pairs whose value coverage is at least `at_least`."""
+        return sum(1 for _, ok, n in self.pairs if n == 0 or ok / n >= at_least)
+
+    def gaps(self):
+        """(tag, key), documents, values wrong, values missing; most
+        documents first, then most values."""
+        rows = [(k, d, self.gap_wrong[k], self.gap_missing[k]) for k, d in self.gap_docs.items()]
+        return sorted(rows, key=lambda r: (-r[1], -(r[2] + r[3]), r[0]))
 
     def story_line(self):
         st = sum(self.story_ok.values())
@@ -392,7 +476,70 @@ def compare_pair(name, ref, ours, examples, show):
             if len(examples[("Story", "text")]) < max(show, 3):
                 examples[("Story", "text")].append((name, sid, text[:80], our_st[sid][:80]))
     p.short_docs.update(short)
+    value_coverage(p, ref, ours)
     return p
+
+
+def value_coverage(p, ref, ours):
+    """Count reference values and the reproduced ones into `p`: element
+    presence, attribute and <Properties> values, story text, and the start
+    and attributes of each text range."""
+    ref_el, ref_st, ref_rg = ref
+    our_el, our_st, our_rg = ours
+    total = Counter()
+    wrong = Counter()
+    missing = Counter()
+
+    def compare(tag, theirs, mine):
+        for k, v in theirs.items():
+            key = (tag, k)
+            total[key] += 1
+            o = mine.get(k)
+            if o is None:
+                missing[key] += 1
+            elif norm(o) != norm(v):
+                wrong[key] += 1
+
+    for (tag, s), el in ref_el.items():
+        theirs = values(tag, el)
+        mine = our_el.get((tag, s))
+        if mine is None:
+            n = 1 + len(theirs)
+            total[(tag, NO_ELEMENT)] += n
+            missing[(tag, NO_ELEMENT)] += n
+            continue
+        total[(tag, ELEMENT)] += 1
+        compare(tag, theirs, values(tag, mine))
+    for sid, text in ref_st.items():
+        key = ("Story", "(text)")
+        total[key] += 1
+        if sid not in our_st:
+            missing[key] += 1
+        elif our_st[sid] != text:
+            wrong[key] += 1
+    for sid, rgs in ref_rg.items():
+        if our_st.get(sid) != ref_st.get(sid):
+            n = sum(1 + len(a) for a in rgs.values())
+            total[("TextRange", NO_TEXT)] += n
+            missing[("TextRange", NO_TEXT)] += n
+            continue
+        mine = our_rg.get(sid, {})
+        for start, attrs in rgs.items():
+            if start not in mine:
+                n = 1 + len(attrs)
+                total[("TextRange", NO_ELEMENT)] += n
+                missing[("TextRange", NO_ELEMENT)] += n
+                continue
+            total[("TextRange", ELEMENT)] += 1
+            compare("TextRange", attrs, mine[start])
+    n = sum(total.values())
+    bad = sum(wrong.values()) + sum(missing.values())
+    p.values += n
+    p.reproduced += n - bad
+    p.gap_total.update(total)
+    p.gap_wrong.update(wrong)
+    p.gap_missing.update(missing)
+    p.gap_docs.update(k for k in total if wrong[k] or missing[k])
 
 
 def main():
@@ -417,6 +564,10 @@ def main():
                     help="element tables, shortfalls and details over trustworthy pairs only")
     ap.add_argument("--stale", type=int, default=0,
                     help="list N stale pairs with their reasons")
+    ap.add_argument("--gaps", type=int, default=30,
+                    help="print the N biggest value coverage gaps")
+    ap.add_argument("--out", default=str(ROOT / "target" / "compare"),
+                    help="directory for pairs.tsv and gaps*.tsv (default target/compare)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
                     help="conversions and schema validations run in parallel")
     args = ap.parse_args()
@@ -425,6 +576,7 @@ def main():
     every = Stats()     # all pairs
     trusted = Stats()   # pairs without a sign of staleness
     stale = []          # (name, reasons)
+    pair_rows = []      # (name, Stats, stale reasons) per pair
     examples = defaultdict(list)
     failures = []
     warnings = Counter()
@@ -506,9 +658,12 @@ def main():
             ours = load(out)
             reasons = stale_reasons(indd_date, idml_date, indd_uids, ref[0], ref[1], ours[1])
             p = compare_pair(indd.name, ref, ours, examples, args.show)
+            rel = str(indd.relative_to(ROOT / "corpus"))
+            p.pairs = [(rel, p.reproduced, p.values)]
+            pair_rows.append((rel, p, reasons))
             every.add(p)
             if reasons:
-                stale.append((str(indd.relative_to(ROOT / "corpus")), reasons))
+                stale.append((rel, reasons))
             else:
                 trusted.add(p)
             if check:
@@ -576,6 +731,52 @@ def main():
                 print(f"      {ex}")
     for ex in examples[("Story", "text")]:
         print("  story mismatch:", ex)
+    headline(args, every, trusted, pair_rows)
+
+
+def gap_name(key):
+    tag, k = key
+    return f"{tag} {k}"
+
+
+def write_gaps(path, st):
+    with open(path, "w") as f:
+        f.write("tag\tkey\tdocuments\twrong\tmissing\tvalues\n")
+        for key, docs, w, m in st.gaps():
+            f.write(f"{key[0]}\t{key[1]}\t{docs}\t{w}\t{m}\t{st.gap_total[key]}\n")
+
+
+def headline(args, every, trusted, pair_rows):
+    """Print value coverage, document scores and the biggest gaps; write
+    pairs.tsv, gaps.tsv (trustworthy pairs) and gaps-all.tsv to --out."""
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    with open(out / "pairs.tsv", "w") as f:
+        f.write("path\ttrusted\tcoverage\treproduced\tvalues\tstale reasons\n")
+        for name, p, reasons in sorted(pair_rows, key=lambda r: r[1].coverage()):
+            f.write(f"{name}\t{not reasons}\t{p.coverage():.5f}\t{p.reproduced}\t{p.values}"
+                    f"\t{'; '.join(reasons)}\n")
+    write_gaps(out / "gaps.tsv", trusted)
+    write_gaps(out / "gaps-all.tsv", every)
+    print("\nheadline (docs/measurement.md):")
+    for label, st in (("trustworthy pairs", trusted), ("all pairs", every)):
+        n = st.docs or 1
+        print(f"  {label}: value coverage {st.coverage():.2%} "
+              f"({st.reproduced} of {st.values} values); documents at >= 99 %: "
+              f"{st.document_score(0.99)}/{st.docs} ({st.document_score(0.99) / n:.1%}), "
+              f">= 99.9 %: {st.document_score(0.999)}/{st.docs} "
+              f"({st.document_score(0.999) / n:.1%})")
+        print(f"    per pair: lowest {st.quantile(0):.1%}, 10th percentile {st.quantile(0.1):.1%}, "
+              f"median {st.quantile(0.5):.1%}, 90th percentile {st.quantile(0.9):.1%}, "
+              f"highest {st.quantile(1):.1%}")
+    rows = trusted.gaps()
+    print(f"\nvalue gaps, trustworthy pairs, by documents affected "
+          f"(documents, values wrong, missing, of values; all in {out / 'gaps.tsv'}):")
+    for key, docs, w, m in rows[:args.gaps]:
+        print(f"  {docs:5} {w:7} {m:7} {trusted.gap_total[key]:8}  {gap_name(key)[:90]}")
+    print("\nvalue gaps, trustworthy pairs, by values (documents, values wrong, missing, of values):")
+    for key, docs, w, m in sorted(rows, key=lambda r: -(r[2] + r[3]))[:args.gaps // 2]:
+        print(f"  {docs:5} {w:7} {m:7} {trusted.gap_total[key]:8}  {gap_name(key)[:90]}")
 
 
 if __name__ == "__main__":
