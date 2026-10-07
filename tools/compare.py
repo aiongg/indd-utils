@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Compare converter output with reference IDML files.
 
-For every INDD file in the corpus that has a sibling IDML from the same
-major version, convert it with `target/release/indd` and compare the result
-with the sibling. Reports, per element type: how many referenced elements
-we produce (matched by Self), and per attribute how often our value
-matches. Also reports story text agreement.
+For every INDD file in the corpus that has a reference IDML from the same
+major version (the `idml` column of corpus/inventory.tsv, written by
+tools/inventory.py), convert it with `target/release/indd` and compare the
+result with the reference. Files with the same SHA-256 are converted
+once. Reports, per element type: how many referenced elements we produce
+(matched by Self), and per attribute how often our value matches. Also
+reports story text agreement.
 
 Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
                                    [--schemas DIR --jing DIR] [--bin PATH]
@@ -41,27 +43,42 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target" / "release" / "indd"
 
 
-def pairs(limit, substr, exclude, seen):
+def inventory():
+    """Rows of corpus/inventory.tsv (tools/inventory.py), as dicts."""
+    lines = (ROOT / "corpus" / "inventory.tsv").read_text().splitlines()
+    cols = lines[0].split("\t")
+    return [dict(zip(cols, line.split("\t"))) for line in lines[1:]]
+
+
+def digest(indd, known):
+    """SHA-256 of a corpus file, from the inventory if it lists the file."""
+    path = str(indd.relative_to(ROOT / "corpus"))
+    if path in known:
+        return known[path]
+    return hashlib.sha256(indd.read_bytes()).hexdigest()
+
+
+def pairs(limit, substr, exclude, seen, known):
     """Corpus files with a same-version reference IDML, without duplicates.
     Adds the digest of each file to `seen`."""
-    rows = (ROOT / "corpus" / "inventory.tsv").read_text().splitlines()[1:]
     out = []
-    for row in rows:
-        path, _size, _valid, order, ver, _creator, dom = row.split("\t")
+    for row in inventory():
+        path, order, ver, dom = row["path"], row["order"], row["version"], row["idml_dom"]
         if order != "LE" or not dom or ver.split(".")[0] != dom.split(".")[0]:
             continue
         if substr and substr not in path or any(path.startswith(e) for e in exclude):
             continue
         indd = ROOT / "corpus" / path
-        digest = hashlib.md5(indd.read_bytes()).hexdigest()
-        if digest in seen:
+        d = digest(indd, known)
+        if d in seen:
             continue
-        seen.add(digest)
-        out.append((indd, indd.with_suffix(".idml")))
+        seen.add(d)
+        idml = row.get("idml") or str(Path(path).with_suffix(".idml"))
+        out.append((indd, ROOT / "corpus" / idml))
     return out[:limit] if limit else out
 
 
-def unpaired(substr, exclude, seen):
+def unpaired(substr, exclude, seen, known):
     """Every other INDD and INDT file under corpus/, without duplicates."""
     out = []
     for indd in sorted((ROOT / "corpus").rglob("*")):
@@ -70,10 +87,10 @@ def unpaired(substr, exclude, seen):
         path = str(indd.relative_to(ROOT / "corpus"))
         if substr and substr not in path or any(path.startswith(e) for e in exclude):
             continue
-        digest = hashlib.md5(indd.read_bytes()).hexdigest()
-        if digest in seen:
+        d = digest(indd, known)
+        if d in seen:
             continue
-        seen.add(digest)
+        seen.add(d)
         out.append(indd)
     return out
 
@@ -234,8 +251,9 @@ def main():
     warnings = Counter()
     warned_files = Counter()
     seen = set()
-    todo = pairs(args.limit, args.file, args.exclude, seen)
-    others = unpaired(args.file, args.exclude, seen) if args.all else []
+    known = {r["path"]: r["sha256"] for r in inventory() if r.get("sha256")}
+    todo = pairs(args.limit, args.file, args.exclude, seen, known)
+    others = unpaired(args.file, args.exclude, seen, known) if args.all else []
     other_failures = []
     pool = ThreadPoolExecutor(max(1, args.jobs))
     checks = []  # (name, paired, future of schema errors)
