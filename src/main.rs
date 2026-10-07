@@ -5,8 +5,10 @@ const USAGE: &str = "usage:
   indd convert <in.indd> <out.idml>  convert to IDML
   indd info <file.indd>...         header, master page and container summary
   indd objects <file.indd>         one line per object: UID, class, length, first bytes
+  indd uids <file.indd>            one line per object: UID, class (no object data read)
   indd object <file.indd> <uid>    write one object's bytes to stdout
-  indd dump <file.indd> <uid>...   print objects' chunks in hex";
+  indd dump <file.indd> <uid>...   print objects' chunks in hex
+  indd xmp <file.indd>             write the document's XMP packet to stdout";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -14,6 +16,8 @@ fn main() -> ExitCode {
         (Some("info"), n) if n > 1 => return info(&args[1..]),
         (Some("convert"), 3) => convert(&args[1], &args[2]),
         (Some("objects"), 2) => objects(&args[1]),
+        (Some("xmp"), 2) => xmp(&args[1]),
+        (Some("uids"), 2) => uids(&args[1]),
         (Some("dump"), n) if n > 2 => args[2..]
             .iter()
             .map(|a| parse_uid(a))
@@ -88,6 +92,26 @@ fn objects(path: &str) -> CliResult {
         let class = db.class_of(uid).map_or("-".into(), |c| format!("{c:#x}"));
         writeln!(out, "{uid}\t{class}\t{}\t{}", data.len(), head.join(" "))?;
     }
+    Ok(())
+}
+
+fn uids(path: &str) -> CliResult {
+    let bytes = std::fs::read(path)?;
+    let c = indd::Container::parse(&bytes)?;
+    let db = c.database()?;
+    let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+    for uid in db.uids() {
+        let class = db.class_of(uid).map_or("-".into(), |c| format!("{c:#x}"));
+        writeln!(out, "{uid}\t{class}")?;
+    }
+    Ok(())
+}
+
+fn xmp(path: &str) -> CliResult {
+    let bytes = std::fs::read(path)?;
+    let c = indd::Container::parse(&bytes)?;
+    let packet = c.xmp()?.ok_or("the file has no XMP packet")?;
+    std::io::stdout().lock().write_all(packet)?;
     Ok(())
 }
 

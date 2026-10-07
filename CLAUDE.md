@@ -43,8 +43,9 @@ now). Licence: MIT.
 `corpus/` (git-ignored, ~3.4 GB): 357 third-party INDD files, 240 with a
 sibling IDML, plus privately held samples in `corpus/own/`.
 `corpus/inventory.tsv` lists version and pairing per file. Priority:
-InDesign 18–21, little-endian. Pairs whose IDML DOMVersion is older than
-the INDD version were probably re-saved after export; trust them less.
+InDesign 18–21, little-endian. Some IDMLs show a different save than their
+INDD; compare.py marks those pairs stale and reports trustworthy pairs
+separately (rule and evidence: `docs/measurement.md`).
 
 ## Commands
 
@@ -54,10 +55,13 @@ the INDD version were probably re-saved after export; trust them less.
   `tests/fixtures/manifest.json` and its licence and source to
   `tests/fixtures/README.md`.
 - `cargo run -q -- info <file>`, `indd convert in.indd out.idml`,
-  `indd objects <file>`, `indd dump <file> <uid>...`.
+  `indd objects <file>`, `indd dump <file> <uid>...`, `indd uids <file>`,
+  `indd xmp <file>`.
 - `python3 -I tools/compare.py [--detail TAG --show N]`: convert every
   corpus pair and compare with the reference IDML. This is the main
-  measure of progress; run it after every change.
+  measure of progress; run it after every change. It reports all pairs and
+  the trustworthy ones (`--stale N` lists stale pairs, `--trusted` limits
+  the tables to trustworthy pairs).
 - `compare.py --all` also converts every other INDD/INDT under `corpus/`
   (any version, either byte order) and reports their failures; every run
   counts converter warnings by kind (`--warnings N` lists N kinds).

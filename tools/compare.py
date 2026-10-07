@@ -12,7 +12,7 @@ reports story text agreement.
 Usage: python3 -I tools/compare.py [--limit N] [--detail TAG]... [--file SUBSTR]
                                    [--schemas DIR --jing DIR] [--bin PATH]
                                    [--all] [--exclude PREFIX]... [--jobs N]
-                                   [--shortfalls N]
+                                   [--shortfalls N] [--trusted] [--stale N]
 Run from the repository root after `cargo build --release`. With --schemas
 and --jing, also validates every output with tools/validate.sh, in batches
 of VALIDATE_BATCH files (one Jing run per schema for a whole batch). --bin runs
@@ -23,6 +23,11 @@ version, either byte order, without a usable IDML), validates the output
 if schemas are given, and reports failures for those files separately.
 --exclude leaves out files whose path under corpus/ starts with PREFIX.
 Converter warnings are counted by kind over all converted files.
+
+Pairs are trustworthy or stale (the IDML shows a different save than the
+INDD; rule and evidence in docs/measurement.md). Totals are printed for all
+pairs and for trustworthy pairs; --trusted limits the element tables,
+shortfalls and details to trustworthy pairs, --stale N lists stale pairs.
 
 --shortfalls N lists the N element types and attributes that fall short
 (missing elements; wrong or missing attribute values; differing story
@@ -43,6 +48,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -108,6 +114,65 @@ def warning_kind(msg):
     msg = re.sub(r'"[^"]*"', '"…"', msg)
     msg = re.sub(r"\b0x[0-9a-fA-F]+\b", "#", msg)
     return re.sub(r"\b\d+(\.\d+)?\b", "#", msg)
+
+
+XMP_NS = {"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+          "xmp": "http://ns.adobe.com/xap/1.0/"}
+# A pair is stale if the INDD was saved more than this long after the
+# IDML's metadata date (docs/measurement.md).
+STALE_AFTER = timedelta(hours=1)
+
+
+def modify_date(packet):
+    """xmp:ModifyDate of the document in an XMP packet, or None."""
+    if not packet:
+        return None
+    start = packet.find(b"<x:xmpmeta")
+    end = packet.rfind(b"</x:xmpmeta>")
+    if start < 0 or end < 0:
+        return None
+    try:
+        meta = ET.fromstring(packet[start:end + len(b"</x:xmpmeta>")])
+    except ET.ParseError:
+        return None
+    key = "{%s}ModifyDate" % XMP_NS["xmp"]
+    for desc in meta.findall("rdf:RDF/rdf:Description", XMP_NS):
+        text = desc.get(key) or desc.findtext(key)
+        if text:
+            try:
+                d = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            # Without a time zone, compare clock times.
+            return d.replace(tzinfo=d.tzinfo or timezone.utc)
+    return None
+
+
+def idml_modify_date(idml):
+    """xmp:ModifyDate in an IDML package's META-INF/metadata.xml, or None."""
+    try:
+        with zipfile.ZipFile(idml) as z:
+            return modify_date(z.read("META-INF/metadata.xml"))
+    except (KeyError, zipfile.BadZipFile, OSError):
+        return None
+
+
+def stale_reasons(indd_date, idml_date, indd_uids, ref_el, ref_st, our_st):
+    """Why a pair's IDML may not show the same save as its INDD (empty if
+    there is no sign of that). See docs/measurement.md for the evidence."""
+    out = []
+    if indd_date is None or idml_date is None:
+        out.append("no ModifyDate")
+    elif indd_date < idml_date:
+        out.append("IDML modified after the INDD")
+    elif indd_date - idml_date > STALE_AFTER:
+        out.append("INDD saved over an hour after the IDML")
+    ref_uids = {int(s[1:], 16) for _, s in ref_el if re.fullmatch(r"u[0-9a-f]+", s)}
+    if indd_uids is not None and ref_uids - indd_uids:
+        out.append("IDML objects not in the INDD")
+    if set(our_st) - set(ref_st):
+        out.append("INDD stories not in the IDML")
+    return out
 
 
 def validate(outs, args):
@@ -238,6 +303,98 @@ def props(el):
     return a
 
 
+class Stats:
+    """Comparison counts over a set of pairs."""
+
+    def __init__(self):
+        self.docs = 0
+        self.found = Counter()
+        self.total = Counter()
+        self.attr_ok = defaultdict(Counter)
+        self.story_ok = Counter()
+        self.short_docs = Counter()  # (kind, tag, attribute) -> documents affected
+
+    def add(self, other):
+        self.docs += other.docs
+        self.found.update(other.found)
+        self.total.update(other.total)
+        for k, c in other.attr_ok.items():
+            self.attr_ok[k].update(c)
+        self.story_ok.update(other.story_ok)
+        self.short_docs.update(other.short_docs)
+
+    def story_line(self):
+        st = sum(self.story_ok.values())
+        return (f"{self.story_ok['ok']}/{st} exact, {self.story_ok['wrong']} differ, "
+                f"{self.story_ok['missing']} missing")
+
+
+def compare_pair(name, ref, ours, examples, show):
+    """Stats of one pair: `ref` and `ours` are load() results. Adds up to
+    `show` mismatches per attribute to `examples`."""
+    ref_el, ref_st, ref_rg = ref
+    our_el, our_st, our_rg = ours
+    p = Stats()
+    p.docs = 1
+    short = set()
+    for (tag, s), el in ref_el.items():
+        p.total[tag] += 1
+        mine = our_el.get((tag, s))
+        if mine is None:
+            short.add(("element", tag, ""))
+            continue
+        p.found[tag] += 1
+        mine = props(mine)
+        for k, v in props(el).items():
+            if k == "Self":
+                continue
+            if k not in mine:
+                p.attr_ok[(tag, k)]["missing"] += 1
+                short.add(("attribute", tag, k))
+            elif norm(mine[k]) == norm(v):
+                p.attr_ok[(tag, k)]["ok"] += 1
+            else:
+                p.attr_ok[(tag, k)]["wrong"] += 1
+                short.add(("attribute", tag, k))
+                if len(examples[(tag, k)]) < show:
+                    examples[(tag, k)].append((name, s, v, mine[k]))
+    for sid, rgs in ref_rg.items():
+        if our_st.get(sid) != ref_st.get(sid):
+            continue
+        mine = our_rg.get(sid, {})
+        for start, attrs in rgs.items():
+            p.total["TextRange"] += 1
+            if start not in mine:
+                short.add(("element", "TextRange", ""))
+                continue
+            p.found["TextRange"] += 1
+            for k, v in attrs.items():
+                o = mine[start].get(k)
+                if o is None:
+                    p.attr_ok[("TextRange", k)]["missing"] += 1
+                    short.add(("attribute", "TextRange", k))
+                elif norm(o) == norm(v):
+                    p.attr_ok[("TextRange", k)]["ok"] += 1
+                else:
+                    p.attr_ok[("TextRange", k)]["wrong"] += 1
+                    short.add(("attribute", "TextRange", k))
+                    if len(examples[("TextRange", k)]) < show:
+                        examples[("TextRange", k)].append((name, sid, start, v, o))
+    for sid, text in ref_st.items():
+        if sid not in our_st:
+            p.story_ok["missing"] += 1
+            short.add(("element", "Story", ""))
+        elif our_st[sid] == text:
+            p.story_ok["ok"] += 1
+        else:
+            p.story_ok["wrong"] += 1
+            short.add(("text", "Story", ""))
+            if len(examples[("Story", "text")]) < max(show, 3):
+                examples[("Story", "text")].append((name, sid, text[:80], our_st[sid][:80]))
+    p.short_docs.update(short)
+    return p
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
@@ -256,17 +413,19 @@ def main():
                     help="number of warning kinds to list")
     ap.add_argument("--shortfalls", type=int, default=0,
                     help="rank the N biggest shortfalls by documents affected")
+    ap.add_argument("--trusted", action="store_true",
+                    help="element tables, shortfalls and details over trustworthy pairs only")
+    ap.add_argument("--stale", type=int, default=0,
+                    help="list N stale pairs with their reasons")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
                     help="conversions and schema validations run in parallel")
     args = ap.parse_args()
     check = bool(args.schemas and args.jing)
 
-    found = Counter()
-    total = Counter()
-    attr_ok = defaultdict(Counter)
+    every = Stats()     # all pairs
+    trusted = Stats()   # pairs without a sign of staleness
+    stale = []          # (name, reasons)
     examples = defaultdict(list)
-    story_ok = Counter()
-    short_docs = Counter()  # (kind, tag, attribute) -> documents affected
     failures = []
     warnings = Counter()
     warned_files = Counter()
@@ -280,6 +439,17 @@ def main():
     def convert(indd, out):
         """Convert one file; runs in the pool."""
         return subprocess.run([args.bin, "convert", indd, out], capture_output=True, text=True)
+
+    def convert_pair(indd, idml, out):
+        """Convert one paired file and read what stale_reasons needs: the
+        INDD's UIDs and the ModifyDate of both files; runs in the pool."""
+        r = convert(indd, out)
+        x = subprocess.run([args.bin, "xmp", indd], capture_output=True)
+        u = subprocess.run([args.bin, "uids", indd], capture_output=True, text=True)
+        uids = ({int(line.split("\t")[0]) for line in u.stdout.splitlines()}
+                if u.returncode == 0 else None)
+        dates = (modify_date(x.stdout) if x.returncode == 0 else None, idml_modify_date(idml))
+        return r, dates, uids
 
     def count_warnings(r):
         kinds = set()
@@ -296,8 +466,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         jobs = [pool.submit(convert, indd, Path(tmp) / f"other{n}.idml")
                 for n, indd in enumerate(others)]
-        jobs += [pool.submit(convert, indd, Path(tmp) / f"pair{n}.idml")
-                 for n, (indd, _) in enumerate(todo)]
+        jobs += [pool.submit(convert_pair, indd, idml, Path(tmp) / f"pair{n}.idml")
+                 for n, (indd, idml) in enumerate(todo)]
         # Converted files waiting for validation: (output, name, list of
         # invalid files it belongs to). They are validated in batches, which
         # bounds the space the unpacked outputs take.
@@ -325,71 +495,22 @@ def main():
             out.unlink(missing_ok=True)
         for n, (indd, idml) in enumerate(todo):
             out = Path(tmp) / f"pair{n}.idml"
-            r = jobs[len(others) + n].result()
+            r, (indd_date, idml_date), indd_uids = jobs[len(others) + n].result()
             count_warnings(r)
             if r.returncode != 0:
                 failures.append((indd.name, r.stderr.strip()))
                 continue
             if check:
                 to_check.append((out, indd.name, invalid))
-            ref_el, ref_st, ref_rg = load(idml)
-            our_el, our_st, our_rg = load(out)
-            short = set()
-            for (tag, s), el in ref_el.items():
-                total[tag] += 1
-                mine = our_el.get((tag, s))
-                if mine is None:
-                    short.add(("element", tag, ""))
-                    continue
-                found[tag] += 1
-                ours = props(mine)
-                for k, v in props(el).items():
-                    if k == "Self":
-                        continue
-                    if k not in ours:
-                        attr_ok[(tag, k)]["missing"] += 1
-                        short.add(("attribute", tag, k))
-                    elif norm(ours[k]) == norm(v):
-                        attr_ok[(tag, k)]["ok"] += 1
-                    else:
-                        attr_ok[(tag, k)]["wrong"] += 1
-                        short.add(("attribute", tag, k))
-                        if len(examples[(tag, k)]) < args.show:
-                            examples[(tag, k)].append((indd.name, s, v, ours[k]))
-            for sid, rgs in ref_rg.items():
-                if our_st.get(sid) != ref_st.get(sid):
-                    continue
-                mine = our_rg.get(sid, {})
-                for start, attrs in rgs.items():
-                    total["TextRange"] += 1
-                    if start not in mine:
-                        short.add(("element", "TextRange", ""))
-                        continue
-                    found["TextRange"] += 1
-                    for k, v in attrs.items():
-                        o = mine[start].get(k)
-                        if o is None:
-                            attr_ok[("TextRange", k)]["missing"] += 1
-                            short.add(("attribute", "TextRange", k))
-                        elif norm(o) == norm(v):
-                            attr_ok[("TextRange", k)]["ok"] += 1
-                        else:
-                            attr_ok[("TextRange", k)]["wrong"] += 1
-                            short.add(("attribute", "TextRange", k))
-                            if len(examples[("TextRange", k)]) < args.show:
-                                examples[("TextRange", k)].append((indd.name, sid, start, v, o))
-            for sid, text in ref_st.items():
-                if sid not in our_st:
-                    story_ok["missing"] += 1
-                    short.add(("element", "Story", ""))
-                elif our_st[sid] == text:
-                    story_ok["ok"] += 1
-                else:
-                    story_ok["wrong"] += 1
-                    short.add(("text", "Story", ""))
-                    if len(examples[("Story", "text")]) < max(args.show, 3):
-                        examples[("Story", "text")].append((indd.name, sid, text[:80], our_st[sid][:80]))
-            short_docs.update(short)
+            ref = load(idml)
+            ours = load(out)
+            reasons = stale_reasons(indd_date, idml_date, indd_uids, ref[0], ref[1], ours[1])
+            p = compare_pair(indd.name, ref, ours, examples, args.show)
+            every.add(p)
+            if reasons:
+                stale.append((str(indd.relative_to(ROOT / "corpus")), reasons))
+            else:
+                trusted.add(p)
             if check:
                 flush(VALIDATE_BATCH)
             else:
@@ -416,33 +537,39 @@ def main():
     print(f"warnings: {sum(warnings.values())} (count, files, kind)")
     for kind, count in warnings.most_common(args.warnings):
         print(f"  {count:6} {warned_files[kind]:4}  {kind[:150]}")
-    st = sum(story_ok.values())
-    print(f"story text: {story_ok['ok']}/{st} exact, {story_ok['wrong']} differ, {story_ok['missing']} missing")
-    print("\nelements (produced / in reference):")
-    for tag, n in total.most_common():
-        print(f"  {tag:34} {found[tag]:6} / {n:6}")
+    print(f"story text: {every.story_line()}")
+    reasons = Counter(r for _, rs in stale for r in rs)
+    print(f"trustworthy pairs: {trusted.docs} of {every.docs}; stale: {len(stale)} "
+          f"({', '.join(f'{r}: {n}' for r, n in reasons.most_common())})")
+    print(f"trustworthy pairs: story text: {trusted.story_line()}")
+    for name, rs in stale[:args.stale]:
+        print(f"  stale: {name}: {'; '.join(rs)}")
+    st = trusted if args.trusted else every
+    which = "trustworthy pairs" if args.trusted else "all pairs"
+    print(f"\nelements, {which} (produced / in reference):")
+    for tag, n in st.total.most_common():
+        print(f"  {tag:34} {st.found[tag]:6} / {n:6}")
     if args.shortfalls:
-        n_docs = len(todo) - len(failures)
-        print(f"\nshortfalls by documents affected (of {n_docs}):")
+        print(f"\nshortfalls by documents affected (of {st.docs} {which}):")
         def instances(kind, tag, k):
             """How many elements, values or stories fall short."""
             if kind == "attribute":
-                return attr_ok[(tag, k)]["wrong"] + attr_ok[(tag, k)]["missing"]
+                return st.attr_ok[(tag, k)]["wrong"] + st.attr_ok[(tag, k)]["missing"]
             if kind == "element":
-                return total[tag] - found[tag]
-            return story_ok["wrong"]
-        ranked = sorted(short_docs.items(), key=lambda kv: (-kv[1], -instances(*kv[0]), kv[0]))
+                return st.total[tag] - st.found[tag]
+            return st.story_ok["wrong"]
+        ranked = sorted(st.short_docs.items(), key=lambda kv: (-kv[1], -instances(*kv[0]), kv[0]))
         for (kind, tag, k), n in ranked[:args.shortfalls]:
-            what = f"{story_ok['wrong']} stories differ"
+            what = f"{st.story_ok['wrong']} stories differ"
             if kind == "attribute":
-                c = attr_ok[(tag, k)]
+                c = st.attr_ok[(tag, k)]
                 what = f"{c['wrong']} wrong, {c['missing']} missing of {sum(c.values())}"
             elif kind == "element":
-                what = f"{total[tag] - found[tag]} of {total[tag]} not produced"
+                what = f"{st.total[tag] - st.found[tag]} of {st.total[tag]} not produced"
             print(f"  {n:5}  {tag + (' ' + k if k else ''):56} {what}")
     for tag in args.detail:
-        print(f"\nattributes of {tag} (ok / wrong / missing):")
-        rows = [(k, c) for (t, k), c in attr_ok.items() if t == tag]
+        print(f"\nattributes of {tag}, {which} (ok / wrong / missing):")
+        rows = [(k, c) for (t, k), c in st.attr_ok.items() if t == tag]
         for k, c in sorted(rows, key=lambda kc: -sum(kc[1].values())):
             print(f"  {k:40} {c['ok']:6} {c['wrong']:6} {c['missing']:6}")
             for ex in examples[(tag, k)]:
