@@ -567,6 +567,9 @@ pub struct Style {
     pub imported: bool,
     /// The GUID string after the name in newer files (`StyleUniqueId`).
     pub unique_id: Option<String>,
+    /// Keyboard shortcut: u32 key 10 bytes before the name's flag byte,
+    /// then the two bytes 6 and 5 before it (`docs/format/objects.md`).
+    pub shortcut: Option<(u32, u8, u8)>,
 }
 
 /// A stretch of story text with one paragraph style and one character style.
@@ -2475,6 +2478,15 @@ impl<'a> Reader<'a> {
         };
         let paragraph = Cursor::new(&data[at - 4..]).u16()? != 0;
         let imported = Cursor::new(&data[at - 2..]).u16()? != 0;
+        let shortcut = if at >= 10 {
+            Some((
+                Cursor::new(&data[at - 10..]).u32()?,
+                data[at - 6],
+                data[at - 5],
+            ))
+        } else {
+            None
+        };
         // A 36-character in-object string after the name: a GUID.
         const GUID: [u8; 6] = [2, 0, 36, 0, 36, 0x40];
         let unique_id = if crate::object::big_endian() {
@@ -2503,6 +2515,7 @@ impl<'a> Reader<'a> {
             attrs,
             imported,
             unique_id,
+            shortcut,
         }))
     }
 

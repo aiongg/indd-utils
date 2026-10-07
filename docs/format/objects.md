@@ -950,6 +950,37 @@ IDML writes a `BasedOn` of the root `[No paragraph style]` or
 `[No character style]` as a string (`$ID/[No paragraph style]`), and any
 other base as an object reference.
 
+**Keyboard shortcuts.** Ten bytes before the name's flag byte is a u32
+key; the two bytes 6 and 5 before the flag are modifier bytes *m0* and
+*m1*. Evidence: the 6,957 paragraph and character styles of all pairs
+whose IDML style has the same name.
+
+| Key | `KeyboardShortcut` | `ExtendedKeyboardShortcut` |
+|---|---|---|
+| 0 (5,272 styles) | `0 0` | `0 0 0` |
+| 0xC000*xx*, *xx* a digit `0`–`9`, *m1* = 0 | *m0* and the code below | `0 0 0` |
+| the same, *m1* = 1, paragraph style | *m0* + 256 and 96 + the digit | `0 0 0` |
+| 0x8000*xx* (4 styles, one file) | `0 0` | not written (`256 49 1` and similar in IDML) |
+
+The 103 styles with a key other than 0 are in 38 files.
+
+Codes with *m1* = 0: digits 0 to 7 give 82 to 89, 8 gives 91 and 9 gives
+92 (every digit occurs). The converter writes the attribute only for
+these rows; character styles with *m1* = 1 (11 styles: `257 83`, `257 84`,
+`257 105`) are left out. Over all pairs, `KeyboardShortcut` is
+reproduced for 5,273 of 5,273 paragraph styles and 2,191 of 2,202
+character styles. IDML has `ExtendedKeyboardShortcut` from DOM 15 on;
+the converter writes it from version 15.
+
+**Empty nested, line and GREP styles.** Paragraph styles have
+`EmptyNestedStyles`, `EmptyLineStyles` and `EmptyGrepStyles` (DOM 8.1,
+and 10 on). Each is `false` when the style's list of nested styles
+(attribute 0x1B75), line styles (0x1BBB) or GREP styles (0x1BBA) has
+items, where the list is that of the first style in the based-on chain
+that has the attribute; an empty list is stored as a count of 0. This
+gives the IDML value of 5,401 of 5,403 paragraph styles for each of the
+three (all pairs; the other 2 are not written).
+
 ## Style groups and object styles
 
 **Root groups** (class 0xCA8C for paragraph and character styles, 0x1B972

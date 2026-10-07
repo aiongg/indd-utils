@@ -68,6 +68,7 @@ ELEMENTS = [
     "TextFrame/TextFramePreference", "TextFrame/TextFrameFootnoteOptionsObject",
     "Color", "Tint", "Gradient", "Swatch", "Guide", "ObjectStyle/ObjectExportOption",
     "ParagraphStyle", "CharacterStyle", "TOCStyle", "TOCStyleEntry", "Assignment",
+    "TableStyle", "CellStyle",
     "Document/ConditionalTextPreference", "Document/EndnoteOption",
     "Document/TextFrameFootnoteOptionsObject", "Document/LinkedStoryOption",
     "Document/LinkedPageItemOption", "Document/WatermarkPreference",

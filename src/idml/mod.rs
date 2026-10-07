@@ -151,6 +151,33 @@ fn ui_color_name(rgb: [f64; 3]) -> Option<&'static str> {
         .map(|(_, n)| *n)
 }
 
+/// `KeyboardShortcut` and `ExtendedKeyboardShortcut` of a style, from its
+/// stored key (`docs/format/objects.md`, style shortcuts). `None` where the
+/// samples do not show the value.
+fn style_shortcut(s: &crate::model::Style) -> (Option<String>, Option<String>) {
+    let Some((key, low, high)) = s.shortcut else {
+        return (None, None);
+    };
+    if key == 0 {
+        return (Some("0 0".into()), Some("0 0 0".into()));
+    }
+    let ch = key & 0xFFFF;
+    match key >> 16 {
+        0xC000 if (0x30..=0x39).contains(&ch) => {
+            let d = ch - 0x30;
+            let code = match (high, s.paragraph) {
+                (0, _) => Some(82 + d + u32::from(d >= 8)),
+                (1, true) => Some(96 + d),
+                _ => None,
+            };
+            let mods = u32::from(low) + 256 * u32::from(high);
+            (code.map(|c| format!("{mods} {c}")), Some("0 0 0".into()))
+        }
+        0x8000 => (Some("0 0".into()), None),
+        _ => (None, None),
+    }
+}
+
 /// Preference elements of `Resources/Preferences.xml` that `model::prefs`
 /// supplies values for.
 const PREFERENCE_TAGS: &[&str] = &[
@@ -2321,6 +2348,10 @@ impl Writer<'_> {
         for (k, v) in attrs {
             x.attr(k, v);
         }
+        // Values every IDML has on these styles (idml-values.md).
+        if let Some(n) = values::element(tag, self.doc.version.major) {
+            x.attrs_missing(n.attrs.iter());
+        }
         if tag == "CellStyle"
             && let Some(p) = s
                 .attrs
@@ -3231,6 +3262,24 @@ impl Writer<'_> {
         }
     }
 
+    /// Whether the list attribute `id` (nested, line or GREP styles) of a
+    /// paragraph style has items: the first style in its based-on chain that
+    /// has the attribute decides. An empty list is stored as a 0 count.
+    fn inherited_list(&self, s: &Style, id: u32) -> bool {
+        let mut cur = Some(s);
+        for _ in 0..32 {
+            let Some(st) = cur else { break };
+            if let Some(v) = st.attrs.get(id) {
+                return match v {
+                    Value::Other(_, b) => b.len() >= 4 && b[..4] != [0, 0, 0, 0],
+                    _ => false,
+                };
+            }
+            cur = st.based_on.and_then(|b| self.doc.styles.get(&b));
+        }
+        false
+    }
+
     fn style_element(&self, x: &mut Xml, s: &Style, tag: &str) {
         let doc = self.doc;
         let paragraph = s.paragraph;
@@ -3253,6 +3302,16 @@ impl Writer<'_> {
         if let Some(id) = &s.unique_id {
             x.attr("StyleUniqueId", id);
         }
+        let v = doc.version;
+        if paragraph && (v.major >= 10 || (v.major == 8 && v.minor >= 1)) {
+            for (id, name) in [
+                (0x1B75, "EmptyNestedStyles"),
+                (0x1BBB, "EmptyLineStyles"),
+                (0x1BBA, "EmptyGrepStyles"),
+            ] {
+                x.attr(name, (!self.inherited_list(s, id)).to_string());
+            }
+        }
         // Root styles also get the values every exported IDML has on them;
         // values read from the INDD take precedence.
         let mut extra = Vec::new();
@@ -3266,6 +3325,15 @@ impl Writer<'_> {
             }
             extra = more;
         } else if let Some(n) = values::element(tag, doc.version.major) {
+            let (short, extended) = style_shortcut(s);
+            if let Some(k) = short {
+                x.attr("KeyboardShortcut", k);
+            }
+            if v.major >= 15
+                && let Some(e) = extended
+            {
+                x.attr("ExtendedKeyboardShortcut", e);
+            }
             // Other styles get the values every IDML has on them.
             x.attrs_missing(n.attrs.iter());
             x.attrs_missing(values::when_written(tag, doc.version.major).iter());

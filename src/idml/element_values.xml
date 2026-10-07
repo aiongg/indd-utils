@@ -51,6 +51,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				<FrameColor type="enumeration">Nothing</FrameColor>
 			</Properties>
 		</Assignment>
+		<TableStyle KeyboardShortcut="0 0" />
 		<Document>
 			<ConditionalTextPreference Present="true" ShowConditionIndicators="ShowIndicators" ActiveConditionSet="n" />
 			<LinkedStoryOption UpdateWhileSaving="false" WarnOnUpdateOfEditedStory="true" RemoveForcedLineBreaks="false" />
@@ -219,6 +220,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		</TextFrame>
 		<Page SnapshotBlendingMode="IgnoreLayoutSnapshots" OptionalPage="false" />
 		<Tint ColorOverride="Normal" AlternateSpace="NoAlternateColor" AlternateColorValue="" ColorEditable="true" ColorRemovable="true" Visible="true" SwatchCreatorID="7937" />
+		<CellStyle KeyboardShortcut="0 0" />
 		<Document>
 			<LinkedStoryOption Present="true" ApplyStyleMappings="false" />
 			<LinkedPageItemOption Present="true" UpdateLinkWhileSaving="false" WarnOnUpdateOfEditedPageItem="true" PreserveSizeAndShape="false" PreserveAppearance="false" PreserveInteractivity="false" PreserveFrameContent="false" PreserveOthers="false" />
@@ -330,6 +332,8 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 	</Values>
 	<Values MinimumVersion="15">
 		<CharacterStyle ExtendedKeyboardShortcut="0 0 0" />
+		<TableStyle ExtendedKeyboardShortcut="0 0 0" />
+		<CellStyle ExtendedKeyboardShortcut="0 0 0" />
 		<Preferences>
 			<TextFramePreference ColumnRuleOverride="false" ColumnRuleOffset="0" ColumnRuleTopInset="0" ColumnRuleInsetChainOverride="true" ColumnRuleBottomInset="0" ColumnRuleStrokeType="StrokeStyle/$ID/Solid" ColumnRuleStrokeTint="100" ColumnRuleOverprintOverride="false" />
 			<EPubExportPreference UseSVGAs="EmbedCode" />
