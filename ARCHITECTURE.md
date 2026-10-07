@@ -83,13 +83,14 @@ group cycles, table sizes larger than their cell data.
 | `ids.rs` | class, chunk and strand IDs and enumeration codes |
 | `attrs.rs` | attribute lists (`Attrs`, `Value`), including structured values: tab lists, nested styles, bullet characters, opacity stops |
 | `spread.rs` | spreads, pages, guides, layers, sections |
-| `item.rs` | page items: transforms, paths, frames, graphics, links, text wrap |
+| `item.rs` | page items: transforms, paths, frames, export options, graphics and their properties and layers, links, text wrap |
 | `story.rs` | stories: text runs, anchored objects, tables in text, hyperlink sources, XML markers |
 | `style.rs` | paragraph, character, object and TOC styles, style groups, anchored object, text frame and story settings |
 | `table.rs` | tables, rows, columns, cells, cell and table styles |
 | `color.rs`, `font.rs`, `cjk.rs` | swatches and inks; font families; composite fonts and kinsoku and mojikumi tables |
 | `hyperlink.rs`, `xref.rs`, `variable.rs`, `xml.rs` | hyperlinks and bookmarks; cross-reference formats; text variables; the XML structure |
 | `settings.rs`, `prefs.rs` | document-level lists and preferences |
+| `xmp.rs` | dates of the XMP packet (time zone offsets for link times) |
 | `strings.rs` | searches for names at positions that are not decoded |
 
 ### `src/idml/`
@@ -99,6 +100,8 @@ group cycles, table sizes larger than their cell data.
 | `mod.rs` | `Writer` and `write`: the package parts in order |
 | `designmap.rs` | `designmap.xml`: document settings, languages, layers, sections, hyperlinks, TOC styles, text variables |
 | `spread.rs` | spreads and master spreads: pages, guides, page items |
+| `graphic.rs` | placed graphics: settings, clipping, import options, layers, links |
+| `export.rs` | `ObjectExportOption` of page items and object styles, by version |
 | `story.rs` | stories, tables in stories, the XML backing story |
 | `styles.rs` | `Resources/Styles.xml` |
 | `resources.rs` | `Resources/Graphic.xml`, `Fonts.xml`, `Preferences.xml` |
