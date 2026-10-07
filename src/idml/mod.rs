@@ -2817,6 +2817,10 @@ impl Writer<'_> {
         for (k, v) in &plain {
             x.attr(k, v);
         }
+        x.attr("Imported", s.imported.to_string());
+        if let Some(id) = &s.unique_id {
+            x.attr("StyleUniqueId", id);
+        }
         // Root styles also get the values every exported IDML has on them;
         // values read from the INDD take precedence.
         let mut extra = Vec::new();
@@ -2824,9 +2828,18 @@ impl Writer<'_> {
             let written: Vec<&str> = plain.iter().map(|(k, _)| *k).collect();
             let (attrs, more, _) = self.root_values(tag, &written, &props);
             for (k, v) in &attrs {
-                x.attr(k, v);
+                if !x.has_attr(k) {
+                    x.attr(k, v);
+                }
             }
             extra = more;
+        } else if let Some(n) = values::element(tag, doc.version.major) {
+            // Other styles get the values every IDML has on them.
+            x.attrs_missing(n.attrs.iter());
+            x.attrs_missing(values::when_written(tag, doc.version.major).iter());
+            if let Some(p) = n.child("Properties") {
+                extra = p.children.clone();
+            }
         }
         if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {
             // The root "[No ... style]" is written as a string.

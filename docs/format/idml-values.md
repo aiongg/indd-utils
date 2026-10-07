@@ -265,6 +265,26 @@ same value, in at least 3 files (a `Keyed` block of the values file):
 63 languages. Romanian and Japanese have two variants each and are left
 out.
 
+### Paragraph and character styles
+
+The styles other than the root styles (5,505 paragraph and 2,284
+character styles in the IDML files):
+
+| Values kept | Styles | Versions |
+|---|---|---|
+| `PreviewColor` `Nothing` | paragraph and character | 7 on |
+| `EpubAriaRole=""` | paragraph and character | 21 on |
+| `IncludeClass="true"` | character | 13 on |
+| `ExtendedKeyboardShortcut="0 0 0"` | character | 15 on |
+| `EmitCss="true"` where written | paragraph and character | 10 on |
+| `SplitDocument="false"` where written | character | 10 on |
+
+`KeyboardShortcut` and the paragraph styles' `ExtendedKeyboardShortcut`,
+`SplitDocument` and `IncludeClass` are left out: a few styles have
+other values (keyboard shortcuts such as `16 82`), whose INDD field was
+not found. `Imported` and `StyleUniqueId` come from the INDD
+(`objects.md`, styles).
+
 ### Swatches
 
 | Element | Values kept |

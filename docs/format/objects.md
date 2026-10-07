@@ -788,14 +788,24 @@ last paragraph return of a story is not written to IDML.
 
 Paragraph and character styles share the class. Chunk 0x230: u32 next
 style (0 = itself), u32 based-on style, fields not yet identified, u16 1
-for paragraph styles or 0 for character styles, u16 not identified, u8 1
-if the name is a built-in key (`$ID/` in IDML), the name as an in-object
-string, then a GUID string in newer files. The name's offset varies (23–26
+for paragraph styles or 0 for character styles, u16 `Imported` (1 =
+true), u8 1 if the name is a built-in key (`$ID/` in IDML), the name as
+an in-object string, then, in newer files, a GUID string
+(`StyleUniqueId`). The name's offset varies (23–26
 bytes), so the converter locates it as a flag byte followed by a valid
 in-object string.
 All 486 style names and 291 `NextStyle` values in the pairs match.
 
-**Kind field.** The kind and the unidentified u16 after it can be read
+**Imported and unique ID.** Over the 4,694 paragraph and character
+styles of the trustworthy pairs whose IDML style has the same name, the
+u16 after the kind equals `Imported` in 4,694 (180 imported). The GUID
+is a 36-character in-object string after the name; where it is stored,
+IDML has it as `StyleUniqueId` in 2,769 of 2,793 styles (DOM 11 on; the
+other 24 have another GUID in IDML). Styles without a stored GUID
+(1,108 from DOM 11 on) have a `StyleUniqueId` in IDML that the INDD does
+not hold, which the converter leaves out.
+
+**Kind field.** The kind and the `Imported` u16 after it can be read
 as one u32 in most files, because the second u16 is 0. The InDesign 7.5
 template fixture `scml-template/scml.indt` (no IDML) has 1 there in 600
 of its styles: 151 have `00 00 01 00` before the flag and 449 have

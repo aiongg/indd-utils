@@ -67,6 +67,7 @@ ELEMENTS = [
     "Spread", "MasterSpread", "Page", "Spread/FlattenerPreference", "Layer",
     "TextFrame/TextFramePreference", "TextFrame/TextFrameFootnoteOptionsObject",
     "Color", "Tint", "Gradient", "Swatch", "Guide", "ObjectStyle/ObjectExportOption",
+    "ParagraphStyle", "CharacterStyle",
     "Document/ConditionalTextPreference", "Document/EndnoteOption",
     "Document/TextFrameFootnoteOptionsObject", "Document/LinkedStoryOption",
     "Document/LinkedPageItemOption", "Document/WatermarkPreference",
@@ -96,11 +97,22 @@ WHEN_WRITTEN = {
         "VerticalThreshold", "UseFlexibleColumnWidth",
         "MinimumFirstBaselineOffset",
     ],
+    "ParagraphStyle": ["EmitCss"],
+    "CharacterStyle": ["EmitCss", "SplitDocument"],
 }
 # Values that are nearly constant; the exceptions are read from the INDD.
 # (path, key) -> reason, as recorded in docs/format/idml-values.md.
 EXPLAINED = {}
 EXPLAINED_SHARE = 0.995
+# The root styles, whose values tools/root_values.py collects; they are
+# left out of the style paths here.
+ROOT_STYLES = {
+    "ParagraphStyle/$ID/[No paragraph style]",
+    "CharacterStyle/$ID/[No character style]",
+    "ObjectStyle/$ID/[None]",
+    "CellStyle/$ID/[None]",
+    "TableStyle/$ID/[No table style]",
+}
 # Attributes that are names or references of the element itself, or
 # written by the converter from the document structure.
 SKIP = {"Self", "Name"}
@@ -168,7 +180,7 @@ def scan(arg):
                 lists["keyed:" + el.tag].append(dict(el.attrib))
             if el.get("Self") is None:
                 continue
-            if el.tag in wanted:
+            if el.tag in wanted and el.get("Self") not in ROOT_STYLES:
                 found[el.tag].append(flatten(el))
             for ch in el:
                 path = f"{el.tag}/{ch.tag}"

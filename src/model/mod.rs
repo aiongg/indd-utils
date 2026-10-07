@@ -537,6 +537,10 @@ pub struct Style {
     pub based_on: Option<u32>,
     pub next: Option<u32>,
     pub attrs: Attrs,
+    /// The u16 after the kind, before the name (IDML `Imported`).
+    pub imported: bool,
+    /// The GUID string after the name in newer files (`StyleUniqueId`).
+    pub unique_id: Option<String>,
 }
 
 /// A stretch of story text with one paragraph style and one character style.
@@ -2377,6 +2381,17 @@ impl<'a> Reader<'a> {
             return Err(Error::Corrupt(format!("style {uid}: no name")));
         };
         let paragraph = Cursor::new(&data[at - 4..]).u16()? != 0;
+        let imported = Cursor::new(&data[at - 2..]).u16()? != 0;
+        // A 36-character in-object string after the name: a GUID.
+        const GUID: [u8; 6] = [2, 0, 36, 0, 36, 0x40];
+        let unique_id = if crate::object::big_endian() {
+            None
+        } else {
+            data[at..]
+                .windows(GUID.len())
+                .position(|w| w == GUID)
+                .and_then(|i| Cursor::new(&data[at + i..]).string().ok())
+        };
         let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {
             Some(d) if d.len() >= 2 => {
                 let mut c = Cursor::new(&d);
@@ -2393,6 +2408,8 @@ impl<'a> Reader<'a> {
             based_on: uid_or_none(based_on),
             next: uid_or_none(next),
             attrs,
+            imported,
+            unique_id,
         }))
     }
 
