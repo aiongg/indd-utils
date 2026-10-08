@@ -108,6 +108,14 @@ const BUILTIN_CJK_TABLES: [(&str, &str); 6] = [
     ("kMojikumiDefaultName16", "SimpChineseDefault"),
 ];
 
+/// The IDML enumeration value of a built-in kinsoku or mojikumi table.
+pub(super) fn builtin_cjk_table(name: &str) -> Option<&'static str> {
+    BUILTIN_CJK_TABLES
+        .iter()
+        .find(|(k, _)| *k == name)
+        .map(|(_, e)| *e)
+}
+
 fn text(ty: &'static str, s: String) -> (&'static str, PropValue) {
     (ty, PropValue::Text(s))
 }
@@ -245,18 +253,15 @@ impl Writer<'_> {
                 }
                 let t = self.doc.cjk_tables.iter().find(|t| t.uid == u)?;
                 if t.name.builtin {
-                    return BUILTIN_CJK_TABLES
-                        .iter()
-                        .find(|(k, _)| *k == t.name.name)
-                        .map(|(_, e)| text("enumeration", e.to_string()));
+                    return builtin_cjk_table(&t.name.name)
+                        .map(|e| text("enumeration", e.to_string()));
                 }
-                if t.mojikumi {
-                    return None;
-                }
-                Some(text(
-                    "object",
-                    format!("KinsokuTable/{}", self_name(&t.name.name)),
-                ))
+                let tag = match (t.mojikumi, &t.custom_mojikumi) {
+                    (false, _) => "KinsokuTable",
+                    (true, Some(_)) => "MojikumiTable",
+                    (true, None) => return None,
+                };
+                Some(text("object", format!("{tag}/{}", self_name(&t.name.name))))
             }
             Kind::TabList => match v {
                 Value::TabList(stops) => tab_list(stops).map(|l| ("list", PropValue::List(l))),

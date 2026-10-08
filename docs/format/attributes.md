@@ -288,8 +288,11 @@ enumeration: `kHardKinsokuName` `HardKinsoku` (51 styles),
 `LineEndAllOneHalfEmEnum` (55) and `kMojikumiDefaultName16`
 `SimpChineseDefault` (1); a custom kinsoku table (class 0x4204) as the
 object `KinsokuTable/<name>` (38). Other built-in tables are not written.
-81 styles name a custom mojikumi table of class 0x4203, which the
-converter does not write, so their `Mojikumi` is left out.
+A custom mojikumi table (class 0x4203, `objects.md`) is the object
+`MojikumiTable/<name>`. In the trustworthy pairs of the corpus of
+2026-10 this gives the IDML value for 576 paragraph ranges, 105
+paragraph styles, 94 ranges in table cells, 19 story ranges and 11 text
+defaults, with no value that differs from the IDML.
 
 Paragraph style counts include the 78 root styles `[No paragraph style]`
 of the compared pairs. For many attributes above the root holds the only

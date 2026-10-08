@@ -468,7 +468,10 @@ impl<'a> Reader<'a> {
                     out.composite_entries.insert(uid, e);
                 }
             }
-            c if c == cjk::class::MOJIKUMI || cjk::class::KINSOKU.contains(&c) => {
+            c if c == cjk::class::MOJIKUMI
+                || c == cjk::class::CUSTOM_MOJIKUMI
+                || cjk::class::KINSOKU.contains(&c) =>
+            {
                 if let Some(t) = CjkTable::read(uid, c, &*self.object(uid)?)? {
                     out.cjk_tables.push(t);
                 }

@@ -2125,9 +2125,10 @@ The converter leaves out codes other than 0 to 3.
 
 Kinsoku tables are objects of classes 0x4209 (hard), 0x420A (soft),
 0x42B4 (Korean), 0x42B5 (Simplified Chinese), 0x42B6 (Traditional
-Chinese) and 0x4204 (custom); mojikumi tables are class 0x4206. IDML
-writes one `KinsokuTable` or `MojikumiTable` per object in
-`designmap.xml`, kinsoku tables first, each in UID order. Chunk 0x100B is
+Chinese) and 0x4204 (custom); mojikumi tables are classes 0x4206 and
+0x4203 (custom, below). IDML writes one `KinsokuTable` or
+`MojikumiTable` per object in `designmap.xml`, kinsoku tables first,
+each in UID order (mojikumi tables of both classes together). Chunk 0x100B is
 a flag byte (1 = built-in key, `$ID/`) and the name; `Self` is
 `KinsokuTable/<Name>` or `MojikumiTable/<Name>`. Implemented in
 `src/model/cjk.rs`.
@@ -2148,6 +2149,49 @@ little-endian files, and the third count is 0 in all of them.
 
 Built-in tables have only `Self` and `Name` in IDML. Mojikumi chunk
 0x421E (a u16 from 1 to 16) is not used.
+
+**Custom mojikumi tables (class 0x4203).** Chunk 0x100B holds a flag
+byte (0 in all of them) and the name, as for the other tables. Chunk
+0x420A holds the settings:
+
+| Field | Contents |
+|---|---|
+| u32 | 26 in all 835 objects of the 129 little-endian files that have the class |
+| u32 | 0 in all |
+| u32 *n* | entry count |
+| *n* × 34 bytes | entries, below |
+| u32, u32 | not identified |
+| u16 | `BasedOnMojikumiSet`: 0 `Nothing`; *n* > 0 the built-in table `kMojikumiDefaultName<n>` (attributes.md): 1 `LineEndAllOneHalfEmEnum`, 16 `SimpChineseDefault` |
+
+Each entry is one IDML `OverrideMojikumiAkiType`:
+
+| Offset | Type | IDML |
+|---|---|---|
+| 0 | u16 | `TargetMojikumiClass` |
+| 2 | u16 | `SideMojikumiClass` |
+| 4, 12, 20 | f64 | `Minimum`, `Desired`, `Maximum` |
+| 28 | u16 | `CompressionPriority` |
+| 30 | u16 | `AkiDoesNotFloat` (0 `false`, 1 `true`) |
+| 32 | u16 | `SideIsAfterTarget` (0 `false`, 1 `true`) |
+
+IDML writes the table as `<MojikumiTable Self="MojikumiTable/<name>"
+Name="<name>" BasedOnMojikumiSet="…">` with `Properties`,
+`OverrideMojikumiAkiList` and one `OverrideMojikumiAkiType` per entry, in
+file order, with the attributes in the order `TargetMojikumiClass`,
+`SideMojikumiClass`, `SideIsAfterTarget`, `Minimum`, `Desired`,
+`Maximum`, `CompressionPriority`, `AkiDoesNotFloat`.
+
+Evidence, in the corpus of 2026-10: 185 tables in 66 pairs. The entry
+count matches in 185 of 185 tables, all eight fields of the entries in
+file order in 62,439 of 62,439 entries, and `BasedOnMojikumiSet` in 185
+of 185 (code 1: 151 tables, 0: 33, 16: 1). `Self` is `MojikumiTable/`
+and the name in all 187 custom tables of the corpus IDML files. The
+layout parses in all 835 objects of the corpus; codes 3, 6, 9 and 11
+also occur (232 objects, none with an IDML), and the converter leaves
+`BasedOnMojikumiSet` out for them. A chunk whose length is not 22 + 34
+*n*, or a flag other than 0 or 1, leaves the table out with a warning.
+In the 66 pairs, the tables of classes 0x4206 and 0x4203 are listed
+together in UID order, after all kinsoku tables.
 
 ## Colours (0x1F05)
 

@@ -12,6 +12,7 @@ pub mod class {
     pub const KINSOKU: [u32; 6] = [0x4209, 0x420A, 0x42B4, 0x42B5, 0x42B6, CUSTOM_KINSOKU];
     pub const CUSTOM_KINSOKU: u32 = 0x4204;
     pub const MOJIKUMI: u32 = 0x4206;
+    pub const CUSTOM_MOJIKUMI: u32 = 0x4203;
 }
 
 pub mod chunk {
@@ -21,6 +22,8 @@ pub mod chunk {
     pub const TABLE_NAME: u32 = 0x100B;
     /// Character lists of a custom kinsoku table.
     pub const KINSOKU_CHARS: u32 = 0x4214;
+    /// Spacing settings of a custom mojikumi table.
+    pub const MOJIKUMI_AKI: u32 = 0x420A;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,6 +148,72 @@ pub struct CjkTable {
     /// cannot end a line, (not identified), hanging punctuation, cannot be
     /// separated.
     pub chars: Option<[String; 5]>,
+    /// The settings of a custom mojikumi table.
+    pub custom_mojikumi: Option<MojikumiSettings>,
+}
+
+/// The settings of a custom mojikumi table (chunk 0x420A). See
+/// `docs/format/objects.md`, custom mojikumi tables.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MojikumiSettings {
+    /// The `kMojikumiDefaultName<n>` code of the table it is based on; 0
+    /// for none.
+    pub based_on: u16,
+    pub entries: Vec<AkiEntry>,
+}
+
+/// One spacing entry of a custom mojikumi table.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AkiEntry {
+    pub target_class: u16,
+    pub side_class: u16,
+    pub minimum: f64,
+    pub desired: f64,
+    pub maximum: f64,
+    pub compression_priority: u16,
+    pub aki_does_not_float: bool,
+    pub side_is_after_target: bool,
+}
+
+/// A u16 that holds 0 or 1.
+fn bool16(c: &mut Cursor) -> Result<bool, Error> {
+    match c.u16()? {
+        0 => Ok(false),
+        1 => Ok(true),
+        v => Err(Error::Corrupt(format!("mojikumi flag {v} is not 0 or 1"))),
+    }
+}
+
+impl MojikumiSettings {
+    /// Chunk 0x420A: u32, u32, u32 entry count, 34 bytes per entry, two
+    /// u32 not identified and the u16 code of the table it is based on.
+    pub fn read(enc: crate::object::Encoding, d: &[u8]) -> Result<MojikumiSettings, Error> {
+        let mut c = enc.cursor(d);
+        c.skip(8)?;
+        let n = c.u32()? as usize;
+        if Some(d.len()) != n.checked_mul(34).and_then(|m| m.checked_add(22)) {
+            return Err(Error::Corrupt(format!(
+                "mojikumi settings of {} bytes for {n} entries",
+                d.len()
+            )));
+        }
+        let mut entries = Vec::with_capacity(n);
+        for _ in 0..n {
+            entries.push(AkiEntry {
+                target_class: c.u16()?,
+                side_class: c.u16()?,
+                minimum: c.f64()?,
+                desired: c.f64()?,
+                maximum: c.f64()?,
+                compression_priority: c.u16()?,
+                aki_does_not_float: bool16(&mut c)?,
+                side_is_after_target: bool16(&mut c)?,
+            });
+        }
+        c.skip(8)?;
+        let based_on = c.u16()?;
+        Ok(MojikumiSettings { based_on, entries })
+    }
 }
 
 impl CjkTable {
@@ -167,11 +236,20 @@ impl CjkTable {
             }
             _ => None,
         };
+        let custom_mojikumi = if cls == class::CUSTOM_MOJIKUMI {
+            let d = obj
+                .chunk(chunk::MOJIKUMI_AKI)
+                .ok_or_else(|| Error::Corrupt("mojikumi table without settings".into()))?;
+            Some(MojikumiSettings::read(enc, d)?)
+        } else {
+            None
+        };
         Ok(Some(CjkTable {
             uid,
-            mojikumi: cls == class::MOJIKUMI,
+            mojikumi: cls == class::MOJIKUMI || cls == class::CUSTOM_MOJIKUMI,
             name,
             chars,
+            custom_mojikumi,
         }))
     }
 }
@@ -272,6 +350,46 @@ mod tests {
         assert!(name.builtin);
         assert_eq!(name.name, "[No composite font]");
         assert_eq!(entries, [0x60, 0x61]);
+    }
+
+    #[test]
+    fn reads_custom_mojikumi_settings() {
+        for enc in [Encoding::default(), big_endian()] {
+            let mut d = enc.u32_bytes(26).to_vec();
+            d.extend(enc.u32_bytes(0));
+            d.extend(enc.u32_bytes(1));
+            d.extend(enc.u16_bytes(1));
+            d.extend(enc.u16_bytes(23));
+            for f in [0.5, 0.25, 1.0] {
+                d.extend(enc.f64_bytes(f));
+            }
+            d.extend(enc.u16_bytes(2));
+            d.extend(enc.u16_bytes(0));
+            d.extend(enc.u16_bytes(1));
+            d.extend([0; 8]);
+            d.extend(enc.u16_bytes(16));
+            let m = MojikumiSettings::read(enc, &d).unwrap();
+            assert_eq!(m.based_on, 16);
+            assert_eq!(
+                m.entries,
+                [AkiEntry {
+                    target_class: 1,
+                    side_class: 23,
+                    minimum: 0.5,
+                    desired: 0.25,
+                    maximum: 1.0,
+                    compression_priority: 2,
+                    aki_does_not_float: false,
+                    side_is_after_target: true,
+                }]
+            );
+            // A length that does not fit the entry count.
+            assert!(MojikumiSettings::read(enc, &d[..d.len() - 1]).is_err());
+            // A flag other than 0 or 1.
+            let mut bad = d.clone();
+            bad[12 + 32..12 + 34].copy_from_slice(&enc.u16_bytes(2));
+            assert!(MojikumiSettings::read(enc, &bad).is_err());
+        }
     }
 
     #[test]

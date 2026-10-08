@@ -93,6 +93,9 @@ impl Writer<'_> {
                         .attr("HangingPunctuationChars", hanging)
                         .attr("CantBeSeparatedChars", together);
                 }
+                if let Some(m) = &t.custom_mojikumi {
+                    custom_mojikumi(&mut x, m);
+                }
                 x.end();
             }
         }
@@ -1021,4 +1024,35 @@ pub(super) fn topic_refs(doc: &Document) -> std::collections::HashMap<u32, Strin
         }
     }
     out
+}
+
+/// `BasedOnMojikumiSet` and the spacing entries of a custom mojikumi
+/// table (objects.md, custom mojikumi tables). A code without a known
+/// table name leaves the attribute out.
+fn custom_mojikumi(x: &mut Xml, m: &crate::model::cjk::MojikumiSettings) {
+    let based_on = match m.based_on {
+        0 => Some("Nothing"),
+        n => super::kind::builtin_cjk_table(&format!("kMojikumiDefaultName{n}")),
+    };
+    if let Some(b) = based_on {
+        x.attr("BasedOnMojikumiSet", b);
+    }
+    x.start("Properties").start("OverrideMojikumiAkiList");
+    for e in &m.entries {
+        x.empty(
+            "OverrideMojikumiAkiType",
+            &[
+                ("TargetMojikumiClass", e.target_class.to_string()),
+                ("SideMojikumiClass", e.side_class.to_string()),
+                ("SideIsAfterTarget", e.side_is_after_target.to_string()),
+                ("Minimum", num(e.minimum)),
+                ("Desired", num(e.desired)),
+                ("Maximum", num(e.maximum)),
+                ("CompressionPriority", e.compression_priority.to_string()),
+                ("AkiDoesNotFloat", e.aki_does_not_float.to_string()),
+            ],
+        );
+    }
+    x.end();
+    x.end();
 }
