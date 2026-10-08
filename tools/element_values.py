@@ -74,6 +74,10 @@ ELEMENTS = [
     "Document/LinkedPageItemOption", "Document/WatermarkPreference",
     "Document/TaggedPDFPreference", "Document/AdjustLayoutPreference",
     "Document/HTMLFXLExportPreference", "Document/PublishExportPreference",
+    "Story", "XmlStory", "Story/StoryPreference", "Story/InCopyExportOption",
+    "Rectangle/InCopyExportOption", "Oval/InCopyExportOption",
+    "Polygon/InCopyExportOption", "Image/ClippingPathSettings",
+    "PDF/ClippingPathSettings", "EPS/ClippingPathSettings", "Ink",
 ]
 # The top-level elements of Resources/Preferences.xml, as paths
 # "Preferences/<tag>". tools/root_values.py collects them from the IDML
@@ -126,6 +130,8 @@ WHEN_WRITTEN = {
         "MinimumFirstBaselineOffset",
     ],
     "ParagraphStyle": ["EmitCss"],
+    "Story": ["UserText"],
+    "XmlStory": ["UserText"],
     "TOCStyle": ["SetStoryDirection"],
     "CharacterStyle": ["EmitCss", "SplitDocument"],
 }

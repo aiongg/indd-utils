@@ -479,13 +479,13 @@ impl Writer<'_> {
         }
         Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
         if frame {
-            x.empty(
-                "InCopyExportOption",
-                &[
-                    ("IncludeGraphicProxies", "true".into()),
-                    ("IncludeAllResources", "false".into()),
-                ],
-            );
+            // The values every IDML has (idml-values.md, page items).
+            let observed = self.observed(&format!("{tag}/InCopyExportOption"));
+            if !observed.is_empty() {
+                x.start("InCopyExportOption");
+                x.attrs_missing(observed.iter());
+                x.end();
+            }
         }
         for (effect, attr, v) in transparency::write(
             self,

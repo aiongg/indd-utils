@@ -40,11 +40,12 @@ impl Writer<'_> {
     /// The start tag of a `Story` or `XmlStory` with its attributes.
     pub(super) fn story_start(&self, x: &mut Xml, tag: &str, s: &Story) {
         x.start(tag).attr("Self", uref(Some(s.uid)));
-        // Values every exported IDML has on every story, from the DOM
-        // version where they first appear (docs/format/idml-values.md).
-        let major = self.doc.version.major;
-        if major >= 12 {
-            x.attr("UserText", "true");
+        // `UserText` from version 11.2, with the value every IDML has
+        // (docs/format/idml-values.md, stories).
+        let v = &self.doc.version;
+        let major = v.major;
+        if (major, v.minor) >= (11, 2) {
+            x.attrs_missing(values::when_written(tag, major).iter());
         }
         // From DOM 13 (footnotes.md).
         if major >= 13 {
@@ -52,9 +53,7 @@ impl Writer<'_> {
         }
         // Without chunk 0xA44C the title is `$ID/` (objects.md, stories).
         let title = s.settings.title.as_deref().unwrap_or("$ID/");
-        x.attr("TrackChanges", "false")
-            .attr("StoryTitle", title)
-            .attr("AppliedNamedGrid", "n");
+        x.attr("StoryTitle", title);
         // The TOC style that made the story, if any (objects.md).
         let toc = s
             .toc_style
@@ -63,6 +62,8 @@ impl Writer<'_> {
             "AppliedTOCStyle",
             toc.map_or("n".into(), Self::toc_style_ref),
         );
+        // The values every IDML has on every story (idml-values.md).
+        x.attrs_missing(self.observed(tag).iter());
     }
 
     pub(super) fn xml_element_start(x: &mut Xml, e: &XmlElement) {
@@ -97,25 +98,25 @@ impl Writer<'_> {
             prefs.push(("OpticalMarginAlignment", a.into()));
         }
         prefs.push(("OpticalMarginSize", size));
-        prefs.push(("FrameType", "TextFrameType".into()));
         // Read from the story's frames; otherwise the value every
         // exported IDML has (`idml-values.md`).
-        let orientation = match s.orientation {
-            Some(Orientation::Vertical) => "Vertical",
-            _ => "Horizontal",
-        };
-        prefs.push(("StoryOrientation", orientation.into()));
+        match s.orientation {
+            Some(Orientation::Vertical) => prefs.push(("StoryOrientation", "Vertical".into())),
+            Some(Orientation::Horizontal) => prefs.push(("StoryOrientation", "Horizontal".into())),
+            None => {}
+        }
         if let Some(d) = direction {
             prefs.push(("StoryDirection", d.into()));
         }
-        x.empty("StoryPreference", &prefs);
-        x.empty(
-            "InCopyExportOption",
-            &[
-                ("IncludeGraphicProxies", "true".into()),
-                ("IncludeAllResources", "false".into()),
-            ],
-        );
+        x.start("StoryPreference");
+        for (k, v) in &prefs {
+            x.attr(k, v);
+        }
+        x.attrs_missing(self.observed("Story/StoryPreference").iter());
+        x.end();
+        x.start("InCopyExportOption");
+        x.attrs_missing(self.observed("Story/InCopyExportOption").iter());
+        x.end();
         let scope = uref(Some(s.uid));
         // The element whose content is the story holds all its text.
         let element = s

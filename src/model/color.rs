@@ -391,7 +391,8 @@ impl Color {
 
 /// An ink (class 0x1F07). Chunk 0x1F0D: flag byte and name, then fields
 /// at offsets from the end of the name: f64 neutral density at 14, u32
-/// trap order − 1 at 26, f64 frequency at 32, f64 angle at 40.
+/// trap order − 1 at 26, f64 frequency at 32, f64 angle at 40, u8 convert
+/// to process at 56.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ink {
     pub uid: u32,
@@ -402,6 +403,8 @@ pub struct Ink {
     pub trap_order: u32,
     pub frequency: f64,
     pub angle: f64,
+    /// `ConvertToProcess`: u8 at 56 (1 `true`, 0 `false`).
+    pub convert_to_process: Option<bool>,
 }
 
 impl Ink {
@@ -424,6 +427,11 @@ impl Ink {
             trap_order: enc.cursor(&d[end + 26..]).u32()? + 1,
             frequency: f(32)?,
             angle: f(40)?,
+            convert_to_process: match d.get(end + 56) {
+                Some(0) => Some(false),
+                Some(1) => Some(true),
+                _ => None,
+            },
         }))
     }
 }

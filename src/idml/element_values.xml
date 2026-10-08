@@ -19,8 +19,11 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 					<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
 				</Properties>
 			</ObjectExportOption>
+			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
 		</Rectangle>
-		<Polygon StoryTitle="$ID/" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
+		<Polygon StoryTitle="$ID/" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0">
+			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
+		</Polygon>
 		<GraphicLine LockState="None" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
 		<Group GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
 		<Spread PageTransitionType="None" PageTransitionDirection="NotApplicable" PageTransitionDuration="Medium" ShowMasterItems="true" FlattenerOverride="Default">
@@ -58,6 +61,18 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<WatermarkPreference Present="true" WatermarkVisibility="false" WatermarkDoPrint="false" WatermarkDrawInBack="true" WatermarkText="" WatermarkFontPointSize="48" WatermarkOpacity="50" WatermarkRotation="0" WatermarkHorizontalPosition="WatermarkHCenter" WatermarkHorizontalOffset="0" WatermarkVerticalPosition="WatermarkVCenter" WatermarkVerticalOffset="0" />
 			<TaggedPDFPreference StructureOrder="UseXMLStructure" />
 		</Document>
+		<Story TrackChanges="false" AppliedNamedGrid="n">
+			<StoryPreference FrameType="TextFrameType" StoryOrientation="Horizontal" />
+			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
+		</Story>
+		<XmlStory AppliedTOCStyle="n" TrackChanges="false" StoryTitle="$ID/" AppliedNamedGrid="n" />
+		<Image>
+			<ClippingPathSettings ClippingType="None" InvertPath="false" IncludeInsideEdges="false" RestrictToFrame="false" InsetFrame="0" AppliedPathName="$ID/" Index="-1" />
+		</Image>
+		<PDF>
+			<ClippingPathSettings ClippingType="None" InvertPath="false" IncludeInsideEdges="false" RestrictToFrame="false" UseHighResolutionImage="true" Threshold="25" Tolerance="2" InsetFrame="0" AppliedPathName="$ID/" Index="-1" />
+		</PDF>
+		<Ink PrintInk="true" InkType="Normal" />
 		<Preferences>
 			<PrintPreference PrintFile="" Collating="false" ReverseOrder="false" Sequence="All" PrintMasterPages="false" PrintNonprinting="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" TilingType="Auto" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" PrintBlack="true" SourceSpace="UseDocument" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" IgnoreSpreadOverrides="false" CompositeScreening="$ID/kDefault" PrintLayers="VisiblePrintableLayers">
 				<Properties>
@@ -174,6 +189,11 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<HTMLExportPreference ExportOrder="LayoutOrder" BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" PreserveLayoutAppearence="false" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" PreserveLocalOverride="true" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" />
 		</Preferences>
 	</Values>
+	<Values MinimumVersion="8" MaximumVersion="20">
+		<EPS>
+			<ClippingPathSettings ClippingType="None" InvertPath="false" IncludeInsideEdges="false" RestrictToFrame="false" UseHighResolutionImage="true" Threshold="25" Tolerance="2" InsetFrame="0" AppliedPathName="$ID/" Index="-1" />
+		</EPS>
+	</Values>
 	<Values MinimumVersion="8">
 		<Rectangle TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
 			<ObjectExportOption SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" />
@@ -185,6 +205,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 					<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
 				</Properties>
 			</ObjectExportOption>
+			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
 		</Oval>
 		<Polygon HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
 			<ObjectExportOption CustomAltText="$ID/" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
@@ -313,6 +334,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</EndnoteOption>
 		</Document>
+		<XmlStory IsEndnoteStory="false" />
 		<Preferences>
 			<TextDefault ParagraphBorderOverprint="false" ParagraphBorderGapOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderStrokeEndCap="ButtEndCap" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphBorderWidth="ColumnWidth" ParagraphBorderRightOffset="0" ParagraphBorderDisplayIfSplits="false" ProviderHyphenationStyle="HyphAll">
 				<Properties>
@@ -385,6 +407,10 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 	<WhenWritten MinimumVersion="10">
 		<ParagraphStyle EmitCss="true" />
 		<CharacterStyle SplitDocument="false" EmitCss="true" />
+	</WhenWritten>
+	<WhenWritten MinimumVersion="11">
+		<Story UserText="true" />
+		<XmlStory UserText="true" />
 	</WhenWritten>
 	<WhenWritten MinimumVersion="13">
 		<TextFrame>

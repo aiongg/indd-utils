@@ -114,42 +114,41 @@ element in the package.
 
 ## Story values
 
-Every `Story` element in the 240 corpus IDML files (2,094 stories) has
-these values, which the converter writes on every story. No INDD field
-for them is identified; the story objects examined have no attributes in
-their attribute list (chunk 0x23F, always empty), and no story chunk has
-a value that varies with them.
+`tools/element_values.py` collects the values of `Story`, `XmlStory`
+and their `StoryPreference` and `InCopyExportOption` children from the
+683 corpus IDML files (`element_values.xml`); the converter writes them
+where the INDD gives no value:
 
-| Element | Values | Same in |
+| Element | Values kept | Versions |
 |---|---|---|
-| `Story` | `TrackChanges="false"`, `StoryTitle="$ID/"`, `AppliedNamedGrid="n"` | 2,094 of 2,094 |
-| `Story` | `UserText="true"` | 2,090 of 2,090 with DOM 12 or later (written for version 12 and later) |
-| `Story` | `IsEndnoteStory="false"` | 3,094 of 3,094 with DOM 13.0–14.0 and 0 of 2,467 with DOM 12 (`footnotes.md`); written for version 13 and later, `true` for the endnote story |
-| `StoryPreference` | `OpticalMarginAlignment="false"`, `OpticalMarginSize="12"`, `FrameType="TextFrameType"`, `StoryOrientation="Horizontal"`, `StoryDirection="LeftToRightDirection"` | 2,094 of 2,094 |
-| `InCopyExportOption` | `IncludeGraphicProxies="true"`, `IncludeAllResources="false"` | 2,094 of 2,094 |
+| `Story` | `TrackChanges="false"`, `AppliedNamedGrid="n"` | 7 on |
+| `Story`, `XmlStory` | `UserText="true"` where written | 11 on; IDML has it from version 11.2 (none of the 3,184 stories of DOM 10.0 to 11.0, every story from 11.2), and the converter writes it from INDD version 11.2 |
+| `StoryPreference` | `FrameType="TextFrameType"`, `StoryOrientation="Horizontal"` | 7 on |
+| `InCopyExportOption` of stories | `IncludeGraphicProxies="true"`, `IncludeAllResources="false"` | 7 on |
 
-`StoryPreference` and `InCopyExportOption` are the first two children of
-every story, in that order, as the IDML schema puts them. Optical margin
-alignment is off in every corpus story, so the field that turns it on is
-not known and a document that uses it is converted without it.
-`AppliedTOCStyle` is left out: it names a TOC style in 4 stories.
+The other story values are read from the INDD: `StoryTitle`,
+`StoryDirection` and the optical margin from story chunks, with the
+value of every story without the chunk when it is absent (`objects.md`,
+story settings); `IsEndnoteStory` from the story class (`footnotes.md`);
+`AppliedTOCStyle` from chunk 0x8C40.
 
 `StoryOrientation` is read from the story's frames when they agree
 (`objects.md`, text orientation); the observed `Horizontal` is written
 only for other stories. For a sample typeset vertically, no field was
-found that sets `StoryDirection` or `FrameType` apart from horizontal
-samples, so these keep the observed values there too. Its object styles
-store direction code 1, as horizontal samples do.
+found that sets `FrameType` apart from horizontal samples, so it keeps
+the observed value there too.
 
 ## Graphic settings without an INDD field
 
-All 496 `Image` elements in the 240 corpus IDML files (119 files) have
-`ClippingPathSettings` with `InvertPath="false"`,
-`IncludeInsideEdges="false"`, `RestrictToFrame="false"` and
-`AppliedPathName="$ID/"`, and `ImageIOPreference` with
-`AllowAutoEmbedding="true"`. The 386 PDF and 49 EPS graphics with
-`ClippingPathSettings` have the same four values. The converter writes
-them (`objects.md`, clipping path settings).
+`element_values.xml` holds the `ClippingPathSettings` values of every
+`Image`, `PDF` and `EPS` element in the 683 corpus IDML files:
+`ClippingType="None"`, `InvertPath="false"`, `IncludeInsideEdges="false"`,
+`RestrictToFrame="false"` and `AppliedPathName="$ID/"` (and for PDF and
+EPS also the values the converter reads for images). EPS graphics occur
+only up to DOM 20, so a DOM 21 EPS gets only the values read from the
+INDD. Every `ImageIOPreference` has `AllowAutoEmbedding="true"`. The
+converter writes the values read from the INDD first (`objects.md`,
+clipping path settings).
 
 Over the 5,131 graphics of the trustworthy pairs, every graphic has
 `LocalDisplaySetting="Default"`; every image (3,607)
@@ -224,16 +223,21 @@ version; the converter writes it from 13.1.
 
 ## Composite font entries
 
-`Locked="true"` is in all 1,440 `CompositeFontEntry` elements of the
-240 corpus IDML files. No INDD field for it is identified; the converter
-writes it on every entry (`fonts.md`).
+The converter writes only the built-in composite font `[No composite
+font]`. All 5,159 of its `CompositeFontEntry` elements in the 683 corpus
+IDML files have `Locked="true"`, `RelativeSize="100"`,
+`BaselineShift="0"`, `HorizontalScale="100"` and `VerticalScale="100"`.
+No INDD field for `Locked` is identified; the converter writes it on
+every entry, and the other four where the entry's stored numbers are
+those of every entry (`fonts.md`). Entries of other composite fonts
+have other values.
 
 ## Inks
 
-All 973 `Ink` elements of the 240 corpus IDML files have
-`InkType="Normal"`, `PrintInk="true"` and `ConvertToProcess="false"`.
-No INDD field for them is identified; the converter writes them on every
-ink (`objects.md`).
+Every `Ink` element of the 683 corpus IDML files has `InkType="Normal"`
+and `PrintInk="true"` (`element_values.xml`); the converter writes them
+on every ink. `ConvertToProcess` is read from the INDD (`objects.md`,
+inks).
 
 ## Values of other elements
 
@@ -443,9 +447,11 @@ blocks of `element_values.xml`, `root_values.xml` and
 `object_style_values.xml` are not used, because those files are keyed
 by major version only.
 
-All 3,412 `InCopyExportOption` elements of rectangles, ovals and polygons
-have `IncludeGraphicProxies="true"` and `IncludeAllResources="false"`,
-and the converter writes them on those items.
+Every `InCopyExportOption` of a rectangle, oval or polygon in the 683
+corpus IDML files has `IncludeGraphicProxies="true"` and
+`IncludeAllResources="false"` (`element_values.xml`; ovals from DOM 8,
+as no DOM 7 file has one). The converter writes the element with these
+values on those items.
 
 ## Column direction of pages
 

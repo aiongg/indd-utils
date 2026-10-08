@@ -151,20 +151,22 @@ impl Writer<'_> {
                 ("Self", format!("Ink/{}", self_name(&i.name.idml()))),
                 ("Name", i.name.idml()),
                 ("Angle", num(i.angle)),
-                // These three are the same in every Ink of the corpus
-                // IDML files (idml-values.md).
-                ("ConvertToProcess", "false".into()),
-                ("Frequency", num(i.frequency)),
             ];
+            if let Some(c) = i.convert_to_process {
+                attrs.push(("ConvertToProcess", c.to_string()));
+            }
+            attrs.push(("Frequency", num(i.frequency)));
             if let Some(d) = i.neutral_density {
                 attrs.push(("NeutralDensity", num(d)));
             }
-            attrs.extend([
-                ("PrintInk", "true".into()),
-                ("TrapOrder", i.trap_order.to_string()),
-                ("InkType", "Normal".into()),
-            ]);
-            x.empty("Ink", &attrs);
+            attrs.push(("TrapOrder", i.trap_order.to_string()));
+            x.start("Ink");
+            for (k, v) in &attrs {
+                x.attr(k, v);
+            }
+            // The values every IDML has on an ink (idml-values.md).
+            x.attrs_missing(self.observed("Ink").iter());
+            x.end();
         }
         // The document's constant shade, with the values every IDML has
         // on one (idml-values.md); its contents are the stored numbers in

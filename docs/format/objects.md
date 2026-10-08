@@ -2073,11 +2073,15 @@ of the name:
 | 26 | u32, one less than the IDML value | `TrapOrder` | 314 of 314 |
 | 32 | f64 | `Frequency` | 314 of 314 |
 | 40 | f64 | `Angle` | 314 of 314 (0, 15, 27, 45, 63 and 75) |
+| 56 | u8 | `ConvertToProcess` (1 `true`) | 2,065 of 2,065 inks of the trustworthy pairs (3 `true`) |
 
 Byte 2 is 1 for the four process inks and 0 for spot inks; its meaning
-is not known. `InkType="Normal"`, `PrintInk="true"` and
-`ConvertToProcess="false"` are in all 973 IDML inks and are written from
-that observation (`idml-values.md`). The schema puts inks after the
+is not known. The u8 at 56 is `ConvertToProcess` (1 `true`, 0 `false`):
+it is 1 for the 3 inks of the trustworthy pairs whose IDML has `true`
+(one spot ink, in three copies of one document) and 0 for the other
+2,062; no other byte separates them. `InkType="Normal"` and
+`PrintInk="true"` are in every IDML ink and are written from that
+observation (`idml-values.md`). The schema puts inks after the
 colours and before the tints.
 
 In 41 files without an IDML (InDesign 6.0, 13.x and 14.x, from two

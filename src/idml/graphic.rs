@@ -70,7 +70,7 @@ impl Writer<'_> {
     /// those every exported IDML has, and a graphic without chunk 0x2C1A
     /// has the values every such graphic has in IDML. See
     /// `docs/format/objects.md`.
-    pub(super) fn clipping(x: &mut Xml, g: &Graphic) {
+    pub(super) fn clipping(&self, x: &mut Xml, g: &Graphic, tag: &str) {
         let (high_resolution, threshold, tolerance, inset, index) = match &g.clipping {
             Some(c) if c.kind == 0 => (
                 match c.high_resolution {
@@ -92,19 +92,15 @@ impl Writer<'_> {
                 "-1".into(),
             ),
         };
-        x.start("ClippingPathSettings")
-            .attr("ClippingType", "None")
-            .attr("InvertPath", "false")
-            .attr("IncludeInsideEdges", "false")
-            .attr("RestrictToFrame", "false");
+        x.start("ClippingPathSettings");
         if let Some(h) = high_resolution {
             x.attr("UseHighResolutionImage", h);
         }
         x.attr("Threshold", threshold)
             .attr("Tolerance", tolerance)
             .attr("InsetFrame", inset)
-            .attr("AppliedPathName", "$ID/")
             .attr("Index", index);
+        x.attrs_missing(self.observed(&format!("{tag}/ClippingPathSettings")).iter());
         x.end();
     }
 
@@ -314,7 +310,7 @@ impl Writer<'_> {
         );
         x.end();
         if g.kind != GraphicKind::Svg {
-            Self::clipping(x, g);
+            self.clipping(x, g, tag);
         }
         if g.kind == GraphicKind::Image {
             Self::image_io(x, g);
