@@ -98,9 +98,15 @@ impl Writer<'_> {
             prefs.push(("OpticalMarginAlignment", a.into()));
         }
         prefs.push(("OpticalMarginSize", size));
-        // Read from the story's frames; otherwise the value every
-        // exported IDML has (`idml-values.md`).
-        match s.orientation {
+        // Frame type and orientation from chunk 0x2EE; without it, the
+        // values of every story without the chunk. For another orientation
+        // code, the orientation of the story's frames (objects.md, story
+        // settings).
+        let (frame_type, orientation) = story_layout(s.settings.layout, s.orientation);
+        if let Some(t) = frame_type {
+            prefs.push(("FrameType", t.into()));
+        }
+        match orientation {
             Some(Orientation::Vertical) => prefs.push(("StoryOrientation", "Vertical".into())),
             Some(Orientation::Horizontal) => prefs.push(("StoryOrientation", "Horizontal".into())),
             None => {}
@@ -830,9 +836,47 @@ fn split_runs_at(runs: &[TextRun], cuts: &[usize]) -> Vec<TextRun> {
     out
 }
 
+/// `FrameType` and the orientation of a story from chunk 0x2EE (u16
+/// orientation, u16 frame type); without the chunk, `TextFrameType` and
+/// horizontal. For another orientation code, the orientation of the
+/// story's frames. See `docs/format/objects.md`, story settings.
+fn story_layout(
+    layout: Option<(u16, u16)>,
+    frames: Option<Orientation>,
+) -> (Option<&'static str>, Option<Orientation>) {
+    let (orientation, frame_type) = layout.unwrap_or((0, 0));
+    let frame_type = match frame_type {
+        0 => Some("TextFrameType"),
+        1 => Some("FrameGridType"),
+        _ => None,
+    };
+    let orientation = match orientation {
+        0 => Some(Orientation::Horizontal),
+        1 => Some(Orientation::Vertical),
+        _ => frames,
+    };
+    (frame_type, orientation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn story_layout_comes_from_chunk_0x2ee() {
+        use Orientation::*;
+        let v = Some(Vertical);
+        assert_eq!(
+            story_layout(None, v),
+            (Some("TextFrameType"), Some(Horizontal))
+        );
+        assert_eq!(story_layout(Some((1, 1)), None), (Some("FrameGridType"), v));
+        assert_eq!(
+            story_layout(Some((0, 1)), v),
+            (Some("FrameGridType"), Some(Horizontal))
+        );
+        assert_eq!(story_layout(Some((7, 9)), v), (None, v));
+    }
 
     #[test]
     fn writes_paragraph_level_sources_around_split_ranges() {

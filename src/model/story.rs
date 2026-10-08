@@ -90,6 +90,9 @@ pub struct StoryChunks {
     pub direction: Option<u16>,
     /// Chunk 0x2EE: `OpticalMarginSize` and the alignment u16.
     pub optical_margin: Option<(f64, u16)>,
+    /// Chunk 0x2EE: the text orientation u16 at 0 and the frame type u16
+    /// at 14.
+    pub layout: Option<(u16, u16)>,
 }
 
 /// A footnote: its text runs, at their offsets in the story text, which
@@ -756,6 +759,7 @@ impl<'a> Reader<'a> {
             }
             true
         });
+        let margin = self.chunk(uid, chunk::STORY_OPTICAL_MARGIN)?;
         Ok(Story {
             uid,
             runs,
@@ -788,9 +792,12 @@ impl<'a> Reader<'a> {
                 direction: self
                     .chunk(uid, chunk::STORY_DIRECTION)?
                     .and_then(|d| self.enc().u16_at(&d, 0)),
-                optical_margin: self
-                    .chunk(uid, chunk::STORY_OPTICAL_MARGIN)?
-                    .and_then(|d| Some((self.enc().f64_at(&d, 2)?, self.enc().u16_at(&d, 12)?))),
+                optical_margin: margin
+                    .as_ref()
+                    .and_then(|d| Some((self.enc().f64_at(d, 2)?, self.enc().u16_at(d, 12)?))),
+                layout: margin
+                    .as_ref()
+                    .and_then(|d| Some((self.enc().u16_at(d, 0)?, self.enc().u16_at(d, 14)?))),
             },
             toc_style: match self
                 .chunk(uid, chunk::STORY_TOC)?

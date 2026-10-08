@@ -1212,11 +1212,28 @@ pairs, 18,610 stories):
 |---|---|---|---|---|
 | 0xA44C | flag byte (1 for a built-in key), in-object string | `Story` `StoryTitle` (`$ID/` and the key for flag 1) | `$ID/` | 18,610 of 18,610 (30 with a name) |
 | 0x50F96 | u16: 1 | `StoryPreference` `StoryDirection="RightToLeftDirection"` | `LeftToRightDirection` | 18,610 of 18,610 (780 right to left, 10 documents) |
-| 0x2EE (16 bytes) | u16 0; f64 at 2; u16 at 10 (not identified); u16 at 12 (1 `true`); u16 0 | `StoryPreference` `OpticalMarginSize`, `OpticalMarginAlignment` | 12, `false` | alignment 18,610 of 18,610; size 18,601 of 18,610 |
+| 0x2EE (16 bytes) | u16 at 0; f64 at 2; u16 at 10 (not identified); u16 at 12 (1 `true`); u16 at 14 | `StoryPreference` `StoryOrientation` (u16 at 0: 0 `Horizontal`, 1 `Vertical`), `OpticalMarginSize`, `OpticalMarginAlignment`, `FrameType` (u16 at 14: 0 `TextFrameType`, 1 `FrameGridType`) | 12, `false`, `Horizontal`, `TextFrameType` | alignment 18,610 of 18,610; size 18,601 of 18,610; orientation and frame type below |
 
 The 9 other sizes are stories in DOM 16 and 20 documents with 9.2126 in
 IDML and no chunk; not explained. Another value of the direction or
 alignment u16 leaves the attribute out.
+
+Orientation and frame type, over the
+28,669 stories of all corpus pairs (stale pairs included), with chunk
+0x2EE as (u16 at 0, u16 at 14):
+
+| Chunk | Stories | IDML `FrameType`, `StoryOrientation` |
+|---|---:|---|
+| none | 25,206 | `TextFrameType`, `Horizontal` (all) |
+| (0, 0) | 3,359 | `TextFrameType`, `Horizontal` (all) |
+| (0, 1) | 4 | `FrameGridType`, `Horizontal` (all) |
+| (1, 0) | 47 | `TextFrameType`, `Vertical` (all) |
+| (1, 1) | 53 | `FrameGridType`, `Vertical` (all) |
+
+The vertical and frame grid stories are in documents typeset in
+Japanese (DOM 12, 13 and 18). Another frame type value leaves
+`FrameType` out. For another orientation value the converter uses the
+orientation of the story's frames (text orientation, below).
 
 **Owned items (run kind 0x209).** Each record: u32 run length, u16
 count, then that many (u32 class, u32 UID) pairs, the objects owned by

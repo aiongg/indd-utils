@@ -138,15 +138,12 @@ value of every story without the chunk when it is absent (`objects.md`,
 story settings); `IsEndnoteStory` from the story class (`footnotes.md`);
 `AppliedTOCStyle` from chunk 0x8C40.
 
-`StoryOrientation` is read from the story's frames when they agree
-(`objects.md`, text orientation).
+`StoryPreference` `FrameType` and `StoryOrientation` are read from
+story chunk 0x2EE (`objects.md`, story settings).
 
-Left out because they vary: `Story` `AppliedNamedGrid` (106 of 27,816
-stories name a grid, all in DOM 12 files), `StoryPreference`
-`FrameType` (57 stories have `FrameGridType`, in DOM 12, 13 and 18
-files) and `StoryOrientation` (100 stories are `Vertical`). Before the
-corpus had samples typeset in Japanese, every IDML had `n`,
-`TextFrameType` and `Horizontal`.
+Left out because it varies: `Story` `AppliedNamedGrid` (106 of 27,816
+stories name a grid, all in DOM 12 files). Before the corpus had
+samples typeset in Japanese, every IDML had `n`.
 
 ## Graphic settings without an INDD field
 
