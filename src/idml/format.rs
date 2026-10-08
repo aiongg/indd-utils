@@ -67,6 +67,46 @@ pub(super) fn page_color(c: &UiColorRef) -> Option<Node> {
     })
 }
 
+/// The `BaselineFrameGridColor` property of a baseline frame grid colour
+/// (preferences.md, baseline frame grid colour).
+pub(super) fn frame_grid_color(c: crate::model::prefs::FrameGridColor) -> Option<Node> {
+    use crate::model::prefs::FrameGridColor;
+    let name = match c {
+        FrameGridColor::Rgb(rgb) => return ui_color_property("BaselineFrameGridColor", rgb),
+        FrameGridColor::Charcoal => "Charcoal",
+        FrameGridColor::LightBlue => "LightBlue",
+    };
+    Some(Node {
+        tag: "BaselineFrameGridColor".into(),
+        attrs: vec![("type".into(), "enumeration".into())],
+        text: Some(name.into()),
+        children: Vec::new(),
+    })
+}
+
+/// Put `property` in the `Properties` of `node`, in place of a property
+/// of the same name.
+pub(super) fn set_property(node: &mut Node, property: Node) {
+    let i = match node.children.iter().position(|c| c.tag == "Properties") {
+        Some(i) => i,
+        None => {
+            node.children.insert(
+                0,
+                Node {
+                    tag: "Properties".into(),
+                    ..Node::default()
+                },
+            );
+            0
+        }
+    };
+    let props = &mut node.children[i].children;
+    match props.iter_mut().find(|c| c.tag == property.tag) {
+        Some(c) => *c = property,
+        None => props.push(property),
+    }
+}
+
 /// A `Properties` child as a values node.
 pub(super) fn prop_node(p: &Property) -> Node {
     let (name, ty, value) = p;
@@ -359,6 +399,27 @@ impl Writer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sets_the_baseline_frame_grid_colour() {
+        use crate::model::prefs::FrameGridColor;
+        let mut node = Node {
+            tag: "BaselineFrameGridOption".into(),
+            ..Node::default()
+        };
+        set_property(
+            &mut node,
+            frame_grid_color(FrameGridColor::LightBlue).unwrap(),
+        );
+        set_property(
+            &mut node,
+            frame_grid_color(FrameGridColor::Charcoal).unwrap(),
+        );
+        let props = &node.children[0];
+        assert_eq!(props.tag, "Properties");
+        assert_eq!(props.children.len(), 1);
+        assert_eq!(props.children[0].text.as_deref(), Some("Charcoal"));
+    }
 
     #[test]
     fn numbers_without_text_are_written_as_zero() {

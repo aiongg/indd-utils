@@ -379,6 +379,20 @@ impl Writer<'_> {
         } else {
             values::object_style(major)
         };
+        // Every object style has the preferences' baseline frame grid
+        // colour (preferences.md, baseline frame grid colour).
+        if let Some(c) = self
+            .doc
+            .prefs
+            .baseline_frame_grid_color
+            .and_then(frame_grid_color)
+            && let Some(b) = node
+                .children
+                .iter_mut()
+                .find(|c| c.tag == "BaselineFrameGridOption")
+        {
+            set_property(b, c);
+        }
         // The export options of the version (idml-values.md) in place of
         // those of the value files.
         node.children.retain(|c| c.tag != "ObjectExportOption");

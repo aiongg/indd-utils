@@ -163,7 +163,30 @@ attribute too, except where the files show different values: positions
 differ in 2 files, which tells 24 from 32; the sizes are equal in every
 file, so 8 and 16 follow the order of the positions. Offsets 168 and 170
 match both `UseCidMojikumi` and `UseNewVerticalScaling`, which are equal
-in every file; they are not written.
+in every file. In the corpus of 2026-10 the two bytes are equal to each
+other and to both IDML values in 803 of 803 pairs (161 `true`, 642
+`false`). Which byte is which is not known, so the converter writes
+both attributes only when the bytes are equal (0 `false`, 1 `true`).
+
+**Baseline frame grid colour.** The `BaselineFrameGridColor` of the
+`BaselineFrameGridOption` preference follows an observed rule over
+stored data, not a decoded field. Over the 803 pairs of the corpus of
+2026-10:
+
+| Stored data | Pairs | IDML colour |
+|---|---:|---|
+| Chunk 0x2834 (24 bytes), u32 at 20 not 0: the UID of an interface colour object (as for layers, `objects.md`) | 11 | that colour (`Charcoal` in all 11) |
+| u32 at 20 is 0, offset 168 of chunk 0x280 is 1 | 154 | `Charcoal` |
+| u32 at 20 is 0, offset 168 is 0 | 513 | `LightBlue` |
+| No chunk 0x2834 (offset 168 is 0 in all) | 125 | `LightBlue` |
+
+No stored field was found that holds the colour when the u32 is 0. Both
+the colour and offset 168 appear to be defaults of the edition that
+created the document. Every object style's `BaselineFrameGridColor`
+equals the preference's in 803 of 803 pairs (3,515 object styles), so
+the converter writes this colour in the preference and in every object
+style. A UID that is not an interface colour, or another byte at 168,
+leaves the observed value (`LightBlue`).
 
 Chunk 0x28BE (14 bytes, 16 from InDesign 18), u8 flags: 4
 `SmartTextReflow`, 6 `LimitToMasterTextFrames`, 8 `DeleteEmptyPages`, 10

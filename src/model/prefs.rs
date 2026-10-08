@@ -55,6 +55,19 @@ pub struct Prefs {
     /// Layout and story grid defaults: element, grid settings and, for
     /// the story grid, `CharacterCountSize`.
     pub grids: Vec<(&'static str, super::GridData, Option<f64>)>,
+    /// The colour of baseline frame grids, for the preferences and every
+    /// object style.
+    pub baseline_frame_grid_color: Option<FrameGridColor>,
+}
+
+/// The colour of baseline frame grids (`preferences.md`, baseline frame
+/// grid colour).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FrameGridColor {
+    /// An interface colour object.
+    Rgb([f64; 3]),
+    Charcoal,
+    LightBlue,
 }
 
 /// The document's endnote options (preferences chunk 0x2261E). See
@@ -729,6 +742,8 @@ mod id {
     pub const COLOR_POLICIES: u32 = 0x7C44;
     pub const WATERMARK: u32 = 0x16344;
     pub const TEXT: u32 = 0x280;
+    /// Baseline frame grid settings: u32 at 20 an interface colour or 0.
+    pub const BASELINE_FRAME_GRID: u32 = 0x2834;
     pub const SMART_TEXT_REFLOW: u32 = 0x28BE;
     pub const MARGINS: u32 = 0x550;
     pub const COLUMNS: u32 = 0x555;
@@ -1042,7 +1057,24 @@ impl Reader<'_> {
         }
 
         // Text preferences and the default text frame columns.
+        let mut baseline_frame_grid_color = None;
         if let Some(d) = get(id::TEXT)?.filter(|d| d.len() >= 174) {
+            // Bytes 168 and 170 are `UseCidMojikumi` and
+            // `UseNewVerticalScaling` in an order not known; they are
+            // equal in every sample. Byte 168 also gives the default
+            // colour of baseline frame grids (preferences.md).
+            if d[168] == d[170] && d[168] <= 1 {
+                let on = (d[168] == 1).to_string();
+                set("TextPreference", "UseCidMojikumi", on.clone());
+                set("TextPreference", "UseNewVerticalScaling", on);
+            }
+            let ui = get(id::BASELINE_FRAME_GRID)?.and_then(|g| self.enc().u32_at(&g, 20));
+            baseline_frame_grid_color = match (ui, d[168]) {
+                (Some(u), _) if u != 0 => self.ui_color(u)?.map(FrameGridColor::Rgb),
+                (_, 1) => Some(FrameGridColor::Charcoal),
+                (_, 0) => Some(FrameGridColor::LightBlue),
+                _ => None,
+            };
             let f = |o: usize| self.cursor(&d[o..]).f64();
             let b = |o: usize| (d[o] != 0).to_string();
             for (o, name) in [
@@ -1638,6 +1670,7 @@ impl Reader<'_> {
             );
         }
         Ok(Prefs {
+            baseline_frame_grid_color,
             values,
             colors,
             text_defaults,

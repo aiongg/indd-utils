@@ -863,6 +863,10 @@ impl Writer<'_> {
                 .push(("BetweenEntriesSeparator".into(), separator.into()));
         }
         ours.push(self.footnote_option());
+        if let Some(c) = prefs.baseline_frame_grid_color.and_then(frame_grid_color) {
+            let i = ours_of(&mut ours, "BaselineFrameGridOption");
+            set_property(&mut ours[i], c);
+        }
         for mut n in ours {
             match nodes.iter_mut().find(|m| m.tag == n.tag) {
                 Some(m) => {
