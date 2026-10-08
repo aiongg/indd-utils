@@ -224,35 +224,37 @@ def text_ranges(story):
     """Map text offset -> attributes of the paragraph and character range
     starting there, with keys prefixed PSR. and CSR. Ranges inside wrapper
     elements count, at whatever depth. Offsets count Content in UTF-16 code
-    units and every other element (Br, Table, Footnote, an anchored frame) as
-    one position."""
+    units and every other element inside a character range (Br, Table,
+    Footnote, an anchored frame) as one position; elements outside
+    character ranges (StoryPreference, ...) are not text."""
     out = {}
     pos = 0
 
-    def walk(el, pa):
-        """Walk the children of `el` inside the paragraph attributes `pa`."""
+    def walk(el, pa, in_csr):
+        """Walk the children of `el` inside the paragraph attributes `pa`;
+        `in_csr` tells whether `el` is inside a character range."""
         nonlocal pos
         for ch in el:
             if ch.tag in NOT_TEXT:
                 continue
             if ch.tag == "ParagraphStyleRange":
-                walk(ch, {"PSR." + k: v for k, v in props(ch).items()})
+                walk(ch, {"PSR." + k: v for k, v in props(ch).items()}, False)
             elif ch.tag == "CharacterStyleRange":
                 start = pos
-                walk(ch, pa)
+                walk(ch, pa, True)
                 if pos > start:
                     ca = {"CSR." + k: v for k, v in props(ch).items()}
                     # A range nested at the same offset (Change > range at
                     # the start of this one) keeps the offset.
                     out.setdefault(start, {**pa, **ca})
             elif ch.tag in WRAPPERS:
-                walk(ch, pa)
+                walk(ch, pa, in_csr)
             elif ch.tag == "Content":
                 pos += len((ch.text or "").encode("utf-16-le")) // 2
-            else:
+            elif in_csr:
                 pos += 1
 
-    walk(story, {})
+    walk(story, {}, False)
     return out
 
 

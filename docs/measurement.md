@@ -140,8 +140,10 @@ IDML puts some elements around text ranges or around text inside a range:
 `compare.py` looks through them: every `ParagraphStyleRange` and
 `CharacterStyleRange` of the story counts, and the text inside a wrapper
 counts towards the offsets. Offsets count `Content` in UTF-16 code units
-and every other element (`Br`, `Table`, `Footnote`, an anchored frame) as
-one position; `Properties` and `XMLAttribute` count nothing. When a range
+and every other element inside a character range (`Br`, `Table`,
+`Footnote`, an anchored frame) as one position. `Properties`,
+`XMLAttribute` and elements outside character ranges (`StoryPreference`,
+`MetadataPacketPreference`, …) count nothing. When a range
 nested in a wrapper starts at the same offset as the range around it, the
 nested range is the one compared. The wrapper elements themselves have a
 `Self` and count as elements.
@@ -151,8 +153,8 @@ Counting them changed the trustworthy totals as follows:
 | Ranges counted | Reference values | Reproduced | Coverage | Extra values |
 |---|---:|---:|---:|---:|
 | Only `ParagraphStyleRange` children of the story and their `CharacterStyleRange` children | 11,142,835 | 10,501,458 | 94.24 % | 30,237 |
-| Also inside `HyperlinkTextSource` and `CrossReferenceSource` | 11,158,348 | 10,505,081 | 94.15 % | 26,634 |
-| Also inside `XMLElement`, `Change` and `EndnoteRange` | 11,508,691 | 10,505,081 | 91.28 % | 26,634 |
+| Also inside `HyperlinkTextSource` and `CrossReferenceSource` | 11,158,348 | 10,505,425 | 94.15 % | 26,297 |
+| Also inside `XMLElement`, `Change` and `EndnoteRange` | 11,508,691 | 10,505,425 | 91.28 % | 26,297 |
 
 Before, the skipped ranges were not counted, and every later range of the
 story started at a smaller offset in the reference than in the output: the
