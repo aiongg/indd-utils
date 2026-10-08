@@ -218,6 +218,9 @@ WRAPPERS = {"XMLElement", "HyperlinkTextSource", "CrossReferenceSource", "Change
             "EndnoteRange"}
 # Children that are neither text nor a character position.
 NOT_TEXT = {"Properties", "XMLAttribute"}
+# Elements that hold text of their own inside a story: their ranges are
+# counted in a text flow of their own (docs/measurement.md).
+NESTED = {"Footnote", "Cell", "Note"}
 
 
 ERROR = re.compile(r"(?P<part>[^:]+):(?P<line>\d+):(?P<col>\d+): error: (?P<msg>.*)")
@@ -259,40 +262,56 @@ def endnote_parent(data, line):
 
 
 def text_ranges(story):
-    """Map text offset -> attributes of the paragraph and character range
-    starting there, with keys prefixed PSR. and CSR. Ranges inside wrapper
-    elements count, at whatever depth. Offsets count Content in UTF-16 code
-    units and every other element inside a character range (Br, Table,
-    Footnote, an anchored frame) as one position; elements outside
-    character ranges (StoryPreference, ...) are not text."""
+    """Map (text flow, offset) -> attributes of the paragraph and character
+    range starting there, with keys prefixed PSR. and CSR. Flow 0 is the
+    story's own text; each footnote, table cell and note is a flow of its
+    own, numbered in document order. Ranges inside wrapper elements count,
+    at whatever depth. Offsets count Content in UTF-16 code units and every
+    other element inside a character range (Br, Table, Footnote, an
+    anchored frame) as one position; elements outside character ranges
+    (StoryPreference, ...) are not text."""
     out = {}
-    pos = 0
+    flows = 0
 
-    def walk(el, pa, in_csr):
+    def walk(el, pa, in_csr, flow, pos):
         """Walk the children of `el` inside the paragraph attributes `pa`;
-        `in_csr` tells whether `el` is inside a character range."""
-        nonlocal pos
+        `in_csr` tells whether `el` is inside a character range. Returns
+        the offset after them."""
         for ch in el:
             if ch.tag in NOT_TEXT:
                 continue
             if ch.tag == "ParagraphStyleRange":
-                walk(ch, {"PSR." + k: v for k, v in props(ch).items()}, False)
+                pos = walk(ch, {"PSR." + k: v for k, v in props(ch).items()}, False, flow, pos)
             elif ch.tag == "CharacterStyleRange":
                 start = pos
-                walk(ch, pa, True)
+                pos = walk(ch, pa, True, flow, pos)
                 if pos > start:
                     ca = {"CSR." + k: v for k, v in props(ch).items()}
                     # A range nested at the same offset (Change > range at
                     # the start of this one) keeps the offset.
-                    out.setdefault(start, {**pa, **ca})
+                    out.setdefault((flow, start), {**pa, **ca})
             elif ch.tag in WRAPPERS:
-                walk(ch, pa, in_csr)
+                pos = walk(ch, pa, in_csr, flow, pos)
             elif ch.tag == "Content":
                 pos += len((ch.text or "").encode("utf-16-le")) // 2
-            elif in_csr:
-                pos += 1
+            else:
+                if in_csr:
+                    pos += 1
+                nested(ch)
+        return pos
 
-    walk(story, {}, False)
+    def nested(el):
+        """Walk the text flows held in `el` (a table's cells, a footnote)."""
+        nonlocal flows
+        if el.tag in NESTED:
+            flows += 1
+            walk(el, {}, False, flows, 0)
+            return
+        for ch in el:
+            if ch.tag != "Properties":
+                nested(ch)
+
+    walk(story, {}, False, 0, 0)
     return out
 
 

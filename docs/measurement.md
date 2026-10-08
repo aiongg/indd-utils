@@ -122,7 +122,7 @@ A **value** is one of these, in the reference IDML:
 | Attribute | Attribute other than `Self` | The output's attribute is equal, with numbers compared to 6 significant digits |
 | `<Properties>` child | Child of `Properties` (`P.Name`) | Equal text and attributes; a structured child (`PathGeometry`, lists) is compared as a whole |
 | Story text | Story | The text, with paragraph breaks, is identical |
-| Text range | Start of a paragraph and character style range, at any depth inside wrappers (below) | The output has a range starting at the same offset |
+| Text range | Start of a paragraph and character style range, at any depth inside wrappers, in the story's text or in a footnote, table cell or note (below) | The output has a range starting at the same offset of the same text flow |
 | Text range attribute | Attribute or `Properties` child of the range | Equal |
 
 When an element is not produced, its presence and all its values count as
@@ -159,6 +159,21 @@ Counting them changed the trustworthy totals as follows:
 Before, the skipped ranges were not counted, and every later range of the
 story started at a smaller offset in the reference than in the output: the
 converter's ranges were counted as extra and the reference's as missing.
+#### Text flows in footnotes, cells and notes
+
+`Footnote`, `Cell` and `Note` elements hold paragraph and character
+ranges of their own. Each is a text flow with its own offsets from 0,
+numbered in document order; the story's own text is flow 0, where the
+element counts as one position. A range is identified by its flow and
+offset. The story text that decides whether a story's ranges are
+compared includes the text of these flows, so the flows of a story line
+up when its text is identical.
+
+Counting these flows added 124,277 reference values in the trustworthy
+pairs (11,508,691 → 11,632,968), 103,180 of them reproduced (coverage
+92.71 % → 92.60 %, measured on the converter of that commit); extra
+values did not change.
+
 The 350,343 values inside `XMLElement`, `Change` and `EndnoteRange` come
 from 23 trustworthy pairs; one document with `XMLElement` around its text
 has 348,306 of them. They count although the converter does not reproduce
