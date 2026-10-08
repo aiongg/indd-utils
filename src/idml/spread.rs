@@ -786,12 +786,13 @@ impl Writer<'_> {
         }
         let major = self.doc.version.major;
         if !master && let Some(mut fp) = values::element("Spread/FlattenerPreference", major) {
-            if let Some([line_art, gradient]) = s.flattener_resolution {
-                fp.attrs
-                    .insert(0, ("GradientAndMeshResolution".into(), num(gradient)));
-                fp.attrs
-                    .insert(0, ("LineArtAndTextResolution".into(), num(line_art)));
-            }
+            // Without the flattener chunk, IDML has 300 and 150 in nearly
+            // every spread (`idml-values.md`, spreads).
+            let [line_art, gradient] = s.flattener_resolution.unwrap_or([300.0, 150.0]);
+            fp.attrs
+                .insert(0, ("GradientAndMeshResolution".into(), num(gradient)));
+            fp.attrs
+                .insert(0, ("LineArtAndTextResolution".into(), num(line_art)));
             fp.write(&mut x);
         }
         for p in &s.pages {

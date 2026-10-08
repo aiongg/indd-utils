@@ -279,7 +279,13 @@ values come from the INDD.
 | `Layer` | 1,546 | `ShowGuides` and `Expendable` (`true`) from DOM 7 |
 
 Every spread has one `FlattenerPreference`, so the converter writes the
-element on every spread. The other attributes of these elements come
+element on every spread. For a spread without the flattener chunk
+(`objects.md`, flattener settings) it also writes
+`LineArtAndTextResolution="300"` and `GradientAndMeshResolution="150"`.
+These are not in every IDML: 5,045 of the 5,074 trustworthy spreads
+without the chunk have them, and the other 29 (all spreads of 9
+documents) have 400 and 400. No INDD field tells the two groups apart
+(`objects.md`). The other attributes of these elements come
 from the INDD (`objects.md`).
 
 ### Document settings in designmap.xml

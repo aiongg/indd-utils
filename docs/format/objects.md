@@ -112,11 +112,16 @@ offsets 20 and 28, 2 at 36 and 800 at 44. Their IDML has
 `LineArtAndTextResolution` and `GradientAndMeshResolution` 400 and
 `RasterVectorBalance` 50. The converter writes the f64 at 20 and 28 as
 the two resolutions; which is which is not known, as they are equal in
-every sample. Without the chunk, 5,080 spreads have 300 and 150 and 29
-spreads (all spreads of 9 documents, DOM 8 to 20) have 400 and 400; the field that decides this was not found in the
-spread or the document preferences, so the converter leaves the two
-resolutions out. The other four values are the same in every IDML
-(`idml-values.md`).
+every sample. Without the chunk, 5,045 trustworthy spreads have 300
+and 150 and 29 spreads (all spreads of 9 documents, DOM 8 to 20) have
+400 and 400. No field decides this: the bytes of 300 and 150 or of 400
+and 400 do not occur in those files, and no chunk of the preferences or
+the document object follows it. The 9 documents all contain objects of
+classes 0x4207, 0x4208 and 0x4218, which only 4 of the 480 other
+trustworthy documents contain, so the setting probably comes from the edition of the
+application that made the document. The converter writes 300 and 150
+for spreads without the chunk (`idml-values.md`, spreads). The other
+four values are the same in every IDML (`idml-values.md`).
 
 **Spread layers (0x301)** hold the items of one document layer on one
 spread. Chunk 0x302: u32 document layer UID, u16 1 for the layer's guide
