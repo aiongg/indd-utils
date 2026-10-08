@@ -184,6 +184,7 @@ with every code.
 | 0x10833 | Flattener settings (below) |
 | 0x14580 | Tab orders: u32 count, then per page u32 page UID and a UID list (the page's `TabOrder`) |
 | 0x140D | Master spreads: u16, 0 = `ShowMasterItems="false"` |
+| 0x140A | Master spreads: u32 story of the primary text frame (below) |
 
 Evidence, over the 5,129 spreads and 914 master spreads of the 495
 trustworthy pairs:
@@ -193,6 +194,16 @@ trustworthy pairs:
   all `false`.
 - `ShowMasterItems` of master spreads: 913 have no chunk 0x140D and are
   `true`; the one with the chunk (0) is `false`.
+- `PrimaryTextFrame` of master spreads, over all pairs of the corpus of
+  2026-10: IDML writes `n` when chunk 0x140A is absent (1,471 master
+  spreads) or holds 0 (6). Otherwise it names the text
+  frame on that master spread whose `ParentStory` is the chunk's story
+  and whose `PreviousTextFrame` is `n` (50 of 50; in 40 of them the
+  story has a second frame on the spread, which is not the primary
+  one). IDML of DOM 7 has no `PrimaryTextFrame` (9 master spreads). The
+  attribute is the last one of `MasterSpread`. The converter writes it
+  from DOM 8 and leaves it out when the spread has no such frame: 1,521
+  of 1,521 values over all pairs with the same major version.
 - `TabOrder` of pages: the list for the page in its spread's chunk 0x14580
   equals the IDML list for 9,367 of 9,367 pages (8 with a tab order);
   pages not in the chunk have an empty `TabOrder`.

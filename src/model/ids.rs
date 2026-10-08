@@ -119,6 +119,8 @@ pub mod chunk {
     pub const SPREAD_TAB_ORDERS: u32 = 0x14580;
     /// u16 0 if a master spread hides the items of its own master.
     pub const MASTER_SHOW_ITEMS: u32 = 0x140D;
+    /// u32 story of a master spread's primary text frame.
+    pub const MASTER_PRIMARY_STORY: u32 = 0x140A;
     /// Overridden master page items: u32 count, two UID lists.
     pub const PAGE_OVERRIDES: u32 = 0x1404;
     /// Layout grid use: six bytes, the last u16 1 to use the master's.

@@ -830,6 +830,7 @@ impl Writer<'_> {
             .attr("Self", uref(Some(s.uid)))
             .attr("PageCount", s.pages.len().to_string());
         let origin = spread_origin(&s.pages);
+        let major = self.doc.version.major;
         if !master {
             x.attr("BindingLocation", s.binding_location.to_string());
         }
@@ -863,6 +864,12 @@ impl Writer<'_> {
             }
         }
         x.attrs_missing(self.observed(kind).iter());
+        if master
+            && major >= 8
+            && let Some(f) = primary_text_frame(s)
+        {
+            x.attr("PrimaryTextFrame", f);
+        }
         // A master spread has the colour its pages share (objects.md).
         if master
             && let Some(first) = s.pages.first()
@@ -875,7 +882,6 @@ impl Writer<'_> {
             n.write(&mut x);
             x.end();
         }
-        let major = self.doc.version.major;
         if !master && let Some(mut fp) = values::element("Spread/FlattenerPreference", major) {
             // Without the flattener chunk, IDML has 400 and 400 after a
             // session of a Japanese or Chinese edition, otherwise 300 and
@@ -968,9 +974,52 @@ impl Writer<'_> {
     }
 }
 
+/// `PrimaryTextFrame` of a master spread: `n` without a primary story,
+/// otherwise the spread's first text frame of that story; `None` if the
+/// spread has no such frame (objects.md, primary text frame).
+fn primary_text_frame(s: &Spread) -> Option<String> {
+    fn find(items: &[PageItem], story: u32) -> Option<u32> {
+        items.iter().find_map(|i| match i.kind {
+            ItemKind::TextFrame {
+                story: Some(st),
+                previous: None,
+                ..
+            } if st == story => Some(i.uid),
+            _ => find(&i.children, story),
+        })
+    }
+    match s.primary_story {
+        None | Some(0) => Some("n".into()),
+        Some(story) => find(&s.items, story).map(|u| uref(Some(u))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn primary_text_frame_needs_a_first_frame_of_the_story() {
+        let mut s = Spread {
+            uid: 1,
+            master_name: None,
+            transform: Matrix::IDENTITY,
+            binding_location: 0,
+            pages: Vec::new(),
+            items: Vec::new(),
+            guides: Vec::new(),
+            shuffle: None,
+            flattener_resolution: None,
+            show_master_items: None,
+            primary_story: None,
+        };
+        assert_eq!(primary_text_frame(&s).as_deref(), Some("n"));
+        s.primary_story = Some(0);
+        assert_eq!(primary_text_frame(&s).as_deref(), Some("n"));
+        // A story without a frame on the spread.
+        s.primary_story = Some(5);
+        assert_eq!(primary_text_frame(&s), None);
+    }
 
     #[test]
     fn writes_wrap_offsets_by_side() {

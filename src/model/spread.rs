@@ -126,6 +126,9 @@ pub struct Spread {
     pub flattener_resolution: Option<[f64; 2]>,
     /// Master spreads: chunk 0x140D.
     pub show_master_items: Option<u16>,
+    /// Master spreads: the story of the primary text frame (chunk
+    /// 0x140A); `None` without the chunk.
+    pub primary_story: Option<u32>,
 }
 
 /// A ruler guide (class 0x3301, chunk 0x3308). See `docs/format/objects.md`.
@@ -443,6 +446,9 @@ impl<'a> Reader<'a> {
             shuffle: short(chunk::SPREAD_SHUFFLE)?,
             flattener_resolution,
             show_master_items: short(chunk::MASTER_SHOW_ITEMS)?,
+            primary_story: self
+                .chunk(uid, chunk::MASTER_PRIMARY_STORY)?
+                .and_then(|d| self.enc().u32_at(&d, 0)),
         })
     }
 
