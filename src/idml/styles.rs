@@ -287,18 +287,22 @@ impl Writer<'_> {
             } else {
                 &doc.table_styles
             };
-            // Styles listed in the root group first, then any others; the
-            // root style is written above.
-            let mut order: Vec<u32> = root.map_or(Vec::new(), |g| g.children.clone());
-            order.extend(styles.keys().copied());
+            // Styles and style groups listed in the root group first, then
+            // any other styles; the root style is written above.
             let mut seen = std::collections::HashSet::new();
-            for uid in order {
-                let Some(s) = styles.get(&uid) else { continue };
-                let is_root = s.builtin && s.based_on.is_none() && s.name == name;
-                if is_root || !seen.insert(self.table_style_ref(style, s)) {
-                    continue;
+            if let Some(r) = styles
+                .values()
+                .find(|s| s.builtin && s.based_on.is_none() && s.name == name)
+            {
+                seen.insert(self.table_style_ref(style, r));
+            }
+            if let Some(root) = root {
+                self.table_style_group_children(&mut x, root, style, styles, &mut seen);
+            }
+            for s in styles.values() {
+                if seen.insert(self.table_style_ref(style, s)) {
+                    self.table_style_element(&mut x, style, s, styles);
                 }
-                self.table_style_element(&mut x, style, s, styles);
             }
             x.end();
         }
@@ -655,6 +659,38 @@ impl Writer<'_> {
             node.set(&["AnchoredObjectSetting"], anchored_settings(d));
         }
         node
+    }
+
+    /// The cell or table styles and style groups of a style group, in
+    /// its order. `seen` holds the `Self` of the styles written: some
+    /// documents have two style objects with the same name, and the first
+    /// is written.
+    fn table_style_group_children(
+        &self,
+        x: &mut Xml,
+        g: &StyleGroup,
+        tag: &str,
+        styles: &BTreeMap<u32, crate::model::TableStyle>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        for &c in &g.children {
+            if let Some(sub) = self.doc.style_groups.get(&c) {
+                let sub_tag = format!("{tag}Group");
+                let path = self.group_path.get(&sub.uid).cloned().unwrap_or_default();
+                x.start(&sub_tag)
+                    .attr(
+                        "Self",
+                        format!("{sub_tag}/$ID/{}", self_name(&path.join(":"))),
+                    )
+                    .attr("Name", builtin_key(&sub.name));
+                self.table_style_group_children(x, sub, tag, styles, seen);
+                x.end();
+            } else if let Some(s) = styles.get(&c)
+                && seen.insert(self.table_style_ref(tag, s))
+            {
+                self.table_style_element(x, tag, s, styles);
+            }
+        }
     }
 
     pub(super) fn style_group_children(

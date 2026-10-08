@@ -1288,6 +1288,12 @@ children; chunk 0x28D2 a flag byte and the name. IDML names every group
 `$ID/<name>` (20 of 21 groups), and a style inside groups is referenced as
 `ParagraphStyle/<group>:<group>:<name>` with `:` escaped as `%3a`. All 412
 paragraph styles and 21 groups in the pairs match.
+Cell style groups work the same way: the root cell style group's
+children (chunk 0x2024E) include groups of class 0xCA8B, and IDML writes
+each as `<CellStyleGroup Self="CellStyleGroup/$ID/<group>"
+Name="$ID/<group>">` holding its styles, in the order of the children (2
+groups with 6 cell styles in 1 trustworthy DOM 18 pair). No table style
+group occurs in the pairs; the converter writes them the same way.
 
 **Style names.** Over the styles of the 489 trustworthy pairs, a style's
 IDML `Name` is its group path and its own name joined by `:` (1,170
