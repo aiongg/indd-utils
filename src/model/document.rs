@@ -167,7 +167,7 @@ impl<'a> Reader<'a> {
         let tints = self.tints(&mut objects);
         prune_style_groups(&mut objects.style_groups, |m| self.warn(m));
         let preferences = self.document_preferences()?;
-        let prefs = self.prefs(version.major)?;
+        let prefs = self.prefs(version)?;
         let toc_styles = self.toc_styles();
         let named_grids = self.named_grids();
         let index_groups = self.index_groups();

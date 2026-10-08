@@ -42,6 +42,8 @@ pub struct Prefs {
     pub footnotes: Option<FootnoteOptions>,
     /// Endnote options (chunk 0x2261E).
     pub endnotes: Option<EndnoteOptions>,
+    /// Index options (chunk 0x13010).
+    pub index_options: Option<IndexOptions>,
 }
 
 /// The document's endnote options (preferences chunk 0x2261E). See
@@ -235,6 +237,149 @@ pub enum PrefProp {
     Text(&'static str, String),
     /// An empty element with these attributes.
     Attrs(Vec<(&'static str, String)>),
+    /// An element with these children.
+    Nodes(Vec<PrefNode>),
+}
+
+/// An element in a tree of preference values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrefNode {
+    pub tag: &'static str,
+    pub attrs: Vec<(&'static str, String)>,
+    pub children: Vec<PrefNode>,
+}
+
+/// The index options (preferences chunk 0x13010). See
+/// `docs/format/preferences.md`, index options.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexOptions {
+    pub title: String,
+    /// Name of the title's paragraph style.
+    pub title_style: String,
+    pub replace_existing: bool,
+    pub include_book_documents: bool,
+    pub include_section_headings: bool,
+    /// `FollowingTopicSeparator`, `BetweenPageNumbersSeparator`,
+    /// `BetweenEntriesSeparator`, `BeforeCrossReferenceSeparator`,
+    /// `PageRangeSeparator`, `EntryEndSeparator`.
+    pub separators: [String; 6],
+    /// Style names: `Level1Style` to `Level4Style` and
+    /// `SectionHeadingStyle` (paragraph styles), then `PageNumberStyle`,
+    /// `CrossReferenceStyle` and `CrossReferenceTopicStyle` (character
+    /// styles).
+    pub styles: [String; 8],
+}
+
+impl IndexOptions {
+    pub fn read(enc: Encoding, d: &[u8]) -> Result<IndexOptions, Error> {
+        let mut c = enc.cursor(d);
+        let title = counted_string(&mut c)?;
+        let title_style = flagged(&mut c)?.1;
+        let replace_existing = c.u8()? == 1;
+        let include_book_documents = c.u8()? == 1;
+        flagged(&mut c)?;
+        let include_section_headings = c.bytes(14)?[10] == 1;
+        let mut separators: [String; 6] = Default::default();
+        for s in &mut separators {
+            *s = counted_string(&mut c)?;
+        }
+        let mut styles: [String; 8] = Default::default();
+        for s in &mut styles {
+            *s = flagged(&mut c)?.1;
+        }
+        Ok(IndexOptions {
+            title,
+            title_style,
+            replace_existing,
+            include_book_documents,
+            include_section_headings,
+            separators,
+            styles,
+        })
+    }
+}
+
+/// The index header setting (preferences chunk 0x1300E): its attributes
+/// and the groups of `ListOfIndexHeaderGroup`. See
+/// `docs/format/preferences.md`, index header setting.
+fn index_header(enc: Encoding, d: &[u8]) -> Result<(Vec<PrefValue>, Vec<PrefNode>), Error> {
+    const E: &str = "IndexHeaderSetting";
+    let key = |(flag, text): (u8, String)| {
+        if flag == 1 { builtin_key(&text) } else { text }
+    };
+    let mut c = enc.cursor(d);
+    let mut values = Vec::new();
+    let mut set = |name: &'static str, value: String| {
+        values.push(PrefValue {
+            element: E,
+            name,
+            value,
+        })
+    };
+    set("HeaderSetName", key(flagged(&mut c)?));
+    set("HeaderSetLanguage", c.u16()?.to_string());
+    set("IndexHeaderSetHandler", c.u32()?.to_string());
+    set("IndexHeaderSetGroupValue", c.u32()?.to_string());
+    set("IndexHeaderSetGroupOptionValue", c.u32()?.to_string());
+    c.u16()?;
+    let groups = c.u32()?;
+    let mut list = Vec::new();
+    for _ in 0..groups {
+        let internal = key(flagged(&mut c)?);
+        let ui = key(flagged(&mut c)?);
+        let document = builtin_key(&counted_string(&mut c)?);
+        let visible = c.u16()? == 1;
+        let n = c.u32()?;
+        let mut sections = Vec::new();
+        for _ in 0..n {
+            let sorting = builtin_key(&counted_string(&mut c)?);
+            let header = builtin_key(&counted_string(&mut c)?);
+            let ui = key(flagged(&mut c)?);
+            let language = c.u16()?;
+            sections.push(PrefNode {
+                tag: "SectionHeaderType",
+                attrs: vec![
+                    ("SortingHeaderString", sorting),
+                    ("DocumentHeaderString", header),
+                    ("UIHeaderString", ui),
+                    ("Language", language.to_string()),
+                ],
+                children: Vec::new(),
+            });
+        }
+        list.push(PrefNode {
+            tag: "IndexHeaderGroupType",
+            attrs: vec![
+                ("InternalName", internal),
+                ("UIString", ui),
+                ("DocumentString", document),
+                ("Visibility", visible.to_string()),
+            ],
+            children: vec![PrefNode {
+                tag: "SectionHeaderArray",
+                attrs: Vec::new(),
+                children: sections,
+            }],
+        });
+    }
+    if c.remaining() != 0 {
+        return Err(Error::Corrupt(format!(
+            "index header setting: {} bytes left",
+            c.remaining()
+        )));
+    }
+    Ok((values, list))
+}
+
+/// Chapter number format codes (chunk 0x1A4C4).
+fn chapter_format(code: u32) -> Option<&'static str> {
+    Some(match code {
+        0x1A477 => "1, 2, 3, 4...",
+        0x1A47A => "A, B, C, D...",
+        0x1A479 => "i, ii, iii, iv...",
+        0x1A473 => "001,002,003...",
+        _ => return None,
+    })
 }
 
 /// A flagged in-object string: a flag byte (1 for a built-in key) and the
@@ -593,7 +738,21 @@ mod id {
     pub const ITEM_DEFAULTS: u32 = 0x6E07;
     /// Name of a colour profile object (class 0x7D03).
     pub const PROFILE_NAME: u32 = 0x13C;
+    /// Index options.
+    pub const INDEX_OPTIONS: u32 = 0x13010;
+    /// Index header setting.
+    pub const INDEX_HEADER: u32 = 0x1300E;
+    /// Chapter numbering.
+    pub const CHAPTER_NUMBER: u32 = 0x1A4C4;
+    /// Present when hyphenation and spelling use the document's
+    /// dictionary.
+    pub const DICTIONARY: u32 = 0x2806;
+    /// EPUB export options.
+    pub const EPUB: u32 = 0x21A1A;
 }
+
+/// The EPUB identifier of documents without EPUB export options.
+const EPUB_ID: &str = "urn:uuid:29d919dd-24f5-4384-be78-b447c9dc299b";
 
 /// Measurement unit codes (`ViewPreference`).
 fn unit(code: u32) -> Option<&'static str> {
@@ -671,10 +830,12 @@ fn num_half_even(v: f64) -> String {
 }
 
 impl Reader<'_> {
-    pub(super) fn prefs(&self, major: u32) -> Result<Prefs, Error> {
+    pub(super) fn prefs(&self, version: crate::header::Version) -> Result<Prefs, Error> {
+        let major = version.major;
         let mut values = Vec::new();
         let mut colors = Vec::new();
         let mut text_defaults = None;
+        let mut props = Vec::new();
         // The layouts below are those of InDesign CS5 (7.0) and later in
         // little-endian files: the versions the corpus pairs show.
         if major < 7 || self.enc().big_endian() {
@@ -1025,7 +1186,6 @@ impl Reader<'_> {
         };
 
         // Print settings.
-        let mut props = Vec::new();
         let mut print_records = Vec::new();
         for (id, element) in [
             (id::PRINT, "PrintPreference"),
@@ -1061,6 +1221,88 @@ impl Reader<'_> {
                     .zip(m)
                 {
                     set("PrintBookletOption", name, num(v));
+                }
+            }
+        }
+
+        // Index header setting.
+        if let Some(d) = get(id::INDEX_HEADER)? {
+            match index_header(self.enc(), &d) {
+                Ok((v, list)) => {
+                    for pv in v {
+                        set(pv.element, pv.name, pv.value);
+                    }
+                    props.push((
+                        "IndexHeaderSetting",
+                        "ListOfIndexHeaderGroup",
+                        PrefProp::Nodes(list),
+                    ));
+                }
+                Err(e) => self.warn(format!("index header setting left out: {e}")),
+            }
+        }
+        // Chapter numbering: u32 format code, u32 source, u32 number, u16.
+        if let Some(d) = get(id::CHAPTER_NUMBER)?.filter(|d| d.len() >= 12) {
+            let mut c = self.cursor(&d);
+            let (format, source, number) = (c.u32()?, c.u32()?, c.u32()?);
+            if let Some(f) = chapter_format(format) {
+                props.push((
+                    "ChapterNumberPreference",
+                    "ChapterNumberFormat",
+                    PrefProp::Text("string", f.into()),
+                ));
+            }
+            match source {
+                1 => set(
+                    "ChapterNumberPreference",
+                    "ChapterNumberSource",
+                    "UserDefined".into(),
+                ),
+                3 => set(
+                    "ChapterNumberPreference",
+                    "ChapterNumberSource",
+                    "ContinueFromPreviousDocument".into(),
+                ),
+                _ => {}
+            }
+            set(
+                "ChapterNumberPreference",
+                "ChapterNumber",
+                number.to_string(),
+            );
+        }
+        // Dictionary: the chunk is there when composition uses the
+        // document's dictionary.
+        let composition = match get(id::DICTIONARY)? {
+            Some(_) => "UseDocument",
+            None => "Both",
+        };
+        set("DictionaryPreference", "Composition", composition.into());
+        // EPUB export, from DOM 8: u32 version at 0 and the identifier.
+        if major >= 8 {
+            match get(id::EPUB)? {
+                Some(d) => {
+                    match self.cursor(&d).u32()? {
+                        0 => set("EPubExportPreference", "Version", "Epub2".into()),
+                        1 => set("EPubExportPreference", "Version", "Epub3".into()),
+                        _ => {}
+                    }
+                    // The layout after the version is not decoded; the
+                    // identifier is the string that starts `urn:uuid:`.
+                    if let Some((_, _, id)) =
+                        super::strings::find_flagged_string(self.enc(), &d, 4, |s| {
+                            s.starts_with("urn:uuid:")
+                        })
+                    {
+                        set("EPubExportPreference", "Id", id);
+                    }
+                }
+                None => {
+                    let epub3 = (major, version.minor) >= (18, 1);
+                    let v = if epub3 { "Epub3" } else { "Epub2" };
+                    set("EPubExportPreference", "Version", v.into());
+                    set("EPubExportPreference", "Id", EPUB_ID.into());
+                    set("EPubExportPreference", "TocStyleName", "$ID/".into());
                 }
             }
         }
@@ -1147,6 +1389,16 @@ impl Reader<'_> {
                     }
                     Err(e) => {
                         self.warn(format!("footnote options left out: {e}"));
+                        None
+                    }
+                },
+                None => None,
+            },
+            index_options: match get(id::INDEX_OPTIONS)? {
+                Some(d) => match IndexOptions::read(self.enc(), &d) {
+                    Ok(o) => Some(o),
+                    Err(e) => {
+                        self.warn(format!("index options left out: {e}"));
                         None
                     }
                 },
@@ -1355,6 +1607,87 @@ mod tests {
         .unwrap();
         assert!(!values.iter().any(|v| NOT_IN_BOOKLET.contains(&v.name)));
         assert!(values.iter().any(|v| v.name == "ColorOutput"));
+    }
+
+    /// A u32 length and single-byte text segments.
+    fn cstr(d: &mut Vec<u8>, text: &str) {
+        d.extend((text.chars().count() as u32).to_le_bytes());
+        for ch in text.chars() {
+            let u = ch as u32;
+            if u < 0x100 {
+                d.extend(0x4001u16.to_le_bytes());
+                d.push(u as u8);
+            } else {
+                d.extend(0x8001u16.to_le_bytes());
+                d.extend((u as u16).to_le_bytes());
+            }
+        }
+    }
+
+    #[test]
+    fn reads_index_header_setting() {
+        let enc = Encoding::default();
+        let mut d = Vec::new();
+        fstr(&mut d, 1, "");
+        d.extend(256u16.to_le_bytes());
+        for v in [77882u32, 0, 0] {
+            d.extend(v.to_le_bytes());
+        }
+        d.extend(1u16.to_le_bytes());
+        d.extend(1u32.to_le_bytes());
+        fstr(&mut d, 0, "kIndexGroup_Symbol");
+        fstr(&mut d, 1, "kIndexGroup_Symbol");
+        cstr(&mut d, "");
+        d.extend(0u16.to_le_bytes());
+        d.extend(1u32.to_le_bytes());
+        cstr(&mut d, "A");
+        cstr(&mut d, "");
+        fstr(&mut d, 1, "kIndexSection_A");
+        d.extend(256u16.to_le_bytes());
+        let (values, list) = index_header(enc, &d).unwrap();
+        assert_eq!(values[0].value, "$ID/");
+        assert_eq!(values[2].value, "77882");
+        let g = &list[0];
+        assert_eq!(g.attrs[0], ("InternalName", "kIndexGroup_Symbol".into()));
+        assert_eq!(g.attrs[1], ("UIString", "$ID/kIndexGroup_Symbol".into()));
+        assert_eq!(g.attrs[3], ("Visibility", "false".into()));
+        let sec = &g.children[0].children[0];
+        assert_eq!(sec.attrs[0], ("SortingHeaderString", "$ID/A".into()));
+        assert_eq!(
+            sec.attrs[2],
+            ("UIHeaderString", "$ID/kIndexSection_A".into())
+        );
+        // Bytes after the last section are an error.
+        d.push(0);
+        assert!(index_header(enc, &d).is_err());
+    }
+
+    #[test]
+    fn reads_index_options() {
+        let enc = Encoding::default();
+        let mut d = Vec::new();
+        cstr(&mut d, "Index");
+        fstr(&mut d, 1, "Index Title");
+        d.extend([1, 0]);
+        fstr(&mut d, 0, "");
+        let mut b = [0u8; 14];
+        b[10] = 1;
+        d.extend(b);
+        for sep in ["  ", ", ", "; ", ". ", "\u{2013}", ""] {
+            cstr(&mut d, sep);
+        }
+        for i in 0..8 {
+            fstr(&mut d, 0, &format!("S{i}"));
+        }
+        d.extend([0; 4]);
+        let o = IndexOptions::read(enc, &d).unwrap();
+        assert_eq!(
+            (o.title.as_str(), o.title_style.as_str()),
+            ("Index", "Index Title")
+        );
+        assert!(o.replace_existing && !o.include_book_documents && o.include_section_headings);
+        assert_eq!(o.separators[4], "\u{2013}");
+        assert_eq!(o.styles[7], "S7");
     }
 
     #[test]

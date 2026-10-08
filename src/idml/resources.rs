@@ -22,7 +22,25 @@ pub(super) const PREFERENCE_TAGS: &[&str] = &[
     "PrintPreference",
     "PrintBookletPrintPreference",
     "PrintBookletOption",
+    "IndexHeaderSetting",
+    "ChapterNumberPreference",
+    "DictionaryPreference",
+    "EPubExportPreference",
 ];
+
+/// A tree of preference values as a `Node`.
+fn pref_node(n: &crate::model::prefs::PrefNode) -> Node {
+    Node {
+        tag: n.tag.to_string(),
+        attrs: n
+            .attrs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect(),
+        text: None,
+        children: n.children.iter().map(pref_node).collect(),
+    }
+}
 
 impl Writer<'_> {
     /// `SwatchColorGroupReference` of each swatch in a colour group: the
@@ -458,6 +476,68 @@ impl Writer<'_> {
         n
     }
 
+    /// The attributes of `IndexOptions` (`docs/format/preferences.md`,
+    /// index options). A style is named by its name alone, among the
+    /// styles outside style groups; without such a style, IDML names the
+    /// root style.
+    fn index_options(&self, o: &crate::model::prefs::IndexOptions) -> Vec<(&'static str, String)> {
+        let style = |name: &str, paragraph: bool| match self.doc.styles.values().find(|s| {
+            s.paragraph == paragraph
+                && s.name == name
+                && self.group_path.get(&s.uid).is_none_or(|p| p.is_empty())
+        }) {
+            Some(s) => self.style_ref(Some(s.uid), paragraph),
+            None if paragraph => "ParagraphStyle/$ID/[No paragraph style]".into(),
+            None => "CharacterStyle/$ID/[No character style]".into(),
+        };
+        let mut out = vec![
+            ("Title", o.title.clone()),
+            ("TitleStyle", style(&o.title_style, true)),
+            ("ReplaceExistingIndex", o.replace_existing.to_string()),
+            ("IncludeBookDocuments", o.include_book_documents.to_string()),
+            (
+                "IncludeSectionHeadings",
+                o.include_section_headings.to_string(),
+            ),
+        ];
+        for (name, text) in [
+            "FollowingTopicSeparator",
+            "BetweenPageNumbersSeparator",
+            "BetweenEntriesSeparator",
+            "BeforeCrossReferenceSeparator",
+            "PageRangeSeparator",
+            "EntryEndSeparator",
+        ]
+        .into_iter()
+        .zip(&o.separators)
+        {
+            // IDML writes the en dash of the page range as `^=`.
+            let text = if name == "PageRangeSeparator" {
+                text.replace('\u{2013}', "^=")
+            } else {
+                text.clone()
+            };
+            out.push((name, text));
+        }
+        for (i, (name, s)) in [
+            "Level1Style",
+            "Level2Style",
+            "Level3Style",
+            "Level4Style",
+            "SectionHeadingStyle",
+            "PageNumberStyle",
+            "CrossReferenceStyle",
+            "CrossReferenceTopicStyle",
+        ]
+        .into_iter()
+        .zip(&o.styles)
+        .enumerate()
+        {
+            out.push((name, style(s, i < 5)));
+        }
+        out
+    }
+
     pub(super) fn preferences(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Preferences");
@@ -614,6 +694,9 @@ impl Writer<'_> {
                 PrefProp::Attrs(a) => {
                     n.attrs = a.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
                 }
+                PrefProp::Nodes(children) => {
+                    n.children = children.iter().map(pref_node).collect();
+                }
             }
             let i = ours_of(&mut ours, tag);
             match ours[i].children.iter_mut().find(|c| c.tag == "Properties") {
@@ -663,6 +746,14 @@ impl Writer<'_> {
                     ..Node::default()
                 });
             }
+        }
+        if let Some(o) = &prefs.index_options {
+            let i = ours_of(&mut ours, "IndexOptions");
+            ours[i].attrs.extend(
+                self.index_options(o)
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v)),
+            );
         }
         ours.push(self.footnote_option());
         for mut n in ours {

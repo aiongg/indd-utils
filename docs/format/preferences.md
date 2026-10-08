@@ -363,3 +363,126 @@ other attributes have one value in every file). The chunk is in 11
 trustworthy pairs (12 of all pairs); the margins match in all of them.
 Without the chunk, IDML has the margins 36 (478 of 478). Left and right
 are equal in every sample, so their order is assumed.
+
+## Index header setting (`IndexHeaderSetting`)
+
+Chunk 0x1300E of the preferences object holds the attributes of
+`IndexHeaderSetting` and its `Properties/ListOfIndexHeaderGroup`. Every
+trustworthy pair has the chunk. A "u32 string" is a u32 length in UTF-16
+units, then text segments.
+
+| Field | IDML |
+|---|---|
+| String | `HeaderSetName` (`$ID/` and the text for a built-in string) |
+| u16 | `HeaderSetLanguage` |
+| u32 | `IndexHeaderSetHandler` |
+| u32 | `IndexHeaderSetGroupValue` |
+| u32 | `IndexHeaderSetGroupOptionValue` |
+| u16 | not identified (1) |
+| u32 | number of groups |
+
+Each group is an `IndexHeaderGroupType`:
+
+| Field | IDML |
+|---|---|
+| String | `InternalName` (`$ID/` and the text for a built-in string) |
+| String | `UIString` (same rule) |
+| u32 string | `DocumentString`, written `$ID/` and the text |
+| u16 | `Visibility`: 1 `true`, 0 `false` |
+| u32 | number of sections |
+
+Each section is a `SectionHeaderType` in the group's
+`SectionHeaderArray`:
+
+| Field | IDML |
+|---|---|
+| u32 string | `SortingHeaderString`, written `$ID/` and the text |
+| u32 string | `DocumentHeaderString`, written `$ID/` and the text |
+| String | `UIHeaderString` (`$ID/` and the text for a built-in string) |
+| u16 | `Language` |
+
+The chunk ends after the last section. Evidence: the five attributes and
+the whole list equal the IDML in 489 of 489 trustworthy pairs; the parse
+reads every chunk of the 654 pairs to its end. The default list has two
+groups (`kIndexGroup_Symbol` with one section, `$ID/IDX_Basic` with 26);
+documents with CJK index groups have more.
+
+## Index options (`IndexOptions`)
+
+Chunk 0x13010 of the preferences object, in 10 of the 489 trustworthy
+pairs and in no stale pair:
+
+| Field | IDML |
+|---|---|
+| u32 string | `Title` |
+| String | `TitleStyle` (a paragraph style name, below) |
+| u8 | `ReplaceExistingIndex` (1 `true`) |
+| u8 | `IncludeBookDocuments` |
+| String | not identified (empty in every file) |
+| 14 bytes | byte 10: `IncludeSectionHeadings`; the rest 0 |
+| 6 u32 strings | `FollowingTopicSeparator`, `BetweenPageNumbersSeparator`, `BetweenEntriesSeparator`, `BeforeCrossReferenceSeparator`, `PageRangeSeparator`, `EntryEndSeparator` |
+| 8 strings | `Level1Style` to `Level4Style`, `SectionHeadingStyle` (paragraph styles), `PageNumberStyle`, `CrossReferenceStyle`, `CrossReferenceTopicStyle` (character styles) |
+| 4 bytes | 0 |
+
+- The en dash (U+2013) stored as `PageRangeSeparator` is written `^=`
+  (10 of 10 pairs match).
+- A style is stored by name. IDML names the style of that name that is
+  in no style group, whatever the built-in flag of the stored name. If
+  there is none, IDML writes `ParagraphStyle/$ID/[No paragraph style]`
+  (`CharacterStyle/$ID/[No character style]`). Examples: a stored
+  built-in `Index Level 1` in a document without that style gives the
+  root style; a stored built-in `Index Section Head` gives
+  `ParagraphStyle/Index Section Head` where a user style of that name
+  exists; a stored name equal to a style inside a style group gives the
+  root style.
+
+Evidence: every attribute in 10 of 10 trustworthy pairs (titles in
+several languages, `ReplaceExistingIndex` `false` once,
+`IncludeSectionHeadings` `false` once, user style references).
+
+Without the chunk, IDML has `Title="Index"` in most documents and a
+translation in the others (`索引`, `Indice`, `Указатель`, …). The title
+follows the language of the exporting application, which is not stored
+in the INDD, so the converter writes no `Title` without the chunk.
+
+## Chapter numbering (`ChapterNumberPreference`)
+
+Chunk 0x1A4C4 of the preferences object (14 bytes), in 37 of the 489
+trustworthy pairs:
+
+| Offset | Field | IDML |
+|---|---|---|
+| 0 | u32 | `ChapterNumberFormat` (string): 0x1A477 `1, 2, 3, 4...`, 0x1A47A `A, B, C, D...`, 0x1A479 `i, ii, iii, iv...`, 0x1A473 `001,002,003...` |
+| 4 | u32 | `ChapterNumberSource`: 1 `UserDefined`, 3 `ContinueFromPreviousDocument` |
+| 8 | u32 | `ChapterNumber` |
+| 12 | u16 | not identified |
+
+Evidence: 37 of 37. Without the chunk, IDML has the observed values
+(`ChapterNumber="1"`, `ContinueFromPreviousDocument`, `1, 2, 3, 4...`)
+in 452 of 452.
+
+## Dictionary (`DictionaryPreference`)
+
+Chunk 0x2806 of the preferences object (6 bytes, the same in every
+file). Without it, `Composition` is `Both` (468 of 468 trustworthy
+pairs). With it, `Composition` is `UseDocument` in 16 of 21; the other 5
+(DOM 14 and 15) have `Both` with the same bytes. The converter writes
+`UseDocument` when the chunk is there.
+
+## EPUB export (`EPubExportPreference`)
+
+From DOM 8. Chunk 0x21A1A of the preferences object, in 13 of the 482
+trustworthy pairs with DOM 8 or later:
+
+- u32 at 0: `Version`, 0 `Epub2`, 1 `Epub3` (13 of 13).
+- `Id` is the in-object string in the chunk that starts with
+  `urn:uuid:` (13 of 13). The rest of the chunk is not decoded; its
+  length varies.
+
+Without the chunk (469 of 469):
+
+- `Id` is `urn:uuid:29d919dd-24f5-4384-be78-b447c9dc299b` and
+  `TocStyleName` is `$ID/`.
+- `Version` is `Epub2` for INDD files up to version 18.0 and `Epub3`
+  from 18.1 (the 5 DOM 18.0 pairs whose INDD is 18.0 have `Epub2`, the
+  13 whose INDD is 18.1 to 18.4 have `Epub3`).
