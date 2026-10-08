@@ -22,6 +22,9 @@ another converter binary, for example a copy of the previous build.
 --all also converts every other INDD and INDT file under corpus/ (any
 version, either byte order, without a usable IDML), validates the output
 if schemas are given, and reports failures for those files separately.
+Files the converter rejects for a correct reason (not an INDD file,
+InDesign 1.x, truncated, no object database: REJECTIONS) are reported as
+rejected files, not as conversion failures.
 --exclude leaves out files whose path under corpus/ starts with PREFIX.
 Converter warnings are counted by kind over all converted files.
 
@@ -70,6 +73,36 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target" / "release" / "indd"
 # Converted files validated together in one tools/validate.sh run.
 VALIDATE_BATCH = 600
+# Error messages of files the converter rejects for a correct reason:
+# they are not INDD files it can read. Start of the message, and how the
+# report names them.
+REJECTIONS = [
+    ("not an INDD file", "not INDD files"),
+    ("not supported yet: InDesign 1.x", "InDesign 1.x files"),
+    ("file truncated", "truncated"),
+    ("no object database", "without an object database"),
+]
+
+
+def error_message(stderr):
+    """The error of a failed conversion: the last line that is not a
+    warning."""
+    lines = [x for x in stderr.splitlines() if not x.startswith("warning: ")]
+    return lines[-1] if lines else ""
+
+
+def split_rejected(failed):
+    """(rejected, failures) of a list of (name, stderr)."""
+    rejected = [f for f in failed
+                if any(error_message(f[1]).startswith(p) for p, _ in REJECTIONS)]
+    return rejected, [f for f in failed if f not in rejected]
+
+
+def rejection_kinds(rejected):
+    """The rejected files counted by kind, as text."""
+    kinds = Counter(next(n for p, n in REJECTIONS if error_message(err).startswith(p))
+                    for _, err in rejected)
+    return ", ".join(f"{n:,} {name}" for name, n in kinds.most_common())
 
 
 def inventory():
@@ -877,6 +910,11 @@ def main():
                 else:
                     invalid.append((name, e))
 
+    rejected, failures = split_rejected(failures)
+    other_rejected, other_failures = split_rejected(other_failures)
+    if rejected:
+        print(f"rejected files: {len(rejected)} of {len(todo)} paired files "
+              f"({rejection_kinds(rejected)})")
     print(f"conversion failures: {len(failures)} of {len(todo)} paired files")
     for name, err in failures[:10]:
         print(f"  {name}: {err}")
@@ -887,8 +925,9 @@ def main():
         print(f"schema errors accepted (endnote markup, as in the reference): "
               f"{len(endnote_passed)} files")
     if args.all:
-        print(f"files without a reference: {len(others)}, "
-              f"conversion failures: {len(other_failures)}")
+        print(f"files without a reference: {len(others)}, rejected: {len(other_rejected)}"
+              + (f" ({rejection_kinds(other_rejected)})" if other_rejected else "")
+              + f", conversion failures: {len(other_failures)}")
         for name, err in other_failures[:10]:
             print(f"  {name}: {err}")
         if check:
@@ -943,24 +982,24 @@ def main():
         print("  story mismatch:", ex)
     headline(args, every, trusted, pair_rows)
     write_summary(Path(args.out) / "summary.json", args, check,
-                  (todo, failures, invalid), (others, other_failures, other_invalid),
+                  (todo, failures, rejected, invalid),
+                  (others, other_failures, other_rejected, other_invalid),
                   every, trusted)
 
 
 def write_summary(path, args, check, paired, unpaired_files, every, trusted):
     """Write the numbers of the README's "Current numbers" section, and the
     options they were measured with, as JSON (tools/readme_numbers.py).
-    `paired` and `unpaired_files` are (files, failures, invalid)."""
-    def error(stderr):
-        lines = [x for x in stderr.splitlines() if not x.startswith("warning: ")]
-        return lines[-1] if lines else ""
-
+    `paired` and `unpaired_files` are (files, failures, rejected,
+    invalid): conversion failures of valid files, and files rejected for a
+    correct reason (REJECTIONS)."""
     def files(group, converted):
-        todo, failures, invalid = group
+        todo, failures, rejected, invalid = group
         if not converted:
             return None
         return {"files": len(todo),
-                "failures": [error(err) for _, err in failures],
+                "failures": [error_message(err) for _, err in failures],
+                "rejected": [error_message(err) for _, err in rejected],
                 "invalid": len(invalid) if check else None}
 
     def pairs(st):

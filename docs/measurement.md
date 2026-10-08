@@ -7,8 +7,10 @@ computed. It records how the tooling measures; facts about the INDD format
 stay in `docs/format/`.
 
 Numbers below are from the corpus without the privately held samples
-(`--exclude own/`): 654 distinct pairs whose IDML has the same major version
-as the INDD.
+(`--exclude own/`). The evidence was measured when the corpus had 654
+distinct pairs whose IDML has the same major version as the INDD (489
+trustworthy); counts given for the corpus of 2026-10, with 803 such pairs
+(606 trustworthy), say so.
 
 ## Stale pairs
 
@@ -84,7 +86,12 @@ whose minor version is lower than the INDD header's.
 
 ### Result
 
-The rule flags 165 of 654 pairs; 489 are trustworthy.
+The rule flags 165 of 654 pairs; 489 are trustworthy. In the corpus of
+2026-10 it flags 197 of 803 pairs (INDD saved over an hour after the
+IDML: 185; IDML objects deleted in the INDD: 36; INDD stories not in the
+IDML: 24; IDML objects not in the INDD: 23; IDML modified after the INDD:
+4; a pair can have several reasons); 606 are trustworthy, and 19,416 of
+their 19,424 stories have identical text.
 
 | Group | Pairs | Stories with identical text | Pairs with a differing story |
 |---|---:|---:|---:|
@@ -268,6 +275,17 @@ way, and `compare.py` prints the top keys by documents affected.
 values and how many are reproduced, wrong and missing. Comparing them
 between two runs shows whether a change reproduces fewer values of any
 key.
+
+## Rejected files
+
+`compare.py --all` also converts files without a reference. Some of them
+the converter rejects for a correct reason: the file is not an INDD
+file, is from InDesign 1.x (another container), is truncated, or has no
+object database. These are counted as **rejected files**, by kind
+(`REJECTIONS` in `compare.py`), not as conversion failures. A
+**conversion failure** is a valid file whose conversion fails.
+`summary.json` lists both (`rejected`, `failures`) for paired and other
+files, and the README's table reports them in separate rows.
 
 ## Schema validation
 

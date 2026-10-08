@@ -32,12 +32,12 @@ ROOT = Path(__file__).resolve().parent.parent
 START = "<!-- numbers:start -->"
 END = "<!-- numbers:end -->"
 
-# Conversion failures of files without a reference IDML, by the start of
-# the error message: how the table names them.
-FAILURE_KINDS = [
+# Files rejected for a correct reason (compare.py REJECTIONS), by the
+# start of the error message: how the table names them.
+REJECTION_KINDS = [
     ("not an INDD file", "not INDD files"),
-    ("file truncated", "truncated"),
     ("not supported yet: InDesign 1.x", "InDesign 1.x files"),
+    ("file truncated", "truncated"),
     ("no object database", "without an object database"),
 ]
 
@@ -69,15 +69,18 @@ def problems(summary):
     return out
 
 
-def failures(group, label):
-    """The conversion failures of a group of files (`label`), by kind."""
-    text = f"{len(group['failures']):,} of {group['files']:,} {label}"
-    if not group["failures"]:
+def counted(group, key, label):
+    """The files of a group (`label`) under `key` (`failures`: valid files
+    whose conversion fails; `rejected`: files rejected for a correct
+    reason), with the rejected ones by kind."""
+    messages = group.get(key) or []
+    text = f"{len(messages):,} of {group['files']:,} {label}"
+    if key != "rejected" or not messages:
         return text
     kinds = {}
-    for message in group["failures"]:
-        name = next((n for start, n in FAILURE_KINDS if message.startswith(start)),
-                    "other errors")
+    for message in messages:
+        name = next((n for start, n in REJECTION_KINDS if message.startswith(start)),
+                    "other reasons")
         kinds[name] = kinds.get(name, 0) + 1
     ranked = sorted(kinds.items(), key=lambda kv: -kv[1])
     return text + " (" + ", ".join(f"{n:,} {name}" for name, n in ranked) + ")"
@@ -100,7 +103,11 @@ def table(summary):
     stories = trusted["stories"]
     rows = [
         ("Conversion failures",
-         f"{failures(paired, 'paired files')}; {failures(others, 'other files')}"),
+         f"{counted(paired, 'failures', 'paired files')}; "
+         f"{counted(others, 'failures', 'other files')}"),
+        ("Rejected files",
+         f"{counted(paired, 'rejected', 'paired files')}; "
+         f"{counted(others, 'rejected', 'other files')}"),
 
         ("Schema validation failures", invalid_text),
         ("Value coverage, trustworthy pairs",
