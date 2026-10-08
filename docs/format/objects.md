@@ -2140,7 +2140,7 @@ Built-in tables have only `Self` and `Name` in IDML. Mojikumi chunk
 | Chunk | Contents |
 |---|---|
 | 0x1F10 | u8 1 if the name is a built-in key; name; u32 flags: bit 0 removable, bit 1 visible, bit 2 editable |
-| 0x1F01 | u32 space (5 RGB, 6 CMYK), u16 count, f64 components as fractions |
+| 0x1F01 | u32 space (5 RGB, 6 CMYK, 7 LAB, 14 HSB, below), u16 count, f64 components: fractions for RGB, CMYK and HSB; for LAB the L, a and b values as IDML writes them |
 | 0x1F09 | u32 model: 0 Process, 1 Spot, 2 Registration (below) |
 | 0x1F24 | f64 tint value (−1 for a colour, see tints below), then u32 `ColorOverride`: 0 Normal, 1 Specialpaper, 2 Specialblack, 3 Specialregistration, 4 Hiddenreserved |
 | 0x1F0A | Alternate colour, as 0x1F01: space 3 none, 6 CMYK, 7 LAB |
@@ -2154,6 +2154,12 @@ the 12,197 colours of the trustworthy pairs whose IDML colour has the
 same name: `SwatchCreatorID` 12,197 of 12,197; alternate space and
 values 12,197 of 12,197 (7,527 without the chunk, 4,624 with space 3,
 33 LAB and 13 CMYK alternates, all library colours).
+
+Space 7 is `Space="LAB"`, with the three stored values as `ColorValue`
+(for example `79.2156862745098 38 53`). The corpus IDML files have 92
+LAB colours in 40 distinct files (all of them library spot colours,
+whose alternate is LAB too). Over all 803 pairs, `Space` is reproduced
+for 18,935 of 18,936 colours and `ColorValue` for 18,926.
 
 Space 14 holds hue, saturation and brightness as fractions. IDML writes
 such a colour as `RGB` with `ConvertToHsb="true"`; the 9 such colours in
