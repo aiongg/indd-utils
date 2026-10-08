@@ -399,6 +399,10 @@ def props(el):
                 a["P." + c.tag] = canon(c)
             elif len(c) == 0:
                 text = c.text or ""
+                # A line feed and tabs alone are the indentation of an
+                # element written open and closed (docs/measurement.md).
+                if re.fullmatch(r"\n\t*", text):
+                    text = ""
                 extra = sorted((k, v) for k, v in c.attrib.items() if k != "type")
                 if extra:
                     text = " ".join(f"{k}={v}" for k, v in extra)
