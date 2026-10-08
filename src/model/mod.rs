@@ -14,6 +14,7 @@ mod document;
 pub mod font;
 pub mod hyperlink;
 mod ids;
+pub mod index;
 mod item;
 pub mod prefs;
 mod reader;

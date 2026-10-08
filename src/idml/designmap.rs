@@ -264,6 +264,9 @@ impl Writer<'_> {
             );
         }
         self.cross_reference_formats(&mut x);
+        if let Some(index) = &doc.index {
+            index_xml(&mut x, index);
+        }
         x.empty(
             "idPkg:BackingStory",
             &[("src", "XML/BackingStory.xml".into())],
@@ -921,4 +924,56 @@ impl Writer<'_> {
         x.attr("AssociatedTextVariable", format!("dTextVariablen{name}"));
         x.end();
     }
+}
+
+/// The `Self` of a topic: its parent's `Self`, `Topicn` and its name
+/// (`docs/format/index.md`).
+fn topic_self(parent: &str, t: &crate::model::index::Topic) -> String {
+    format!("{parent}Topicn{}", t.name)
+}
+
+/// The `Index` element and its topics.
+fn index_xml(x: &mut Xml, index: &crate::model::index::Index) {
+    fn topic(x: &mut Xml, parent: &str, t: &crate::model::index::Topic) {
+        let me = topic_self(parent, t);
+        x.start("Topic")
+            .attr("Self", &me)
+            .attr("SortOrder", &t.sort_order)
+            .attr("Name", &t.name);
+        for c in &t.children {
+            topic(x, &me, c);
+        }
+        x.end();
+    }
+    let me = uref(Some(index.uid));
+    x.start("Index").attr("Self", &me);
+    for t in &index.topics {
+        topic(x, &me, t);
+    }
+    x.end();
+}
+
+/// The `Self` of the topic of each page reference, by page reference UID.
+pub(super) fn topic_refs(doc: &Document) -> std::collections::HashMap<u32, String> {
+    fn walk(
+        out: &mut std::collections::HashMap<u32, String>,
+        parent: &str,
+        t: &crate::model::index::Topic,
+    ) {
+        let me = topic_self(parent, t);
+        for &r in &t.refs {
+            out.insert(r, me.clone());
+        }
+        for c in &t.children {
+            walk(out, &me, c);
+        }
+    }
+    let mut out = std::collections::HashMap::new();
+    if let Some(index) = &doc.index {
+        let me = uref(Some(index.uid));
+        for t in &index.topics {
+            walk(&mut out, &me, t);
+        }
+    }
+    out
 }

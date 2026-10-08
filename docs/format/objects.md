@@ -1227,14 +1227,7 @@ only.
 
 **Index markers (class 0x13006).** An index marker is owned by a U+FEFF,
 which is not text in IDML: IDML writes a `PageReference` in its place.
-`Self` is `u` and the UID in hexadecimal (7,495 of 7,495 in the
-research run). `Id` is the u32 at offset 26 of chunk 0x13009 when the
-chunk has 30 bytes (7,558 of 7,558 over all pairs); the IDML has no
-`Id` for the 3 markers whose chunk has 26 bytes. `PageReferenceType`
-(`CurrentPage` in all) has no located field, and `ReferencedTopic` names
-an index topic, which the converter does not write yet; both are left
-out (the schema allows that). Chunk 0x13008 is u16 1 and the topic UID
-(class 0x13005).
+Its layout and attributes are in `index.md`.
 
 **Anchored object settings (chunk 0x2800).** The anchor object (class
 0x262) and object styles have a 62-byte chunk 0x2800:

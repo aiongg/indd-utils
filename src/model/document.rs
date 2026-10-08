@@ -23,6 +23,8 @@ pub struct Document {
     /// Index sort groups (preferences chunk 0x1307E), in order: name,
     /// include flag and header variant.
     pub index_groups: Vec<(String, bool, u16)>,
+    /// The index (class 0x13004) and its topics.
+    pub index: Option<super::index::Index>,
     /// The constant shade the document lists (the class 0x5533 object of
     /// lowest UID with a constant shade in chunk 0x5532): its UID and its
     /// u32 and three f64; and its name (chunk 0x5531: a flag byte, 1 for
@@ -171,6 +173,10 @@ impl<'a> Reader<'a> {
         let toc_styles = self.toc_styles();
         let named_grids = self.named_grids();
         let index_groups = self.index_groups();
+        let index = self.index().unwrap_or_else(|e| {
+            self.warn(format!("index left out: {e}"));
+            None
+        });
         let constant_shade = self.constant_shade();
         let assignments = self.assignments();
         let users = self.users(DOC).unwrap_or_else(|e| {
@@ -222,6 +228,7 @@ impl<'a> Reader<'a> {
             toc_styles,
             named_grids,
             index_groups,
+            index,
             constant_shade,
             assignments,
             style_groups: objects.style_groups,

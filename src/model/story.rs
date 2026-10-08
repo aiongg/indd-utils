@@ -20,6 +20,18 @@ pub struct TextRun {
     pub character_attrs: Attrs,
 }
 
+/// An index marker: a page reference (class 0x13006) owned by a U+FEFF.
+/// See `docs/format/index.md`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IndexMarker {
+    pub uid: u32,
+    /// `Id`: the u32 at 26 of a 30-byte chunk 0x13009.
+    pub id: Option<u32>,
+    /// The first 14 bytes of chunk 0x13009 are those of every sample,
+    /// whose IDML has `PageReferenceType="CurrentPage"`.
+    pub current_page: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Story {
     pub uid: u32,
@@ -45,8 +57,8 @@ pub struct Story {
     /// sorted by start.
     pub changes: Vec<ChangeRun>,
     /// Index markers (`PageReference`), by UTF-16 offset of their
-    /// U+FEFF: UID and `Id`.
-    pub index_markers: BTreeMap<usize, (u32, Option<u32>)>,
+    /// U+FEFF.
+    pub index_markers: BTreeMap<usize, IndexMarker>,
     /// Endnote references, by UTF-16 offset of their U+0004: the endnote
     /// UID and the UID of its range.
     pub endnotes: BTreeMap<usize, (u32, u32)>,
@@ -502,11 +514,29 @@ impl<'a> Reader<'a> {
                 class::INDEX_MARKER => {
                     // `Id` is the last u32 of chunk 0x13009 when the chunk
                     // has 30 bytes; IDML has no `Id` for a 26-byte chunk.
-                    let id = self
-                        .chunk(item, chunk::INDEX_MARKER)?
+                    // Its first 14 bytes give the type (index.md).
+                    let d = self.chunk(item, chunk::INDEX_MARKER)?;
+                    let id = d
+                        .as_deref()
                         .filter(|d| d.len() == 30)
-                        .and_then(|d| self.enc().u32_at(&d, 26));
-                    index_markers.insert(pos, (item, id));
+                        .and_then(|d| self.enc().u32_at(d, 26));
+                    let current_page = d.as_deref().is_some_and(|d| {
+                        let e = self.enc();
+                        (
+                            e.u32_at(d, 0),
+                            e.u16_at(d, 4),
+                            e.u32_at(d, 6),
+                            e.u32_at(d, 10),
+                        ) == (Some(1), Some(0), Some(1), Some(0))
+                    });
+                    index_markers.insert(
+                        pos,
+                        IndexMarker {
+                            uid: item,
+                            id,
+                            current_page,
+                        },
+                    );
                 }
                 class::FOOTNOTE => {
                     footnotes.insert(

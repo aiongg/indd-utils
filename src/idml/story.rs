@@ -369,15 +369,21 @@ impl Writer<'_> {
                 }
             }
             // An index marker is written as a `PageReference` in place of
-            // its character (objects.md, notes and index markers).
+            // its character (index.md, page references).
             if ch == '\u{FEFF}'
                 && !story.xml_markers.contains_key(&pos)
-                && let Some(&(uid, id)) = story.index_markers.get(&pos)
+                && let Some(m) = story.index_markers.get(&pos)
             {
                 flush(x, &mut buf);
                 st.open_csr(self, x, run);
-                x.start("PageReference").attr("Self", uref(Some(uid)));
-                if let Some(id) = id {
+                x.start("PageReference").attr("Self", uref(Some(m.uid)));
+                if m.current_page {
+                    x.attr("PageReferenceType", "CurrentPage");
+                }
+                if let Some(t) = self.topics.get(&m.uid) {
+                    x.attr("ReferencedTopic", t);
+                }
+                if let Some(id) = m.id {
                     x.attr("Id", id.to_string());
                 }
                 x.end();

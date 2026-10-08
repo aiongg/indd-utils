@@ -74,6 +74,8 @@ struct Writer<'a> {
     /// Effective values of object styles, by UID (`applied`).
     style_values:
         std::cell::RefCell<std::collections::HashMap<u32, std::rc::Rc<applied::StyleValues>>>,
+    /// The `Self` of the index topic of each page reference UID.
+    topics: std::collections::HashMap<u32, String>,
 }
 
 /// Attributes observed on an element path (`values::element_attrs`).
@@ -146,6 +148,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         style_values: Default::default(),
         page_layouts: alternate_layouts(doc).1,
         page_sections: page_sections(doc),
+        topics: designmap::topic_refs(doc),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();
     files.insert(
@@ -225,6 +228,7 @@ impl<'a> Writer<'a> {
             style_values: Default::default(),
             page_layouts: Vec::new(),
             page_sections: Vec::new(),
+            topics: Default::default(),
         }
     }
 }
