@@ -173,12 +173,10 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
-    /// The index sort groups of the preferences object, chunk 0x1307E: u32
-    /// group count, then the groups with their sections. Each group is
-    /// found by its name, a flag byte and an in-object string starting with
-    /// `kIndexGroup_` or `kWRIndexGroup_`, at its first occurrence; after
-    /// the name come u8 include, u8, u16 header variant. Empty unless the
-    /// names found are as many as the count. See `docs/format/objects.md`.
+    /// The index sort groups of the preferences object, chunk 0x1307E:
+    /// name, include flag and header variant of each group, in stored
+    /// order. Empty when the chunk does not parse to its end. See
+    /// `docs/format/objects.md`, index sort options.
     pub(super) fn index_groups(&self) -> Vec<(String, bool, u16)> {
         let Some(&(uid, _)) = self
             .db
@@ -194,31 +192,12 @@ impl<'a> Reader<'a> {
         if self.enc().big_endian() {
             return Vec::new();
         }
-        let Some(count) = self.enc().u32_at(&d, 0) else {
-            return Vec::new();
-        };
-        let mut out: Vec<(String, bool, u16)> = Vec::new();
-        for i in 4..d.len().saturating_sub(6) {
-            if d[i] != 1 || d[i + 1] != 2 {
-                continue;
+        match index_groups(&mut self.cursor(&d)) {
+            Ok(g) => g,
+            Err(e) => {
+                self.warn(format!("index sort options left out: {e}"));
+                Vec::new()
             }
-            let mut c = self.cursor(&d[i + 1..]);
-            let Ok(name) = c.string() else { continue };
-            if !(name.starts_with("kIndexGroup_") || name.starts_with("kWRIndexGroup_"))
-                || out.iter().any(|(n, _, _)| *n == name)
-            {
-                continue;
-            }
-            let at = i + 1 + c.pos();
-            let (Some(&include), Some(header)) = (d.get(at), self.enc().u16_at(&d, at + 2)) else {
-                continue;
-            };
-            out.push((name, include != 0, header));
-        }
-        if out.len() == count as usize {
-            out
-        } else {
-            Vec::new()
         }
     }
 
@@ -328,4 +307,51 @@ impl<'a> Reader<'a> {
         });
         Ok(Some((name, language)))
     }
+}
+
+/// A u32 length in UTF-16 units, then text segments.
+fn counted_string(c: &mut crate::object::Cursor) -> Result<String, Error> {
+    let n = c.u32()? as usize;
+    if n == 0 {
+        Ok(String::new())
+    } else {
+        c.segments(n)
+    }
+}
+
+/// The groups of chunk 0x1307E (`objects.md`, index sort options): for
+/// each, a flagged name, u8 include, u8, u16 header variant, u16 and its
+/// header variants with their sections. Returns name, include and
+/// variant of each group.
+fn index_groups(c: &mut crate::object::Cursor) -> Result<Vec<(String, bool, u16)>, Error> {
+    let count = c.u32()?;
+    let mut out = Vec::new();
+    for _ in 0..count {
+        c.u8()?;
+        let name = c.string()?;
+        let include = c.u8()? != 0;
+        c.u8()?;
+        let variant = c.u16()?;
+        c.u16()?;
+        for _ in 0..c.u32()? {
+            for _ in 0..2 {
+                c.u8()?;
+                c.string()?;
+            }
+            counted_string(c)?;
+            c.skip(2)?;
+            for _ in 0..c.u32()? {
+                counted_string(c)?;
+                counted_string(c)?;
+                c.u8()?;
+                c.string()?;
+                c.u16()?;
+            }
+        }
+        out.push((name, include, variant));
+    }
+    if c.remaining() != 0 {
+        return Err(Error::Corrupt(format!("{} bytes left", c.remaining())));
+    }
+    Ok(out)
 }

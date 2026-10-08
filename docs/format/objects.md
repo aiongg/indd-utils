@@ -254,14 +254,37 @@ re-encode a longer structure in the same way; they are not decoded.
 ## Index sort options
 
 Chunk 0x1307E of the preferences object (class 0x2202) holds the index
-groups: u32 count, then for each group its name (a flag byte and an
-in-object string such as `kIndexGroup_Symbol` or
-`kWRIndexGroup_GreekAlphabet`), u8 include, u8, u16 header variant, and
-further fields with the group's sections, whose letters and names repeat
-strings. The section records are not decoded: the converter finds each
-group at the first occurrence of its name (a flagged string starting
-with `kIndexGroup_` or `kWRIndexGroup_`) and uses the result only when it
-finds as many groups as the count says.
+groups. A "string" is a flag byte and an in-object string; a "u32
+string" is a u32 length in UTF-16 units and text segments.
+
+```
+u32 group count
+group:
+  string     group name (kIndexGroup_Symbol, kWRIndexGroup_GreekAlphabet, ...)
+  u8         include
+  u8         (not identified)
+  u16        header variant
+  u16        (not identified)
+  u32        variant count
+  variant:
+    string      internal name
+    string      UI string
+    u32 string  document string
+    u8          1 = visible
+    u8          (0)
+    u32         section count
+    section:
+      u32 string  sorting string
+      u32 string  document header string
+      string      UI header string
+      u16         language
+```
+
+Every chunk of the 654 pairs parses to its end with this layout. The
+variants and sections have the same fields as the list that IDML writes
+under `IndexHeaderSetting` (`preferences.md`), which the converter takes
+from chunk 0x1300E. The converter uses the name, include byte and header
+variant of each group.
 
 IDML writes an `IndexingSortOption` per group, in the stored order:
 `Self` `dIndexingSortOptionn` and the name, `Name` `$ID/` and the name,
