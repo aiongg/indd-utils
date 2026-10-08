@@ -106,10 +106,14 @@ impl Writer<'_> {
         let singleton = |x: &mut Xml, tag: &str| {
             if let Some(n) = values::present(&format!("Document/{tag}"), major) {
                 // Values read from the INDD (`model::prefs`) first.
-                let mut ours = Node {
+                let mut ours = match tag {
+                    "EndnoteOption" => self.endnote_option(),
+                    _ => None,
+                }
+                .unwrap_or_else(|| Node {
                     tag: n.tag.clone(),
                     ..Node::default()
-                };
+                });
                 for v in doc.prefs.values.iter().filter(|v| v.element == tag) {
                     ours.attrs.push((v.name.to_string(), v.value.clone()));
                 }
@@ -477,6 +481,65 @@ impl Writer<'_> {
             }
             x.end();
         }
+    }
+
+    /// `EndnoteOption` from chunk 0x2261E (footnotes.md).
+    fn endnote_option(&self) -> Option<Node> {
+        let mut n = Node {
+            tag: "EndnoteOption".into(),
+            ..Node::default()
+        };
+        let Some(e) = self.doc.prefs.endnotes.as_ref() else {
+            // Without the chunk the styles are the defaults (149 of 149);
+            // the title and separator depend on the exporting InDesign's
+            // language.
+            n.attrs
+                .push(("EndnoteMarkerStyle".into(), self.style_ref(None, false)));
+            n.attrs
+                .push(("EndnoteTextStyle".into(), self.style_ref(None, true)));
+            return Some(n);
+        };
+        let mut attr = |k: &str, v: String| n.attrs.push((k.to_string(), v));
+        attr("EndnoteTitle", e.title.clone());
+        attr(
+            "EndnoteTitleStyle",
+            self.style_ref(Some(e.title_style), true),
+        );
+        attr("StartEndnoteNumberAt", e.start_at.to_string());
+        attr(
+            "EndnoteMarkerStyle",
+            self.style_ref(Some(e.marker_style), false),
+        );
+        attr("EndnoteTextStyle", self.style_ref(Some(e.text_style), true));
+        attr("EndnoteSeparatorText", e.separator.clone());
+        let mut props = Vec::new();
+        let mut prop = |name: &str, v: &str| {
+            props.push(Node {
+                tag: name.to_string(),
+                attrs: vec![("type".into(), "enumeration".into())],
+                text: Some(v.to_string()),
+                ..Node::default()
+            })
+        };
+        if e.numbering == 0xCA07 {
+            prop("EndnoteNumberingStyle", "Arabic");
+        }
+        if e.restart == 0 {
+            prop("RestartEndnoteNumbering", "Continuous");
+        }
+        match e.positioning {
+            1 => prop("EndnoteMarkerPositioning", "SuperscriptMarker"),
+            3 => prop("EndnoteMarkerPositioning", "RubyMarker"),
+            _ => {}
+        }
+        // The last fields hold one value in every sample: the generated
+        // value file supplies it (`idml-values.md`).
+        n.children.push(Node {
+            tag: "Properties".into(),
+            children: props,
+            ..Node::default()
+        });
+        Some(n)
     }
 
     /// Hyperlink text sources written in the stories.

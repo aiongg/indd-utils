@@ -336,6 +336,127 @@ impl Writer<'_> {
         x.finish()
     }
 
+    /// `FootnoteOption` from chunk 0x2820 (footnotes.md). The values
+    /// that never vary come from the generated value files.
+    fn footnote_option(&self) -> Node {
+        let major = self.doc.version.major;
+        let mut n = Node {
+            tag: "FootnoteOption".into(),
+            ..Node::default()
+        };
+        let attr = |n: &mut Node, k: &str, v: String| n.attrs.push((k.to_string(), v));
+        let Some(f) = &self.doc.prefs.footnotes else {
+            // Without the chunk every IDML has these values.
+            if major >= 12 {
+                attr(&mut n, "EnableStraddling", "true".into());
+            }
+            attr(&mut n, "FootnoteTextStyle", self.style_ref(None, true));
+            return n;
+        };
+        let bool_text = |b: bool| b.to_string();
+        if major >= 12
+            && let Some(s) = f.tail.as_ref().and_then(|t| t.straddling)
+        {
+            attr(&mut n, "EnableStraddling", bool_text(s));
+        }
+        attr(&mut n, "StartAt", f.start_at.to_string());
+        attr(&mut n, "Prefix", f.prefix.clone());
+        attr(&mut n, "Suffix", f.suffix.clone());
+        attr(
+            &mut n,
+            "FootnoteTextStyle",
+            self.style_ref(Some(f.text_style), true),
+        );
+        attr(
+            &mut n,
+            "FootnoteMarkerStyle",
+            self.style_ref(Some(f.marker_style), false),
+        );
+        attr(&mut n, "SeparatorText", f.separator.clone());
+        attr(&mut n, "SpaceBetween", num(f.space_between));
+        attr(&mut n, "Spacer", num(f.spacer));
+        let mut props: Vec<Node> = Vec::new();
+        let mut prop = |name: &str, ty: &str, text: String| {
+            props.push(Node {
+                tag: name.to_string(),
+                attrs: vec![("type".into(), ty.into())],
+                text: Some(text),
+                ..Node::default()
+            })
+        };
+        let numbering = match f.numbering {
+            0xCA07 => Some("Arabic"),
+            0xCA0A => Some("Symbols"),
+            0xCA58 => Some("Asterisks"),
+            _ => None,
+        };
+        if let Some(v) = numbering {
+            prop("FootnoteNumberingStyle", "enumeration", v.into());
+        }
+        let restart = match f.restart {
+            0 => Some("DontRestart"),
+            1 => Some("PageRestart"),
+            _ => None,
+        };
+        if let Some(v) = restart {
+            prop("RestartNumbering", "enumeration", v.into());
+        }
+        let prefix_suffix = match f.prefix_suffix {
+            0 => Some("NoPrefixSuffix"),
+            1 => Some("PrefixSuffixReference"),
+            3 => Some("PrefixSuffixBoth"),
+            _ => None,
+        };
+        if let Some(v) = prefix_suffix {
+            prop("ShowPrefixSuffix", "enumeration", v.into());
+        }
+        let marker = match f.marker {
+            (1, 0) => Some("SuperscriptMarker"),
+            (0, 0) => Some("NormalMarker"),
+            (0, 1) => Some("RubyMarker"),
+            _ => None,
+        };
+        if let Some(v) = marker {
+            prop("MarkerPositioning", "enumeration", v.into());
+        }
+        if let Some(t) = &f.tail {
+            attr(&mut n, "NoSplitting", bool_text(t.no_splitting));
+            for (r, name) in t.rules.iter().zip(["Rule", "ContinuingRule"]) {
+                attr(&mut n, &format!("{name}On"), bool_text(r.on));
+                attr(&mut n, &format!("{name}LineWeight"), num(r.weight));
+                attr(&mut n, &format!("{name}Tint"), num(r.tint));
+                attr(&mut n, &format!("{name}GapTint"), num(r.gap_tint));
+                attr(&mut n, &format!("{name}LeftIndent"), num(r.left_indent));
+                attr(&mut n, &format!("{name}Width"), num(r.width));
+                attr(&mut n, &format!("{name}Offset"), num(r.offset));
+                if let Some((_, s)) = STROKE_TYPES
+                    .iter()
+                    .chain(TABLE_STROKE_TYPES)
+                    .find(|(k, _)| *k == r.stroke)
+                {
+                    prop(
+                        &format!("{name}Type"),
+                        "object",
+                        format!("StrokeStyle/$ID/{s}"),
+                    );
+                }
+                for (uid, suffix) in [(r.color, "Color"), (r.gap_color, "GapColor")] {
+                    if let Some(sw) = self.doc.swatches.get(&uid) {
+                        prop(&format!("{name}{suffix}"), "object", sw.clone());
+                    }
+                }
+            }
+        }
+        if !props.is_empty() {
+            n.children.push(Node {
+                tag: "Properties".into(),
+                children: props,
+                ..Node::default()
+            });
+        }
+        n
+    }
+
     pub(super) fn preferences(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Preferences");
@@ -544,6 +665,7 @@ impl Writer<'_> {
                 });
             }
         }
+        ours.push(self.footnote_option());
         for mut n in ours {
             match nodes.iter_mut().find(|m| m.tag == n.tag) {
                 Some(m) => {

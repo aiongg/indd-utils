@@ -143,6 +143,8 @@ story's sources in a tree:
   UID, u32 0.
 - The root's value is its start in the story text (UTF-16 offset). A left
   child starts *value* before its parent, a right child *value* after it.
+- In the endnote story the same tree also holds the endnote ranges
+  (class 0x2804, `footnotes.md`).
 
 Checked by taking the INDD story text at the computed start and length
 and comparing it with the text in the IDML source element: 43 of 43 (in

@@ -33,6 +33,14 @@ pub mod class {
     pub const SMOOTH_SHADE: u32 = 0x5533;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
+    /// A footnote, owned by a story at its reference (U+0004).
+    pub const FOOTNOTE: u32 = 0x24F;
+    /// The endnote story (`IsEndnoteStory`).
+    pub const ENDNOTE_STORY: u32 = 0x2801;
+    /// An endnote, owned by a story at its reference (U+0004).
+    pub const ENDNOTE: u32 = 0x2805;
+    /// The text range of an endnote in the endnote story.
+    pub const ENDNOTE_RANGE: u32 = 0x2804;
     pub const TEXT_VARIABLE_INSTANCE: u32 = 0xCA64;
     pub const TEXT_VARIABLE: u32 = 0xCAB4;
     pub const STYLE_ROOT_GROUP: u32 = 0xCA8C;
@@ -60,6 +68,10 @@ pub mod chunk {
     pub const DOC_LAYERS: u32 = 0x301;
     pub const DOC_ACTIVE_LAYER: u32 = 0x313;
     pub const DOC_STORIES: u32 = 0x222;
+    /// Endnote: the UID of its range.
+    pub const ENDNOTE_RANGE_OF: u32 = 0x22616;
+    /// Endnote range: the UID of its endnote.
+    pub const RANGE_ENDNOTE: u32 = 0x2261A;
     pub const DOC_SECTIONS: u32 = 0x4C01;
     /// Document users: u32 count, then per user a flag byte, the name
     /// and u32 colour.

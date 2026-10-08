@@ -295,11 +295,38 @@ pub fn keyed(tag: &str, value: &str) -> Option<Node> {
 }
 
 fn unescape(s: &str) -> String {
-    s.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&amp;", "&")
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('&') {
+        out.push_str(&rest[..i]);
+        rest = &rest[i..];
+        let Some(end) = rest.find(';') else { break };
+        let entity = &rest[1..end];
+        let c = match entity {
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "amp" => Some('&'),
+            _ => match entity.strip_prefix("#x").or(entity.strip_prefix("#X")) {
+                Some(h) => u32::from_str_radix(h, 16).ok(),
+                None => entity.strip_prefix('#').and_then(|d| d.parse().ok()),
+            }
+            .and_then(char::from_u32),
+        };
+        match c {
+            Some(c) => {
+                out.push(c);
+                rest = &rest[end + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Parse the small, trusted XML subset of the values file: elements,
@@ -362,6 +389,11 @@ fn parse(s: &str) -> Option<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unescapes_numeric_references() {
+        assert_eq!(unescape("a&#9;b&#x3000;&amp;lt;&x"), "a\tb\u{3000}&lt;&x");
+    }
 
     #[test]
     fn parses_values_subset() {

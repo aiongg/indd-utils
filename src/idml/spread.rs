@@ -343,6 +343,12 @@ impl Writer<'_> {
     /// to the anchor).
     pub(super) fn page_item(&self, x: &mut Xml, item: &PageItem, nested: bool, outer: &Matrix) {
         let tag = match &item.kind {
+            // A frame of the endnote story (footnotes.md).
+            ItemKind::TextFrame { story: Some(s), .. }
+                if self.doc.stories.iter().any(|t| t.uid == *s && t.is_endnote) =>
+            {
+                "EndnoteTextFrame"
+            }
             ItemKind::TextFrame { .. } => "TextFrame",
             ItemKind::Group => "Group",
             ItemKind::Shape(Shape::Rectangle) => "Rectangle",
@@ -405,7 +411,13 @@ impl Writer<'_> {
         }
         x.attr("ItemTransform", matrix(&item.transform));
         self.item_settings(x, item, nested);
-        x.attrs_missing(self.observed(tag).iter());
+        // An endnote text frame has the values of a text frame.
+        let observed = if tag == "EndnoteTextFrame" {
+            "TextFrame"
+        } else {
+            tag
+        };
+        x.attrs_missing(self.observed(observed).iter());
         Self::path_geometry(x, &item.paths);
         if let ItemKind::TextFrame {
             preferences: Some(p),

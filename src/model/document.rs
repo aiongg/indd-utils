@@ -270,11 +270,9 @@ impl<'a> Reader<'a> {
     /// The stories the document lists. A story that cannot be read is
     /// left out with a warning.
     fn document_stories(&self) -> Result<Vec<Story>, Error> {
-        self.each_or_warn("story", chunk::DOC_STORIES, |uid| {
-            match self.class(uid) == Some(class::STORY) {
-                true => self.story(uid).map(Some),
-                false => Ok(None),
-            }
+        self.each_or_warn("story", chunk::DOC_STORIES, |uid| match self.class(uid) {
+            Some(class::STORY | class::ENDNOTE_STORY) => self.story(uid).map(Some),
+            _ => Ok(None),
         })
     }
 

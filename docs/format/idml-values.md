@@ -121,7 +121,7 @@ a value that varies with them.
 |---|---|---|
 | `Story` | `TrackChanges="false"`, `StoryTitle="$ID/"`, `AppliedNamedGrid="n"` | 2,094 of 2,094 |
 | `Story` | `UserText="true"` | 2,090 of 2,090 with DOM 12 or later (written for version 12 and later) |
-| `Story` | `IsEndnoteStory="false"` | 1,514 of 1,514 with DOM 15 or later (written for version 15 and later) |
+| `Story` | `IsEndnoteStory="false"` | 3,094 of 3,094 with DOM 13.0–14.0 and 0 of 2,467 with DOM 12 (`footnotes.md`); written for version 13 and later, `true` for the endnote story |
 | `StoryPreference` | `OpticalMarginAlignment="false"`, `OpticalMarginSize="12"`, `FrameType="TextFrameType"`, `StoryOrientation="Horizontal"`, `StoryDirection="LeftToRightDirection"` | 2,094 of 2,094 |
 | `InCopyExportOption` | `IncludeGraphicProxies="true"`, `IncludeAllResources="false"` | 2,094 of 2,094 |
 

@@ -55,5 +55,4 @@ codes (none occur in the corpus); the other blocks keep their index.
 
 Cross-reference sources in text are text sources with chunk 0x135A0;
 `hyperlinks.md` describes them. Cross-reference sources inside
-footnotes and tracked changes are not converted, because their text is
-not.
+tracked changes are not converted, because their text is not.

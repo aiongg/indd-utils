@@ -220,6 +220,44 @@ WRAPPERS = {"XMLElement", "HyperlinkTextSource", "CrossReferenceSource", "Change
 NOT_TEXT = {"Properties", "XMLAttribute"}
 
 
+ERROR = re.compile(r"(?P<part>[^:]+):(?P<line>\d+):(?P<col>\d+): error: (?P<msg>.*)")
+
+
+def endnote_errors(idml, errs):
+    """The schema errors of `idml` as (part, message) without positions,
+    if every one is a deviation of InDesign's endnote markup from the 21.5
+    schema: an `Endnote` in a character range, or an element inside an
+    `EndnoteRange`. None otherwise (docs/measurement.md)."""
+    out = set()
+    z = zipfile.ZipFile(idml)
+    for e in errs:
+        m = ERROR.match(e)
+        if not m:
+            return None
+        part, line, msg = m["part"], int(m["line"]), m["msg"]
+        if not msg.startswith('element "Endnote" not allowed here') and \
+                endnote_parent(z.read(part), line) != "EndnoteRange":
+            return None
+        out.add((part, msg))
+    return out
+
+
+def endnote_parent(data, line):
+    """The tag of the parent of the first element that starts on `line`."""
+    import xml.parsers.expat
+    stack, found = [], []
+    p = xml.parsers.expat.ParserCreate()
+
+    def start(tag, attrs):
+        if not found and p.CurrentLineNumber == line:
+            found.append(stack[-1] if stack else None)
+        stack.append(tag)
+    p.StartElementHandler = start
+    p.EndElementHandler = lambda tag: stack.pop()
+    p.Parse(data, True)
+    return found[0] if found else None
+
+
 def text_ranges(story):
     """Map text offset -> attributes of the paragraph and character range
     starting there, with keys prefixed PSR. and CSR. Ranges inside wrapper
@@ -746,13 +784,23 @@ def main():
         # bounds the space the unpacked outputs take.
         to_check = []
 
+        # Paired outputs whose only schema errors are InDesign's endnote
+        # markup: (name, errors, normalised errors, reference IDML). They
+        # pass if the reference has the same errors.
+        endnote_pending = []
+
         def flush(at_least):
             if len(to_check) < at_least:
                 return
-            errs = validate([out for out, _, _ in to_check], args)
-            for out, name, bad in to_check:
-                if errs.get(str(out)):
-                    bad.append((name, errs[str(out)]))
+            errs = validate([out for out, _, _, _ in to_check], args)
+            for out, name, bad, ref in to_check:
+                e = errs.get(str(out))
+                if e:
+                    known = endnote_errors(out, e) if ref else None
+                    if known:
+                        endnote_pending.append((name, e, known, ref))
+                    else:
+                        bad.append((name, e))
                 out.unlink(missing_ok=True)
             to_check.clear()
         for n, indd in enumerate(others):
@@ -762,7 +810,7 @@ def main():
             if r.returncode != 0:
                 other_failures.append((indd.name, r.stderr.strip()))
             elif check:
-                to_check.append((out, indd.name, other_invalid))
+                to_check.append((out, indd.name, other_invalid, None))
                 flush(VALIDATE_BATCH)
                 continue
             out.unlink(missing_ok=True)
@@ -774,7 +822,7 @@ def main():
                 failures.append((indd.name, r.stderr.strip()))
                 continue
             if check:
-                to_check.append((out, indd.name, invalid))
+                to_check.append((out, indd.name, invalid, idml))
             ref = load(idml)
             ours = load(out)
             reasons = stale_reasons(indd_date, idml_date, indd_uids, ref[0], ref[1], ours[1])
@@ -793,6 +841,15 @@ def main():
                 out.unlink(missing_ok=True)
         pool.shutdown()
         flush(1)
+        endnote_passed = []
+        if endnote_pending:
+            ref_errs = validate([ref for _, _, _, ref in endnote_pending], args)
+            for name, e, known, ref in endnote_pending:
+                theirs = endnote_errors(ref, ref_errs.get(str(ref), [])) or set()
+                if known <= theirs:
+                    endnote_passed.append(name)
+                else:
+                    invalid.append((name, e))
 
     print(f"conversion failures: {len(failures)} of {len(todo)} paired files")
     for name, err in failures[:10]:
@@ -801,6 +858,8 @@ def main():
         print(f"schema validation failures: {len(invalid)}")
         for name, errs in invalid[:10]:
             print(f"  {name}: {len(errs)} errors, {errs[:3]}")
+        print(f"schema errors accepted (endnote markup, as in the reference): "
+              f"{len(endnote_passed)} files")
     if args.all:
         print(f"files without a reference: {len(others)}, "
               f"conversion failures: {len(other_failures)}")
@@ -808,6 +867,10 @@ def main():
             print(f"  {name}: {err}")
         if check:
             print(f"files without a reference: schema validation failures: {len(other_invalid)}")
+            with_endnotes = [n for n, errs in other_invalid if any(
+                'element "Endnote"' in e or "EndnoteRange" in e for e in errs)]
+            if with_endnotes:
+                print(f"  with endnote markup errors: {len(with_endnotes)}: {with_endnotes[:10]}")
             for name, errs in other_invalid[:10]:
                 print(f"  {name}: {len(errs)} errors, {errs[:3]}")
     print(f"warnings: {sum(warnings.values())} (count, files, kind)")

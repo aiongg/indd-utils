@@ -46,8 +46,9 @@ impl Writer<'_> {
         if major >= 12 {
             x.attr("UserText", "true");
         }
-        if major >= 15 {
-            x.attr("IsEndnoteStory", "false");
+        // From DOM 13 (footnotes.md).
+        if major >= 13 {
+            x.attr("IsEndnoteStory", s.is_endnote.to_string());
         }
         x.attr("TrackChanges", "false")
             .attr("StoryTitle", "$ID/")
@@ -252,11 +253,36 @@ impl Writer<'_> {
         let mut pos = offset;
         // End offset of the open hyperlink text source.
         let mut open: Option<usize> = None;
+        // End offset of the open endnote range.
+        let mut endnote: Option<usize> = None;
         for ch in text.chars() {
             if open == Some(pos) {
                 flush(x, &mut buf);
                 x.end();
                 open = None;
+            }
+            if endnote == Some(pos) {
+                flush(x, &mut buf);
+                if open.take().is_some() {
+                    x.end();
+                }
+                x.end();
+                endnote = None;
+            }
+            if endnote.is_none()
+                && let Some(r) = story.endnote_ranges.iter().find(|r| r.start == pos)
+            {
+                // Around the endnote's text, inside the character range
+                // (footnotes.md).
+                flush(x, &mut buf);
+                if open.take().is_some() {
+                    x.end();
+                }
+                st.open_csr(self, x, run);
+                x.start("EndnoteRange")
+                    .attr("Self", uref(Some(r.uid)))
+                    .attr("SourceEndnote", uref(Some(r.endnote)));
+                endnote = Some(r.start + r.len);
             }
             if ch == '\u{FEFF}'
                 && let Some(dests) = story.text_destinations.get(&pos)
@@ -334,6 +360,7 @@ impl Writer<'_> {
             }
             st.open_csr(self, x, run);
             if open.is_none()
+                && endnote.is_none()
                 && let Some(r) = story
                     .sources
                     .iter()
@@ -355,6 +382,21 @@ impl Writer<'_> {
                         self.page_item(x, item, false, &Matrix::IDENTITY);
                     }
                 }
+                '\u{4}' if story.endnotes.contains_key(&pos) => {
+                    let (e, r) = story.endnotes[&pos];
+                    flush(x, &mut buf);
+                    x.start("Endnote")
+                        .attr("Self", uref(Some(e)))
+                        .attr("EndnoteTextRange", uref(Some(r)))
+                        .end();
+                }
+                '\u{4}' if story.footnotes.contains_key(&pos) => {
+                    // The footnote's text, in place of its reference.
+                    flush(x, &mut buf);
+                    x.start("Footnote");
+                    self.text_ranges(x, &story.footnotes[&pos].runs, story, scope);
+                    x.end();
+                }
                 '\u{16}' if story.tables.contains_key(&pos) => {
                     flush(x, &mut buf);
                     self.table(x, &story.tables[&pos], story, scope);
@@ -371,6 +413,9 @@ impl Writer<'_> {
         }
         flush(x, &mut buf);
         if open.is_some() {
+            x.end();
+        }
+        if endnote.is_some() {
             x.end();
         }
     }
@@ -637,6 +682,10 @@ mod tests {
                 paragraph: true,
             }],
             xml_markers: Default::default(),
+            footnotes: Default::default(),
+            endnotes: Default::default(),
+            is_endnote: false,
+            endnote_ranges: Vec::new(),
             text_destinations: Default::default(),
             xml_element: None,
             orientation: None,
@@ -704,6 +753,10 @@ mod tests {
             text_variables: Default::default(),
             sources: Vec::new(),
             xml_markers: Default::default(),
+            footnotes: Default::default(),
+            endnotes: Default::default(),
+            is_endnote: false,
+            endnote_ranges: Vec::new(),
             text_destinations: [(1, vec![dest])].into_iter().collect(),
             xml_element: None,
             orientation: None,
@@ -757,6 +810,10 @@ mod tests {
             text_variables: Default::default(),
             sources: Vec::new(),
             xml_markers: markers.into_iter().collect(),
+            footnotes: Default::default(),
+            endnotes: Default::default(),
+            is_endnote: false,
+            endnote_ranges: Vec::new(),
             text_destinations: Default::default(),
             xml_element: None,
             orientation: None,

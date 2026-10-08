@@ -34,6 +34,16 @@ pub struct Story {
     pub sources: Vec<SourceRange>,
     /// XML markers, by UTF-16 offset of their U+FEFF.
     pub xml_markers: BTreeMap<usize, XmlMarker>,
+    /// Footnotes, by UTF-16 offset of their reference (U+0004).
+    pub footnotes: BTreeMap<usize, Footnote>,
+    /// Endnote references, by UTF-16 offset of their U+0004: the endnote
+    /// UID and the UID of its range.
+    pub endnotes: BTreeMap<usize, (u32, u32)>,
+    /// The story is the endnote story (class 0x2801).
+    pub is_endnote: bool,
+    /// Endnote text ranges (in the endnote story), sorted by start; each
+    /// lies within one text run. `source` is the range UID.
+    pub endnote_ranges: Vec<EndnoteRange>,
     /// Text and paragraph destinations, by UTF-16 offset of their U+FEFF.
     pub text_destinations: BTreeMap<usize, Vec<Destination>>,
     /// The XML element whose content is this story.
@@ -43,6 +53,26 @@ pub struct Story {
     pub orientation: Option<Orientation>,
     /// The TOC style that made the story (chunk 0x8C40).
     pub toc_style: Option<u32>,
+}
+
+/// A footnote: its text runs, at their offsets in the story text, which
+/// holds the footnote text after the story's own (footnotes.md).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Footnote {
+    pub uid: u32,
+    pub runs: Vec<TextRun>,
+}
+
+/// The text of an endnote in the endnote story.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EndnoteRange {
+    /// UTF-16 offset in the story text.
+    pub start: usize,
+    pub len: usize,
+    /// The range object (class 0x2804).
+    pub uid: u32,
+    /// The endnote it belongs to (class 0x2805).
+    pub endnote: u32,
 }
 
 /// Text orientation of a story (IDML `StoryOrientation`).
@@ -337,8 +367,29 @@ impl<'a> Reader<'a> {
         let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
         let mut text_variables = BTreeMap::new();
         let mut text_destinations: BTreeMap<usize, Vec<Destination>> = BTreeMap::new();
+        let mut footnotes: BTreeMap<usize, Footnote> = BTreeMap::new();
+        let mut endnotes = BTreeMap::new();
         for (pos, cls, item) in owned {
             match cls {
+                class::ENDNOTE => {
+                    // Chunk 0x22616: the endnote's range.
+                    if let Some(range) = self
+                        .chunk(item, chunk::ENDNOTE_RANGE_OF)?
+                        .and_then(|d| self.enc().u32_at(&d, 0))
+                        .and_then(uid_or_none)
+                    {
+                        endnotes.insert(pos, (item, range));
+                    }
+                }
+                class::FOOTNOTE => {
+                    footnotes.insert(
+                        pos,
+                        Footnote {
+                            uid: item,
+                            runs: Vec::new(),
+                        },
+                    );
+                }
                 hyperlink::class::DESTINATION_OWNER => {
                     // The owner names its destination (hyperlinks.md).
                     let dest = match self.chunk(item, hyperlink::chunk::OWNER_DESTINATION)? {
@@ -390,7 +441,7 @@ impl<'a> Reader<'a> {
         }
         let cuts: Vec<usize> = owners.iter().map(|o| o.0).collect();
         let all = split_runs(&text, &para, &chars, &cuts);
-        // Text not owned by the story belongs to table cells.
+        // Text not owned by the story belongs to footnotes and table cells.
         let owner_at = |at: usize| {
             owners
                 .iter()
@@ -400,6 +451,11 @@ impl<'a> Reader<'a> {
         let mut runs = Vec::new();
         for run in all {
             match owner_at(run.start) {
+                Some((owner, _))
+                    if let Some(f) = footnotes.values_mut().find(|f| f.uid == owner) =>
+                {
+                    f.runs.push(run);
+                }
                 Some((owner, cell)) if owner != uid => {
                     if let Some(t) = tables.values_mut().find(|t| t.uid == owner)
                         && let Some(c) = t.cells.iter_mut().find(|c| c.id == cell)
@@ -410,6 +466,35 @@ impl<'a> Reader<'a> {
                 _ => runs.push(run),
             }
         }
+        // The range tree of the endnote story also holds the endnotes'
+        // ranges (footnotes.md).
+        let (ranges, rest): (Vec<SourceRange>, Vec<SourceRange>) = sources
+            .into_iter()
+            .partition(|r| self.class(r.source) == Some(class::ENDNOTE_RANGE));
+        let mut sources = rest;
+        let mut endnote_ranges = Vec::new();
+        for r in ranges {
+            let endnote = self
+                .chunk(r.source, chunk::RANGE_ENDNOTE)?
+                .and_then(|d| self.enc().u32_at(&d, 0))
+                .and_then(uid_or_none);
+            let inside = runs.iter().any(|t| {
+                r.start >= t.start && r.start + r.len <= t.start + t.text.encode_utf16().count()
+            });
+            match endnote {
+                Some(endnote) if inside && r.len > 0 => endnote_ranges.push(EndnoteRange {
+                    start: r.start,
+                    len: r.len,
+                    uid: r.source,
+                    endnote,
+                }),
+                _ => self.warn(format!(
+                    "story {uid}: endnote range {} spans several text ranges; left out",
+                    r.source
+                )),
+            }
+        }
+        endnote_ranges.sort_by_key(|r| r.start);
         // IDML writes a text source inside one character range, or as a
         // child of a paragraph range around several character ranges
         // (hyperlinks.md, extent and placement).
@@ -417,7 +502,11 @@ impl<'a> Reader<'a> {
         let cell_lists = tables
             .values()
             .flat_map(|t| t.cells.iter().map(|c| c.runs.as_slice()));
-        let lists: Vec<&[TextRun]> = std::iter::once(runs.as_slice()).chain(cell_lists).collect();
+        let footnote_lists = footnotes.values().map(|f| f.runs.as_slice());
+        let lists: Vec<&[TextRun]> = std::iter::once(runs.as_slice())
+            .chain(cell_lists)
+            .chain(footnote_lists)
+            .collect();
         sources.retain_mut(|r| {
             if r.len == 0 {
                 return false;
@@ -492,6 +581,10 @@ impl<'a> Reader<'a> {
             text_variables,
             sources,
             xml_markers,
+            footnotes,
+            endnotes,
+            is_endnote: self.class(uid) == Some(class::ENDNOTE_STORY),
+            endnote_ranges,
             text_destinations,
             xml_element,
             orientation: None,

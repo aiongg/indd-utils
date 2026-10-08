@@ -18,7 +18,8 @@ holds the table, one stretch per cell in row-major order, each ending with
 U+000D (the cell terminator, not written to IDML). A strand with run kind
 0x2A4 assigns every stretch of text an owner: each record is u32 length,
 u32 owner UID, u32 cell ID. Text owned by the story is the story's own; text
-owned by a table belongs to that table's cell.
+owned by a table belongs to that table's cell, and text owned by a footnote
+(cell field 1) to that footnote (`footnotes.md`).
 
 IDML names a table `<scope>i<table UID hex>`, where the scope is the story
 (`udcf`) or, for a nested table, the enclosing cell; cells are named

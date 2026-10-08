@@ -38,6 +38,190 @@ pub struct Prefs {
     pub props: Vec<(&'static str, &'static str, PrefProp)>,
     /// Print records (element, bytes), written in base64 as `PrintRecord`.
     pub print_records: Vec<(&'static str, Vec<u8>)>,
+    /// Footnote options (chunk 0x2820).
+    pub footnotes: Option<FootnoteOptions>,
+    /// Endnote options (chunk 0x2261E).
+    pub endnotes: Option<EndnoteOptions>,
+}
+
+/// The document's endnote options (preferences chunk 0x2261E). See
+/// `docs/format/footnotes.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EndnoteOptions {
+    pub title: String,
+    pub title_style: u32,
+    /// Numbering style code.
+    pub numbering: u32,
+    pub start_at: u32,
+    /// Restart code.
+    pub restart: u32,
+    /// Marker positioning code.
+    pub positioning: u32,
+    pub marker_style: u32,
+    pub text_style: u32,
+    pub separator: String,
+    /// The last five fields: two u32, two strings, a u32. They hold one
+    /// value in every sample.
+    pub rest: (u32, u32, String, String, u32),
+}
+
+/// A u32 length in UTF-16 units, then text segments (chunks 0x2820 and
+/// 0x2261E).
+fn counted_string(c: &mut Cursor) -> Result<String, Error> {
+    let n = c.u32()? as usize;
+    if n == 0 {
+        Ok(String::new())
+    } else {
+        c.segments(n)
+    }
+}
+
+impl EndnoteOptions {
+    pub fn read(enc: Encoding, d: &[u8]) -> Result<EndnoteOptions, Error> {
+        let mut c = enc.cursor(d);
+        Ok(EndnoteOptions {
+            title: counted_string(&mut c)?,
+            title_style: c.u32()?,
+            numbering: c.u32()?,
+            start_at: c.u32()?,
+            restart: c.u32()?,
+            positioning: c.u32()?,
+            marker_style: c.u32()?,
+            text_style: c.u32()?,
+            separator: counted_string(&mut c)?,
+            rest: (
+                c.u32()?,
+                c.u32()?,
+                counted_string(&mut c)?,
+                counted_string(&mut c)?,
+                c.u32()?,
+            ),
+        })
+    }
+}
+
+/// The document's footnote options (preferences chunk 0x2820). See
+/// `docs/format/footnotes.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FootnoteOptions {
+    pub marker_style: u32,
+    pub text_style: u32,
+    /// Numbering style code.
+    pub numbering: u32,
+    pub start_at: u32,
+    /// Restart code.
+    pub restart: u16,
+    /// Superscript and ruby flags of the marker.
+    pub marker: (u16, u16),
+    pub space_between: f64,
+    pub spacer: f64,
+    /// Prefix and suffix display code.
+    pub prefix_suffix: u16,
+    pub prefix: String,
+    pub suffix: String,
+    pub separator: String,
+    /// The fields after the strings, when the tail has a known length.
+    pub tail: Option<FootnoteTail>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FootnoteTail {
+    pub no_splitting: bool,
+    /// `EnableStraddling`; only in the 174-byte tail.
+    pub straddling: Option<bool>,
+    /// The rule and the continuing rule.
+    pub rules: [FootnoteRule; 2],
+}
+
+/// A footnote rule block (78 bytes).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FootnoteRule {
+    pub on: bool,
+    /// Stroke type code.
+    pub stroke: u32,
+    pub color: u32,
+    pub weight: f64,
+    pub tint: f64,
+    pub gap_color: u32,
+    pub gap_tint: f64,
+    pub left_indent: f64,
+    pub width: f64,
+    pub offset: f64,
+}
+
+impl FootnoteOptions {
+    /// Read chunk 0x2820; `tail` is `None` when its tail has a length not
+    /// seen.
+    pub fn read(enc: Encoding, d: &[u8]) -> Result<FootnoteOptions, Error> {
+        let mut c = enc.cursor(d);
+        let marker_style = c.u32()?;
+        let text_style = c.u32()?;
+        let numbering = c.u32()?;
+        let start_at = c.u32()?;
+        let restart = c.u16()?;
+        let superscript = c.u16()?;
+        c.skip(2)?;
+        let ruby = c.u16()?;
+        let space_between = c.f64()?;
+        let spacer = c.f64()?;
+        c.skip(2)?;
+        let prefix_suffix = c.u16()?;
+        let prefix = counted_string(&mut c)?;
+        let suffix = counted_string(&mut c)?;
+        let separator = counted_string(&mut c)?;
+        let t = c.remaining();
+        let tail = if t == 172 || t == 174 {
+            let tail = c.bytes(t)?;
+            let rule_at = if t == 174 { 18 } else { 16 };
+            let rule = |at: usize| -> Result<FootnoteRule, Error> {
+                let mut r = enc.cursor(&tail[at..at + 78]);
+                let on = r.u16()? != 0;
+                let stroke = r.u32()?;
+                r.skip(4)?;
+                let color = r.u32()?;
+                let weight = r.f64()?;
+                let tint = r.f64()?;
+                r.skip(2)?;
+                let gap_color = r.u32()?;
+                let gap_tint = r.f64()?;
+                r.skip(2)?;
+                Ok(FootnoteRule {
+                    on,
+                    stroke,
+                    color,
+                    weight,
+                    tint,
+                    gap_color,
+                    gap_tint,
+                    left_indent: r.f64()?,
+                    width: r.f64()?,
+                    offset: r.f64()?,
+                })
+            };
+            Some(FootnoteTail {
+                no_splitting: enc.u16_at(tail, 0) != Some(0),
+                straddling: (t == 174).then(|| enc.u16_at(tail, 12) != Some(0)),
+                rules: [rule(rule_at)?, rule(rule_at + 78)?],
+            })
+        } else {
+            None
+        };
+        Ok(FootnoteOptions {
+            marker_style,
+            text_style,
+            numbering,
+            start_at,
+            restart,
+            marker: (superscript, ruby),
+            space_between,
+            spacer,
+            prefix_suffix,
+            prefix,
+            suffix,
+            separator,
+            tail,
+        })
+    }
 }
 
 /// The value of a `Properties` child of a preference element.
@@ -181,6 +365,10 @@ mod id {
     pub const MARGINS: u32 = 0x550;
     pub const COLUMNS: u32 = 0x555;
     pub const ANCHOR: u32 = 0x2800;
+    /// Footnote options.
+    pub const FOOTNOTE_OPTIONS: u32 = 0x2820;
+    /// Endnote options.
+    pub const ENDNOTE_OPTIONS: u32 = 0x2261E;
     pub const PRINT: u32 = 0xA4C;
     pub const PRINT_BOOKLET: u32 = 0xAF2;
     pub const PASTEBOARD: u32 = 0x5D2;
@@ -712,13 +900,76 @@ impl Reader<'_> {
             item_default_entries,
             props,
             print_records,
+            footnotes: match get(id::FOOTNOTE_OPTIONS)? {
+                Some(d) => match FootnoteOptions::read(self.enc(), &d) {
+                    Ok(f) => {
+                        if f.tail.is_none() {
+                            self.warn(format!(
+                                "footnote options of {} bytes are not known; rule settings left out",
+                                d.len()
+                            ));
+                        }
+                        Some(f)
+                    }
+                    Err(e) => {
+                        self.warn(format!("footnote options left out: {e}"));
+                        None
+                    }
+                },
+                None => None,
+            },
+            endnotes: match get(id::ENDNOTE_OPTIONS)? {
+                Some(d) => match EndnoteOptions::read(self.enc(), &d) {
+                    Ok(e) => Some(e),
+                    Err(e) => {
+                        self.warn(format!("endnote options left out: {e}"));
+                        None
+                    }
+                },
+                None => None,
+            },
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::num_half_even;
+    use super::*;
+
+    #[test]
+    fn reads_footnote_options() {
+        let enc = Encoding::default();
+        let mut d = Vec::new();
+        for v in [0x10u32, 0x20, 0xCA07, 4] {
+            d.extend(v.to_le_bytes());
+        }
+        for v in [0u16, 1, 0, 0] {
+            d.extend(v.to_le_bytes());
+        }
+        d.extend(0.72f64.to_le_bytes());
+        d.extend(7.2f64.to_le_bytes());
+        d.extend([0, 0, 0, 0]);
+        // Prefix and suffix empty, separator a tab.
+        d.extend(0u32.to_le_bytes());
+        d.extend(0u32.to_le_bytes());
+        d.extend(1u32.to_le_bytes());
+        d.extend([0x01, 0x40, b'\t']);
+        let mut tail = vec![0u8; 174];
+        tail[0] = 1;
+        tail[12] = 1;
+        // The rule block at 18: on, solid, weight 0.5.
+        tail[18] = 1;
+        tail[20..24].copy_from_slice(&0x5A29u32.to_le_bytes());
+        tail[32..40].copy_from_slice(&0.5f64.to_le_bytes());
+        d.extend(tail);
+        let f = FootnoteOptions::read(enc, &d).unwrap();
+        assert_eq!((f.start_at, f.space_between, f.spacer), (4, 0.72, 7.2));
+        assert_eq!((f.marker, f.separator.as_str()), ((1, 0), "\t"));
+        let t = f.tail.unwrap();
+        assert!(t.no_splitting && t.straddling == Some(true));
+        assert!(t.rules[0].on && !t.rules[1].on);
+        assert_eq!((t.rules[0].stroke, t.rules[0].weight), (0x5A29, 0.5));
+    }
 
     #[test]
     fn rounds_shortest_digits_half_even() {

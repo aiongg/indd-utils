@@ -254,6 +254,27 @@ values and how many are reproduced, wrong and missing. Comparing them
 between two runs shows whether a change reproduces fewer values of any
 key.
 
+## Schema validation
+
+`compare.py --schemas … --jing …` validates every output against the
+IDML RelaxNG schemas (`tools/validate.sh`). A conversion with any schema
+error counts as a failure, with one exception.
+
+**Endnote markup.** The 21.5 schema, which InDesign generates, rejects
+InDesign's own endnote markup: an `Endnote` inside a
+`CharacterStyleRange`, and any content inside an `EndnoteRange`
+(`format/footnotes.md`). The converter writes endnotes as InDesign does.
+An output's errors are accepted when both hold:
+
+- every error is `element "Endnote" not allowed here` or names an element
+  whose parent is an `EndnoteRange`;
+- the reference IDML of the same pair has the same errors (same part and
+  message, positions ignored).
+
+`compare.py` prints how many files this accepts. Files without a
+reference IDML get no exception: an endnote error there counts as a
+failure, and `compare.py --all` lists those files separately.
+
 ## Audit: what the converter does not read
 
 `indd audit <file>` needs no reference IDML. It converts the file while
