@@ -141,7 +141,14 @@ later IDML writes it on exactly the frames whose `TextFramePreference`
 has `FootnotesEnableOverrides`; in DOM 12, 1,215 frames have it and 508
 do not, and no chunk of the frame or of its multi-column object separates
 the two groups (314 frames of 6 trustworthy pairs, by chunk presence).
-The converter does not write it.
+
+The converter writes it from DOM 14 on the frames whose
+`TextFramePreference` it writes with `FootnotesEnableOverrides`, with the
+four values of that preference, after `TextFramePreference`. In the
+trustworthy pairs this gives 3,778 elements, all in the reference with
+all four values, and no extra element. The DOM 12 and 13 frames, and
+frames whose preference the converter writes without
+`FootnotesEnableOverrides`, are still missing (1,949 elements).
 
 ## Endnotes
 

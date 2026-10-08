@@ -227,6 +227,21 @@ impl Writer<'_> {
         if attrs.is_empty() && major < 11 {
             return;
         }
+        // From DOM 14 IDML writes the frame's footnote options again as
+        // TextFrameFootnoteOptionsObject on the frames whose preference has
+        // FootnotesEnableOverrides (footnotes.md).
+        let get = |k: &str| attrs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone());
+        let footnote_options = (major >= 14)
+            .then(|| get("FootnotesEnableOverrides"))
+            .flatten()
+            .map(|on| {
+                [
+                    ("EnableOverrides", Some(on)),
+                    ("SpanFootnotesAcross", get("FootnotesSpanAcrossColumns")),
+                    ("MinimumSpacingOption", get("FootnotesMinimumSpacing")),
+                    ("SpaceBetweenFootnotes", get("FootnotesSpaceBetween")),
+                ]
+            });
         x.start("TextFramePreference");
         for (k, val) in attrs {
             x.attr(k, val);
@@ -251,6 +266,15 @@ impl Writer<'_> {
             );
         }
         x.end();
+        if let Some(o) = footnote_options {
+            x.start("TextFrameFootnoteOptionsObject");
+            for (k, v) in o {
+                if let Some(v) = v {
+                    x.attr(k, v);
+                }
+            }
+            x.end();
+        }
     }
 
     /// `TextWrapPreference` from an item's text wrap chunk. An item without
