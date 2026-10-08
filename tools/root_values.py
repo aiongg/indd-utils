@@ -8,7 +8,7 @@ Properties child and child element attribute of the root styles and of
 the top-level preference elements. A value is kept when it is the same in
 every IDML from some DOM version on and present in all of them; the
 earliest such version is its minimum version. Attributes the converter
-reads from the INDD (the TEXT_ATTRS table in src/idml/mod.rs) are left
+reads from the INDD (the TEXT_ATTRS table in src/idml/attrs.rs) are left
 out for the paragraph and character root styles, and the document setup
 it reads is left out of the preferences. Preference values that refer to
 a style other than a root style are left out, since the package need not
@@ -97,7 +97,7 @@ tools/root_values.py; evidence in docs/format/idml-values.md.
 
 
 def decoded_names():
-    src = (ROOT / "src" / "idml" / "mod.rs").read_text()
+    src = (ROOT / "src" / "idml" / "attrs.rs").read_text()
     table = src[src.index("const TEXT_ATTRS"):src.index("/// An attribute written as a")]
     return set(re.findall(r'0x[0-9A-F]+,\s*"(\w+)"', table))
 

@@ -41,7 +41,14 @@ documents of that InDesign version or later (`MinimumVersion` in the
 file). The corpus has grown since; the later pairs are evidence for the
 values of other elements (below). Regenerating these files from all pairs
 would drop some values that the larger corpus shows to vary between
-documents, such as table style stroke weights.
+documents, such as table style stroke weights. With the 828 distinct
+IDML files of the corpus in 2026-10, 19 values of `[No paragraph
+style]`, 41 of the object style `[None]` and 19 of `[No table style]`
+vary, and DOM 7 files differ from later ones in many values. The files
+also predate most of the text attributes the converter now reads from
+the INDD; the tool leaves those out, so regenerating them would also
+remove values that the INDD supplies only for some styles. Regenerating
+them is a change of its own, with its own measurement.
 
 | Root style | Values | Same in | Written for version |
 |---|---|---|---|
@@ -116,14 +123,13 @@ element in the package.
 
 `tools/element_values.py` collects the values of `Story`, `XmlStory`
 and their `StoryPreference` and `InCopyExportOption` children from the
-683 corpus IDML files (`element_values.xml`); the converter writes them
+827 corpus IDML files (`element_values.xml`); the converter writes them
 where the INDD gives no value:
 
 | Element | Values kept | Versions |
 |---|---|---|
-| `Story` | `TrackChanges="false"`, `AppliedNamedGrid="n"` | 7 on |
+| `Story` | `TrackChanges="false"` | 7 on |
 | `Story`, `XmlStory` | `UserText="true"` where written | 11 on; IDML has it from version 11.2 (none of the 3,184 stories of DOM 10.0 to 11.0, every story from 11.2), and the converter writes it from INDD version 11.2 |
-| `StoryPreference` | `FrameType="TextFrameType"`, `StoryOrientation="Horizontal"` | 7 on |
 | `InCopyExportOption` of stories | `IncludeGraphicProxies="true"`, `IncludeAllResources="false"` | 7 on |
 
 The other story values are read from the INDD: `StoryTitle`,
@@ -133,18 +139,29 @@ story settings); `IsEndnoteStory` from the story class (`footnotes.md`);
 `AppliedTOCStyle` from chunk 0x8C40.
 
 `StoryOrientation` is read from the story's frames when they agree
-(`objects.md`, text orientation); the observed `Horizontal` is written
-only for other stories. For a sample typeset vertically, no field was
-found that sets `FrameType` apart from horizontal samples, so it keeps
-the observed value there too.
+(`objects.md`, text orientation).
+
+Left out because they vary: `Story` `AppliedNamedGrid` (106 of 27,816
+stories name a grid, all in DOM 12 files), `StoryPreference`
+`FrameType` (57 stories have `FrameGridType`, in DOM 12, 13 and 18
+files) and `StoryOrientation` (100 stories are `Vertical`). Before the
+corpus had samples typeset in Japanese, every IDML had `n`,
+`TextFrameType` and `Horizontal`.
 
 ## Graphic settings without an INDD field
 
 `element_values.xml` holds the `ClippingPathSettings` values of every
-`Image`, `PDF` and `EPS` element in the 683 corpus IDML files:
+`Image`, `PDF` and `EPS` element with `ClippingType="None"` in the 827
+corpus IDML files:
 `ClippingType="None"`, `InvertPath="false"`, `IncludeInsideEdges="false"`,
 `RestrictToFrame="false"` and `AppliedPathName="$ID/"` (and for PDF and
-EPS also the values the converter reads for images). EPS graphics occur
+EPS also the values the converter reads for images). The converter writes
+the element only for clipping type 0 in chunk 0x2C1A, which IDML writes
+as `None` (`objects.md`), so `tools/element_values.py` collects only those
+elements (`WRITTEN_FOR`). The 8 images with another `ClippingType` (7
+with `AppliedPathName` set, 1 with `InvertPath` and `RestrictToFrame`
+`true`) are the only elements with other values; all 7,698 elements with
+`None` have the values above. EPS graphics occur
 only up to DOM 20, so a DOM 21 EPS gets only the values read from the
 INDD. Every `ImageIOPreference` has `AllowAutoEmbedding="true"`. The
 converter writes the values read from the INDD first (`objects.md`,
@@ -224,7 +241,7 @@ version; the converter writes it from 13.1.
 ## Composite font entries
 
 The converter writes only the built-in composite font `[No composite
-font]`. All 5,159 of its `CompositeFontEntry` elements in the 683 corpus
+font]`. All 5,231 of its `CompositeFontEntry` elements in the corpus
 IDML files have `Locked="true"`, `RelativeSize="100"`,
 `BaselineShift="0"`, `HorizontalScale="100"` and `VerticalScale="100"`.
 No INDD field for `Locked` is identified; the converter writes it on
@@ -234,7 +251,7 @@ have other values.
 
 ## Inks
 
-Every `Ink` element of the 683 corpus IDML files has `InkType="Normal"`
+Every `Ink` element of the 827 corpus IDML files has `InkType="Normal"`
 and `PrintInk="true"` (`element_values.xml`); the converter writes them
 on every ink. `ConvertToProcess` is read from the INDD (`objects.md`,
 inks).
@@ -242,7 +259,7 @@ inks).
 ## Values of other elements
 
 `tools/element_values.py` collects the values of other elements the
-converter writes from every distinct IDML of the corpus (683 files
+converter writes from every distinct IDML of the corpus (827 files
 exported by InDesign; one more IDML in the corpus lacks the `product` of
 InDesign's `aid` processing instruction and was written by a script, so
 it is left out). A value is kept for a range of DOM versions when every
@@ -254,19 +271,19 @@ each range needs 10 files. The kept values are in
 `MaximumVersion`. The converter writes them after the values it reads
 from the INDD and only where the element lacks the attribute.
 
-Files per DOM version: 7: 9, 8: 67, 9: 8, 10: 52, 11: 48, 12: 39, 13: 79,
-14: 74, 15: 66, 16: 42, 17: 17, 18: 48, 19: 70, 20: 31, 21: 33.
+Files per DOM version: 7: 9, 8: 67, 9: 8, 10: 52, 11: 48, 12: 106, 13: 116,
+14: 74, 15: 66, 16: 42, 17: 17, 18: 88, 19: 70, 20: 31, 21: 33.
 
 ### Page items
 
 | Element | Elements | Values kept |
 |---|---|---|
-| `TextFrame` | 32,002 | `LocalDisplaySetting="Default"`, `GradientStrokeAngle`, `GradientStrokeHiliteLength`, `GradientStrokeHiliteAngle` (`0`) from DOM 7; `FlexItemWidthMode` and `FlexItemHeightMode` (`FlexFixed`) from 21 |
-| `Rectangle` | 24,314 | `LocalDisplaySetting`, `StoryTitle="$ID/"` from 7 |
-| `Oval` | 3,356 | `LocalDisplaySetting`, `StoryTitle` and the gradient highlights from 8 |
-| `Polygon` | 52,774 | `LocalDisplaySetting`, `StoryTitle` and the gradient highlights from 7 |
-| `GraphicLine` | 4,351 | `LocalDisplaySetting`, `LockState="None"` and the gradient highlights from 7 |
-| `Group` | 9,010 | `LocalDisplaySetting`, `GradientStrokeAngle` and the gradient highlights from 7 |
+| `TextFrame` | 33,580 | `LocalDisplaySetting="Default"`, `GradientStrokeAngle`, `GradientStrokeHiliteLength`, `GradientStrokeHiliteAngle` (`0`) from DOM 7; `FlexItemWidthMode` and `FlexItemHeightMode` (`FlexFixed`) from 21 |
+| `Rectangle` | 24,737 | `LocalDisplaySetting`, `StoryTitle="$ID/"` from 7 |
+| `Oval` | 3,393 | `LocalDisplaySetting`, `StoryTitle` and the gradient highlights from 8 |
+| `Polygon` | 52,863 | `LocalDisplaySetting`, `StoryTitle` and the gradient highlights from 7 |
+| `GraphicLine` | 4,413 | `LocalDisplaySetting`, `LockState="None"` and the gradient highlights from 7 |
+| `Group` | 9,063 | `LocalDisplaySetting`, `GradientStrokeAngle` and the gradient highlights from 7 |
 
 Each kind also has `FlexItemWidthMode` and `FlexItemHeightMode` from
 DOM 21, and values that the converter reads from the INDD
@@ -279,16 +296,19 @@ values come from the INDD.
 
 | Element | Elements | Values kept |
 |---|---|---|
-| `Spread` | 7,281 | `PageTransitionType="None"`, `PageTransitionDirection="NotApplicable"`, `PageTransitionDuration="Medium"`, `ShowMasterItems="true"`, `FlattenerOverride="Default"` from DOM 7; `SpreadHidden="false"` from 19 |
-| `FlattenerPreference` of spreads | 7,281 | `ClipComplexRegions`, `ConvertAllStrokesToOutlines`, `ConvertAllTextToOutlines` (`false`) and `RasterVectorBalance` 50 from DOM 7 |
-| `MasterSpread` | 1,412 | `OverriddenPageItemProps=""` from DOM 7 |
-| `Page` | 12,639 | `AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName"`, `GridStartingPoint="TopOutside"` from DOM 7; `SnapshotBlendingMode="IgnoreLayoutSnapshots"`, `OptionalPage="false"` from 8 |
-| `Layer` | 1,546 | `ShowGuides` and `Expendable` (`true`) from DOM 7 |
+| `Spread` | 7,725 | `PageTransitionType="None"`, `PageTransitionDirection="NotApplicable"`, `PageTransitionDuration="Medium"`, `ShowMasterItems="true"`, `FlattenerOverride="Default"` from DOM 7; `SpreadHidden="false"` from 19 |
+| `FlattenerPreference` of spreads | 7,725 | `ClipComplexRegions`, `ConvertAllStrokesToOutlines`, `ConvertAllTextToOutlines` (`false`) and `RasterVectorBalance` 50 from DOM 7 |
+| `MasterSpread` | 1,585 | `OverriddenPageItemProps=""` from DOM 7 |
+| `Page` | 13,733 | `AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName"` from DOM 7; `SnapshotBlendingMode="IgnoreLayoutSnapshots"`, `OptionalPage="false"` from 8 |
+| `Layer` | 1,755 | `ShowGuides` and `Expendable` (`true`) from DOM 7 |
 
 Every spread has one `FlattenerPreference`, so the converter writes the
 element on every spread. For a spread without the flattener chunk
 (`objects.md`, flattener settings) it also writes
 `LineArtAndTextResolution="300"` and `GradientAndMeshResolution="150"`.
+`GridStartingPoint` is left out: 28 pages of DOM 18 files have another
+value than `TopOutside`.
+
 These are not in every IDML: 5,045 of the 5,074 trustworthy spreads
 without the chunk have them, and the other 29 (all spreads of 9
 documents) have 400 and 400. No INDD field tells the two groups apart
@@ -314,7 +334,7 @@ all of them have; the converter writes it in the order of the IDML files.
 | `HTMLFXLExportPreference` | 11 | both | |
 | `PublishExportPreference` | 11 | 11 | `ImageExportResolution`, `PublishPdf` |
 
-`Assignment` (683 elements, one per file): `UserName="$ID/"`,
+`Assignment` (827 elements, one per file): `UserName="$ID/"`,
 `ExportOptions="AssignedSpreads"`, `IncludeLinksWhenPackage="true"`,
 `FilePath="$ID/"` and `FrameColor` `Nothing`, from DOM 7.
 
@@ -348,9 +368,9 @@ character styles in the IDML files):
 | `EmitCss="true"` where written | paragraph and character | 10 on |
 | `SplitDocument="false"` where written | character | 10 on |
 
-TOC styles (707 in the IDML files) all have `RunIn="false"` and
-`IncludeHidden="false"`, and `SetStoryDirection="Horizontal"` where they
-have it (all but one, from DOM 7 on).
+TOC styles (851 in the IDML files) all have `RunIn="false"` and
+`IncludeHidden="false"`. `SetStoryDirection` is left out: 3 styles have
+`Vertical`.
 
 The paragraph styles' `SplitDocument` and `IncludeClass` are left out:
 a few styles have other values, whose INDD field was not found. Keyboard
@@ -375,12 +395,13 @@ Colours have their creator and alternate colour in the INDD
 
 ### Trap presets
 
-All 683 IDML files list the same two `TrapPreset` elements at the end of
+All 827 IDML files list the same two `TrapPreset` elements at the end of
 `Resources/Styles.xml`, with the same attributes: `$ID/k[No Trap
 Preset]` and `$ID/kDefaultTrapStyleName`, which every page applies. The
-converter writes the list (a `List` block of the values file). A
-document with trap presets of its own would have more; the corpus has
-none, so their INDD objects are not decoded.
+converter writes the list (a `List` block of the values file). One DOM
+12 file has a third preset, named by the user, after these two. Its INDD
+object is not decoded, so the tool leaves presets with such names out of
+the list.
 
 ### Values written where the converter writes the attribute
 
@@ -447,7 +468,7 @@ blocks of `element_values.xml`, `root_values.xml` and
 `object_style_values.xml` are not used, because those files are keyed
 by major version only.
 
-Every `InCopyExportOption` of a rectangle, oval or polygon in the 683
+Every `InCopyExportOption` of a rectangle, oval or polygon in the 827
 corpus IDML files has `IncludeGraphicProxies="true"` and
 `IncludeAllResources="false"` (`element_values.xml`; ovals from DOM 8,
 as no DOM 7 file has one). The converter writes the element with these
@@ -526,7 +547,7 @@ For example `TextDefault` keeps 264 of its 317 values,
   in a later version is kept only when at least 10 files show it.
 
 `tools/element_values.py` also collects the preference elements from all
-683 IDML files of the larger corpus (paths `Preferences/<tag>` in
+827 IDML files of the larger corpus (paths `Preferences/<tag>` in
 `src/idml/element_values.xml`), with its rule for other elements (per
 range of DOM versions, at least 10 files). The converter adds these
 values where `preference_values.xml` has none. They add, for example,
@@ -540,7 +561,7 @@ style are written only when the package has that style.
 `ImportTextIntoTables="true"`, `ImportToSelected="true"`,
 `RemoveUnmatchedExisting="false"`, `RepeatTextElements="true"` and
 `DictionaryPreference` `MergeUserDictionary="false"` are the same in all
-654 pairs. Two IDML files of the 683 differ: one in the six
+803 pairs. Two IDML files of the 827 differ: one in the six
 `XMLImportPreference` values, one in `MergeUserDictionary`. Both were
 exported by an earlier version than their INDD was last saved with, so
 they are not pairs, and the INDD cannot show which field holds the

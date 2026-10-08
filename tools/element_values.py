@@ -103,7 +103,9 @@ PREFERENCES = [
 ELEMENTS += ["Preferences/" + t for t in PREFERENCES]
 # Of those, the elements every IDML has one of (from some version on).
 SINGLETONS = {p for p in ELEMENTS if p.startswith("Document/")}
-# Elements with Self written as a whole list.
+# Elements with Self written as a whole list. Elements whose Self does
+# not start with "<tag>/$ID/" are named by the user; the converter does
+# not decode them, so they are left out of the list.
 LISTS = ["TrapPreset"]
 # Values that depend only on another attribute of the element: tag ->
 # (key attribute, attributes). For each key value, an attribute is kept
@@ -134,6 +136,14 @@ WHEN_WRITTEN = {
     "XmlStory": ["UserText"],
     "TOCStyle": ["SetStoryDirection"],
     "CharacterStyle": ["EmitCss", "SplitDocument"],
+}
+# Elements the converter writes only for one value of an attribute that
+# it reads from the INDD: path -> (attribute, value). Elements on the
+# path with another value are not collected. ClippingPathSettings is
+# written only for a clipping type 0 in chunk 0x2C1A, which IDML writes
+# as ClippingType="None" (docs/format/objects.md, clipping path).
+WRITTEN_FOR = {
+    f"{t}/ClippingPathSettings": ("ClippingType", "None") for t in ("Image", "PDF", "EPS")
 }
 # Values that are nearly constant; the exceptions are read from the INDD.
 # (path, key) -> reason, as recorded in docs/format/idml-values.md.
@@ -231,7 +241,7 @@ def scan(arg):
                 if path in wanted:
                     found[path].append(flatten(el))
         for el in root.iter():
-            if el.tag in LISTS:
+            if el.tag in LISTS and el.get("Self", "").startswith(el.tag + "/$ID/"):
                 lists[el.tag].append(prop_text(el))
             if el.tag in KEYED:
                 lists["keyed:" + el.tag].append(dict(el.attrib))
@@ -242,7 +252,9 @@ def scan(arg):
             for ch in el:
                 path = f"{el.tag}/{ch.tag}"
                 if ch.get("Self") is None and path in wanted:
-                    found[path].append(flatten(ch))
+                    cond = WRITTEN_FOR.get(path)
+                    if cond is None or ch.get(cond[0]) == cond[1]:
+                        found[path].append(flatten(ch))
     return dom, idml, dict(found), dict(lists)
 
 

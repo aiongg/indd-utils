@@ -34,7 +34,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			</FlattenerPreference>
 		</Spread>
 		<MasterSpread OverriddenPageItemProps="" ItemTransform="1 0 0 1 0 0" />
-		<Page AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName" GridStartingPoint="TopOutside" />
+		<Page AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName" />
 		<Layer ShowGuides="true" Expendable="true" />
 		<Gradient ColorEditable="true" ColorRemovable="true" SwatchCreatorID="7937" />
 		<Swatch ColorEditable="false" ColorRemovable="false" Visible="true" SwatchCreatorID="7937" />
@@ -61,8 +61,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<WatermarkPreference Present="true" WatermarkVisibility="false" WatermarkDoPrint="false" WatermarkDrawInBack="true" WatermarkText="" WatermarkFontPointSize="48" WatermarkOpacity="50" WatermarkRotation="0" WatermarkHorizontalPosition="WatermarkHCenter" WatermarkHorizontalOffset="0" WatermarkVerticalPosition="WatermarkVCenter" WatermarkVerticalOffset="0" />
 			<TaggedPDFPreference StructureOrder="UseXMLStructure" />
 		</Document>
-		<Story TrackChanges="false" AppliedNamedGrid="n">
-			<StoryPreference FrameType="TextFrameType" StoryOrientation="Horizontal" />
+		<Story TrackChanges="false">
 			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
 		</Story>
 		<XmlStory AppliedTOCStyle="n" TrackChanges="false" StoryTitle="$ID/" AppliedNamedGrid="n" />
@@ -104,7 +103,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</TextFramePreference>
 			<TextPreference UseOpticalSize="true" HighlightKinsoku="false" AddPages="EndOfStory" />
-			<TextDefault KeepAllLinesTogether="false" KeepFirstLines="2" KeepLastLines="2" DesiredGlyphScaling="100" RuleAboveOverprint="false" RuleAboveGapTint="-1" RuleAboveGapOverprint="false" RuleBelowLeftIndent="0" RuleBelowRightIndent="0" RuleBelowGapTint="-1" Position="Normal" StrikeThru="false" Skew="0" StrokeTint="-1" OverprintStroke="false" OverprintFill="false" OTFOrdinal="false" OTFFraction="false" OTFDiscretionaryLigature="false" OTFTitling="false" OTFSwash="false" UnderlineGapTint="-1" UnderlineOverprint="false" UnderlineGapOverprint="false" StrikeThroughTint="-1" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" StrikeThroughGapOverprint="false" StrikeThroughWeight="-9999" KeepWithPrevious="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" SpanColumnMinSpaceAfter="0" LastLineIndent="0" OTFSlashedZero="false" OTFHistorical="false" GradientFillLength="-1" GradientFillAngle="0" GradientStrokeLength="-1" GradientStrokeAngle="0" GradientFillStart="0 0" GradientStrokeStart="0 0" RuleBelowOverprint="false" RuleBelowGapOverprint="false" KeepRuleAboveInFrame="false" IgnoreEdgeAlignment="false" OTFMark="true" OTFLocale="true" PositionalForm="None" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection" DigitsType="DefaultDigits" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" ParagraphBreakType="Anywhere" PageNumberType="AutoPageNumber" CharacterAlignment="AlignEmCenter" Tsume="0" LeadingAki="-1" TrailingAki="-1" CharacterRotation="0" Jidori="0" ShataiMagnification="0" ShataiDegreeAngle="4500" ShataiAdjustRotation="false" ShataiAdjustTsume="true" Tatechuyoko="false" TatechuyokoXOffset="0" TatechuyokoYOffset="0" KentenTint="-1" KentenStrokeTint="-1" KentenWeight="-1" KentenOverprintFill="Auto" KentenOverprintStroke="Auto" KentenKind="None" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenXScale="100" KentenYScale="100" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" RubyTint="-1" RubyWeight="-1" RubyOverprintFill="Auto" RubyOverprintStroke="Auto" RubyStrokeTint="-1" RubyOpenTypePro="true" RubyXScale="100" RubyYScale="100" RubyType="PerCharacterRuby" RubyAlignment="RubyJIS" RubyPosition="AboveRight" RubyXOffset="0" RubyYOffset="0" RubyParentSpacing="RubyParent121Aki" RubyAutoAlign="true" RubyOverhang="false" RubyAutoScaling="false" RubyParentScalingPercent="66" RubyParentOverhangAmount="RubyOverhangOneRuby" Warichu="false" WarichuSize="50" WarichuLines="2" WarichuLineSpacing="0" WarichuAlignment="Auto" WarichuCharsAfterBreak="2" WarichuCharsBeforeBreak="2" OTFHVKana="false" OTFRomanItalics="false" CjkGridTracking="false" GlyphForm="None" GridGyoudori="0" AutoTcyIncludeRoman="false" KinsokuHangType="None" RotateSingleByteCharacters="false" RubyAutoTcyIncludeRoman="false" RubyAutoTcyAutoScale="true" AllowArbitraryHyphenation="false" ParagraphGyoudori="false" BulletsTextAfter="^t" NumberingLevel="1" NumberingContinue="true" NumberingStartAt="1" NumberingApplyRestartPolicy="true" AppliedNamedGrid="n">
+			<TextDefault KeepAllLinesTogether="false" KeepFirstLines="2" KeepLastLines="2" DesiredGlyphScaling="100" RuleAboveOverprint="false" RuleAboveGapTint="-1" RuleAboveGapOverprint="false" RuleBelowLeftIndent="0" RuleBelowRightIndent="0" RuleBelowGapTint="-1" Position="Normal" StrikeThru="false" Skew="0" StrokeTint="-1" OverprintStroke="false" OverprintFill="false" OTFOrdinal="false" OTFFraction="false" OTFDiscretionaryLigature="false" OTFTitling="false" OTFSwash="false" UnderlineGapTint="-1" UnderlineOverprint="false" UnderlineGapOverprint="false" StrikeThroughTint="-1" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" StrikeThroughGapOverprint="false" StrikeThroughWeight="-9999" KeepWithPrevious="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" SpanColumnMinSpaceAfter="0" LastLineIndent="0" OTFSlashedZero="false" OTFHistorical="false" GradientFillLength="-1" GradientFillAngle="0" GradientStrokeLength="-1" GradientStrokeAngle="0" GradientFillStart="0 0" GradientStrokeStart="0 0" RuleBelowOverprint="false" RuleBelowGapOverprint="false" KeepRuleAboveInFrame="false" IgnoreEdgeAlignment="false" OTFMark="true" OTFLocale="true" PositionalForm="None" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection" DigitsType="DefaultDigits" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" ParagraphBreakType="Anywhere" PageNumberType="AutoPageNumber" LeadingAki="-1" TrailingAki="-1" CharacterRotation="0" Jidori="0" ShataiMagnification="0" ShataiDegreeAngle="4500" ShataiAdjustRotation="false" ShataiAdjustTsume="true" Tatechuyoko="false" TatechuyokoXOffset="0" TatechuyokoYOffset="0" KentenTint="-1" KentenStrokeTint="-1" KentenWeight="-1" KentenOverprintFill="Auto" KentenOverprintStroke="Auto" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenXScale="100" KentenYScale="100" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" RubyTint="-1" RubyWeight="-1" RubyOverprintFill="Auto" RubyOverprintStroke="Auto" RubyStrokeTint="-1" RubyOpenTypePro="true" RubyXScale="100" RubyYScale="100" RubyType="PerCharacterRuby" RubyAlignment="RubyJIS" RubyPosition="AboveRight" RubyXOffset="0" RubyYOffset="0" RubyParentSpacing="RubyParent121Aki" RubyAutoAlign="true" RubyOverhang="false" RubyAutoScaling="false" RubyParentScalingPercent="66" RubyParentOverhangAmount="RubyOverhangOneRuby" Warichu="false" WarichuSize="50" WarichuLines="2" WarichuLineSpacing="0" WarichuAlignment="Auto" WarichuCharsAfterBreak="2" WarichuCharsBeforeBreak="2" OTFHVKana="false" OTFRomanItalics="false" AutoTcyIncludeRoman="false" RubyAutoTcyIncludeRoman="false" RubyAutoTcyAutoScale="true" AllowArbitraryHyphenation="false" ParagraphGyoudori="false" BulletsTextAfter="^t" NumberingLevel="1" NumberingContinue="true" NumberingStartAt="1" NumberingApplyRestartPolicy="true" AppliedNamedGrid="n">
 				<Properties>
 					<RuleAboveGapColor type="object">Swatch/None</RuleAboveGapColor>
 					<RuleAboveType type="object">StrokeStyle/$ID/Solid</RuleAboveType>
@@ -160,7 +159,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</XMLPreference>
 			<ExportForWebPreference CopyFormattedImages="false" CopyOptimizedImages="false" CopyOriginalImages="false" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="Medium" JPEGOptionsFormat="BaselineEncoding" />
-			<IndexOptions IncludeBookDocuments="false" IncludeHiddenEntries="false" IndexFormat="NestedFormat" IncludeEmptyIndexSections="false" Level2Style="ParagraphStyle/$ID/[No paragraph style]" Level3Style="ParagraphStyle/$ID/[No paragraph style]" Level4Style="ParagraphStyle/$ID/[No paragraph style]" CrossReferenceStyle="CharacterStyle/$ID/[No character style]" CrossReferenceTopicStyle="CharacterStyle/$ID/[No character style]" FollowingTopicSeparator="  " PageRangeSeparator="^=" EntryEndSeparator="" />
+			<IndexOptions IncludeHiddenEntries="false" IndexFormat="NestedFormat" IncludeEmptyIndexSections="false" Level2Style="ParagraphStyle/$ID/[No paragraph style]" Level3Style="ParagraphStyle/$ID/[No paragraph style]" Level4Style="ParagraphStyle/$ID/[No paragraph style]" CrossReferenceStyle="CharacterStyle/$ID/[No character style]" CrossReferenceTopicStyle="CharacterStyle/$ID/[No character style]" FollowingTopicSeparator="  " PageRangeSeparator="^=" EntryEndSeparator="" />
 			<IndexHeaderSetting HeaderSetName="$ID/" HeaderSetLanguage="256" IndexHeaderSetGroupOptionValue="0" />
 			<TinDocumentDataObject>
 				<Properties>
@@ -178,7 +177,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<TransparencyPreference GlobalLightAngle="120" GlobalLightAltitude="30" />
 			<LayoutGridDataInformation CharacterAki="0" HorizontalScale="100" VerticalScale="100" />
 			<StoryGridDataInformation CharacterAki="0" HorizontalScale="100" VerticalScale="100" LineAlignment="LeftOrTopLineJustify" GridAlignment="AlignEmCenter" CharacterAlignment="AlignEmCenter" GridView="GridViewEnum" CharacterCountLocation="BottomAlign" />
-			<CjkGridPreference ShowAllLayoutGrids="false" MinimumScale="50" SnapToLayoutGrid="false" ColorEveryNthCell="10" SingleLineColorMode="true" ICFMode="false" UseCircularCells="false">
+			<CjkGridPreference MinimumScale="50" ColorEveryNthCell="10" SingleLineColorMode="true" ICFMode="false" UseCircularCells="false">
 				<Properties>
 					<LayoutGridColorIndex type="enumeration">GridGreen</LayoutGridColorIndex>
 				</Properties>
@@ -397,7 +396,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<TextFrame>
 			<TextFramePreference VerticalThreshold="0" />
 		</TextFrame>
-		<TOCStyle SetStoryDirection="Horizontal" />
 	</WhenWritten>
 	<WhenWritten MinimumVersion="8">
 		<TextFrame>
