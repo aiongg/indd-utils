@@ -615,7 +615,11 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x4226,
         "KinsokuHangType",
-        Kind::Enum(&[(0, "None"), (2, "KinsokuHangForce")]),
+        Kind::Enum(&[
+            (0, "None"),
+            (1, "KinsokuHangRegular"),
+            (2, "KinsokuHangForce"),
+        ]),
         false,
     ),
     (0x4227, "BunriKinshi", Kind::Bool, false),
@@ -633,9 +637,66 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x4247,
         "KentenKind",
-        Kind::Enum(&[(0, "None"), (1, "KentenSesameDot")]),
+        Kind::Enum(&[
+            (0, "None"),
+            (1, "KentenSesameDot"),
+            (5, "KentenSmallBlackCircle"),
+        ]),
         false,
     ),
+    // Ruby, kenten and warichu (attributes.md, ruby, kenten and warichu).
+    (
+        0x4231,
+        "RubyAlignment",
+        Kind::Enum(&[(1, "RubyCenter"), (2, "RubyRight"), (4, "RubyJIS")]),
+        false,
+    ),
+    (
+        0x4235,
+        "RubyParentSpacing",
+        Kind::Enum(&[
+            (0, "RubyParentNoAdjustment"),
+            (1, "RubyParentBothSides"),
+            (2, "RubyParent121Aki"),
+        ]),
+        false,
+    ),
+    (
+        0x423C,
+        "RubyParentOverhangAmount",
+        Kind::Enum(&[
+            (0, "None"),
+            (1, "RubyOverhangOneRuby"),
+            (5, "RubyOverhangNoLimit"),
+        ]),
+        false,
+    ),
+    (
+        0x423A,
+        "RubyPosition",
+        Kind::Enum(&[(0, "AboveRight"), (1, "BelowLeft")]),
+        false,
+    ),
+    (0x4239, "RubyYOffset", Kind::Number, false),
+    (0x423F, "RubyParentScalingPercent", Kind::Percent, false),
+    (0x423E, "RubyAutoScaling", Kind::Bool, false),
+    (0x423B, "RubyAutoAlign", Kind::Bool, false),
+    (0x42B1, "RubyAutoTcyDigits", Kind::Number, false),
+    (0x42B2, "RubyAutoTcyIncludeRoman", Kind::Bool, false),
+    (0x4236, "RubyXScale", Kind::Percent, false),
+    (0x424C, "KentenXScale", Kind::Percent, false),
+    (
+        0x4281,
+        "WarichuAlignment",
+        Kind::Enum(&[(0, "LeftAlign"), (7, "Auto")]),
+        false,
+    ),
+    (0x427D, "Warichu", Kind::Bool, false),
+    (0x427E, "WarichuLines", Kind::Number, false),
+    (0x427F, "WarichuSize", Kind::Percent, false),
+    (0x4280, "WarichuLineSpacing", Kind::Number, false),
+    (0x4234, "RubyFontStyle", Kind::EmptyAsNothing, true),
+    (0x424B, "KentenFontStyle", Kind::EmptyAsNothing, true),
     (0x1DF1F, "MergeConsecutiveParaBorders", Kind::Bool, false),
     (0x1DF1A, "ParagraphBorderTopLineWeight", Kind::Number, false),
     (
@@ -1565,6 +1626,31 @@ mod tests {
             (0x1BDE, Value::Enum(2)),
         ]));
         assert!(plain.is_empty());
+    }
+
+    #[test]
+    fn writes_ruby_and_warichu_attributes() {
+        let doc = Document::default();
+        let w = Writer::for_test(&doc);
+        let mut a = Attrs::default();
+        a.values = vec![
+            (0x423B, Value::Enum(0)),
+            (0x4281, Value::Enum(7)),
+            (0x427F, Value::Double(0.5)),
+            (0x4231, Value::Enum(3)),
+            (0x4234, Value::String(String::new())),
+            (0x424B, Value::String("Regular".into())),
+        ];
+        let (plain, props) = w.text_attrs(&a);
+        assert!(plain.contains(&("RubyAutoAlign", "false".into())));
+        assert!(plain.contains(&("WarichuAlignment", "Auto".into())));
+        assert!(plain.contains(&("WarichuSize", "50".into())));
+        // Code 3 of `RubyAlignment` has no IDML value.
+        assert!(!plain.iter().any(|(k, _)| *k == "RubyAlignment"));
+        // An empty font style is `Nothing`; another is left out.
+        let names: Vec<&str> = props.iter().map(|p| p.0).collect();
+        assert_eq!(names, ["RubyFontStyle"]);
+        assert!(matches!(&props[0].2, PropValue::Text(t) if t == "Nothing"));
     }
 
     #[test]

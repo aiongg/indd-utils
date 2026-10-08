@@ -451,9 +451,9 @@ A layout of the converted sample with these two attributes reproduces
 noticeably more of the PDF's line breaks than one without them.
 
 **Ruby (0x422D, 0x422E).** IDML writes neither attribute on the root
-style, and no corpus story has them. In every pair the root style stores
-0 for 0x422D and a 4-byte 0 for 0x422E. The evidence is a sample typeset
-vertically and its print PDF:
+style. In every pair the root style stores 0 for 0x422D and a 4-byte 0
+for 0x422E. The first evidence was a sample typeset vertically and its
+print PDF:
 
 - Character runs of the sample set 0x422D to 1 together with 0x422E,
   whose value is a u32 length in characters followed by text segments
@@ -466,9 +466,12 @@ vertically and its print PDF:
   length.
 
 The converter writes `RubyString` and writes `RubyFlag` with the stored
-number (1 in every such run; the schema type is an integer). The other
-ruby settings (`RubyType`, `RubyAlignment`, `RubyPosition`, font and
-size) are not identified.
+number (1 in every such run; the schema type is an integer). Pairs
+with ruby were added later: in the corpus of 2026-10 the converter
+reproduces `RubyFlag` and `RubyString` in 185 of 185 IDML ruby ranges
+(15 distinct documents). Per-character ruby stores the readings of the
+base characters separated by U+3000, and IDML writes the same string.
+The other ruby settings are in "Ruby, kenten and warichu" below.
 
 **`Tatechuyoko` (0x425E).** Every public style that stores it has 0,
 and IDML writes `Tatechuyoko="false"` on all 240 root paragraph styles
@@ -640,7 +643,7 @@ not listed leaves the attribute out.
 | 0x4222 | `LeadingAki` | num (−1 kept) | 502 (7) |
 | 0x4223 | `TrailingAki` | num | 504 (9) |
 | 0x4225 | `KinsokuType` | 0 `KinsokuPushInFirst`, 2 `KinsokuPushOutOnly`, 3 `KinsokuPrioritizeAdjustmentAmount` | 502 (7) |
-| 0x4226 | `KinsokuHangType` | 0 `None`, 2 `KinsokuHangForce` | 498 (3) |
+| 0x4226 | `KinsokuHangType` | 0 `None`, 1 `KinsokuHangRegular`, 2 `KinsokuHangForce` | 498 (3); code 1 below |
 | 0x4227 | `BunriKinshi` | bool | 499 (4) |
 | 0x421D | `Tsume` | num | 499 (4) |
 | 0x42A6 | `CjkGridTracking` | bool | 497 (2) |
@@ -648,7 +651,7 @@ not listed leaves the attribute out.
 | 0x422F | `RubyFontSize` | num | 500 (5) |
 | 0x4248 | `KentenFontSize` | num | 500 (5) |
 | 0x4232 | `RubyType` | 0 `GroupRuby`, 1 `PerCharacterRuby` | 497 (2) |
-| 0x4247 | `KentenKind` | 0 `None`, 1 `KentenSesameDot` | 496 (1) |
+| 0x4247 | `KentenKind` | 0 `None`, 1 `KentenSesameDot`, 5 `KentenSmallBlackCircle` | 496 (1); code 5 below |
 | 0x1DF1F | `MergeConsecutiveParaBorders` | bool | 347 |
 | 0x1DF1A | `ParagraphBorderTopLineWeight` | num | 393 (67) |
 | 0x1DF1B | `ParagraphBorderBottomLineWeight` | num | 395 (69) |
@@ -674,6 +677,117 @@ values of these attributes in paragraph and character styles, text
 defaults and text ranges; 120,409 reproduced, 3 wrong (`TextDefault`
 `DesiredLetterSpacing`, `DesiredWordSpacing` and `UnderlineType` in one
 document each), the rest in stories whose text differs.
+
+### Ruby, kenten and warichu
+
+These attributes are in story runs (character and paragraph runs, chunk
+0x262) and in style chunk 0x23F. They were found in the corpus of
+2026-10 (803 pairs, 606 trustworthy) by aligning IDML character and
+paragraph ranges with the INDD run at the same text offset, and styles
+by kind and name. The evidence:
+
+- 24 character ranges in 4 pairs store a full block of CJK attributes
+  (150 to 152 attributes each), all with default values, and their IDML
+  ranges write every ruby, kenten and warichu attribute. Values that
+  occur only once in the block identify the field: 0.66 ↔ 66, 0.5 ↔ 50,
+  4 ↔ `RubyJIS`, 7 ↔ `Auto`.
+- One paragraph style (a pair of version 13) sets eight ruby attributes
+  to other values, and one ruby range (another pair of version 13) sets
+  five others.
+- 326 ranges and 9 styles in 6 pairs set `RubyAutoAlign="false"` and
+  `WarichuAlignment="LeftAlign"`.
+- 205 trustworthy ranges in 13 documents have `RubyXScale` and
+  `KentenXScale`, 44 have `RubyAutoScaling`, and 573 ranges and styles
+  have an empty ruby and kenten font style.
+
+Over all these items, each ID below is present exactly when the IDML
+element has the attribute, and every value matches. Encodings: bool =
+u16, 1 `true`; pct = f64 fraction, written ×100; code = u16, by the
+table; string = flag byte and in-object string.
+
+| ID | IDML | Encoding | Values seen (items) |
+|---|---|---|---|
+| 0x4231 | `RubyAlignment` | code: 1 `RubyCenter`, 2 `RubyRight`, 4 `RubyJIS` | 4: 24 ranges; 2: 1 range; 1: 1 style |
+| 0x4235 | `RubyParentSpacing` | code: 0 `RubyParentNoAdjustment`, 1 `RubyParentBothSides`, 2 `RubyParent121Aki` | 2: 24; 0: 1; 1: 1 |
+| 0x423C | `RubyParentOverhangAmount` | code: 0 `None`, 1 `RubyOverhangOneRuby`, 5 `RubyOverhangNoLimit` | 1: 24; 5: 1; 0: 1 |
+| 0x423A | `RubyPosition` | code: 0 `AboveRight`, 1 `BelowLeft` | 0: 24; 1: 1 |
+| 0x4239 | `RubyYOffset` | f64, points | 0: 24; −1.4173228: 1 |
+| 0x423F | `RubyParentScalingPercent` | pct | 0.66: 24; 0.4: 1 |
+| 0x423E | `RubyAutoScaling` | bool | true: 21 ranges and 1 style; false: 24 |
+| 0x423B | `RubyAutoAlign` | bool | false: 326 ranges and 9 styles; true: 24 |
+| 0x42B1 | `RubyAutoTcyDigits` | u16 number | 0: 24; 2: 3 styles; 5: 1 |
+| 0x42B2 | `RubyAutoTcyIncludeRoman` | bool | false: 24; true: 1 |
+| 0x4236 | `RubyXScale` | pct | 222 ranges and 1 style, 80.9 to 113.1 |
+| 0x424C | `KentenXScale` | pct | the same items; always equal to 0x4236 |
+| 0x4234 | `RubyFontStyle` (Properties) | string; empty = enumeration `Nothing` | 512 ranges and 61 styles, all empty |
+| 0x424B | `KentenFontStyle` (Properties) | as 0x4234 | the same items |
+| 0x4281 | `WarichuAlignment` | code: 0 `LeftAlign`, 7 `Auto` | 0: 326 ranges and 9 styles; 7: 24 |
+| 0x427D | `Warichu` | bool | false: 24 ranges; true: print PDF, below |
+| 0x427E | `WarichuLines` | u16 number | 2: 24; see below |
+| 0x427F | `WarichuSize` | pct | 0.5 ↔ 50: 24; print PDF, below |
+| 0x4280 | `WarichuLineSpacing` | f64, points | 0: 24; print PDF, below |
+
+`KentenKind` (0x4247) code 5 is `KentenSmallBlackCircle` (1 range).
+`KinsokuHangType` (0x4226) code 1 is `KinsokuHangRegular`: 31 styles and
+120 ranges over all pairs (5 styles, 8 paragraph ranges and 6 story
+ranges in trustworthy pairs), and no other value goes with code 1.
+
+**How IDs with equal values were told apart.**
+
+- `RubyAutoAlign` and `WarichuAlignment` are always present together,
+  with (1, 7) for (`true`, `Auto`) and (0, 0) for (`false`,
+  `LeftAlign`). 0x423B has value type 0x1B03, which 17 attributes use
+  (booleans and `RubyType`), and over all styles the values of that
+  type are 0 or 1 (9,186 of 9,186). 0x4281 has its own value type and
+  holds 7. So 0x423B is the boolean.
+- `RubyYOffset`, `RubyPosition` and `RubyParentScalingPercent` are in
+  the same 25 items. The style's values −1.4173 (f64), 1 (u16) and 0.4
+  (fraction) fit only one attribute each.
+- `RubyAlignment`, `RubyParentSpacing`, `RubyParentOverhangAmount`,
+  `RubyAutoTcyDigits` and `RubyAutoTcyIncludeRoman`: the range sets (2,
+  0, 5, 5, 1) and the style (1, 1, 0, none, none). 0x423C and 0x42B1
+  are both 5 in the range; the 24 default ranges (1 ↔
+  `RubyOverhangOneRuby`, 0 ↔ `RubyAutoTcyDigits="0"`) and the style
+  (0x423C = 0 ↔ `None`, no 0x42B1) separate them.
+- Ruby or kenten for 0x4234/0x424B and 0x4236/0x424C: the two values are
+  equal in every pair item. The ruby strand (`objects.md`) decides it:
+  its records hold only ruby attributes, including 0x4234 (5,145 runs)
+  and 0x4236 (5,297 runs), and never 0x424B, 0x424C or a kenten ID
+  (0x4247, 0x4248). So 0x4234 and 0x4236 are the ruby attributes.
+
+**Values without an IDML pair.** 0x423C = 2 (6 styles), 0x4281 = 2 (5
+styles), 0x423F = 0.75 (5 runs) and non-empty font styles (`Regular` in
+104 runs) occur only in files without IDML. The converter leaves them
+out.
+
+**Warichu.** No pair has warichu switched on. The evidence for
+`Warichu`, `WarichuSize` and `WarichuLineSpacing` is a third-party
+sample typeset vertically (version 21, no IDML) and its print PDF:
+
+- A run of 7 characters sets only 0x427D = 1. In the PDF the paragraph
+  is 8.504 pt and the run is set at 4.252 pt (50 %) in two rows of 3 and
+  4 characters, with baselines 4.252 pt apart (row pitch = size + 0),
+  between full-size characters. The PDFs of three saved revisions show
+  the same.
+- A run of 36 characters sets 0x427D = 1, 0x427F = 0.6, 0x4280 =
+  0.708661, 0x4281 = 0, and 0x428E = 0x428F = 1. In the PDF the
+  paragraph is 6.378 pt and the run is 3.827 pt (0.600 × 6.378) in two
+  rows that start at the same position, with baselines 4.535 pt apart
+  (3.827 + 0.708), and it continues on the next line in two rows again.
+
+So 0x427D switches warichu on, 0x427F is the size as a fraction of the
+point size, and 0x4280 is the extra space between the rows in points.
+Both runs have two rows, the second with 0x428E and 0x428F set to 1, and
+the root style stores 0x427E = 2. So neither 0x428E nor 0x428F is the
+number of rows. 0x427E is `WarichuLines`: value type 0x1B10 is used
+only by 0x427E, 0x428E and 0x428F, and 0x427E is the remaining one.
+
+**Not mapped.** The 24 default ranges also hold IDs for the ruby and
+kenten fonts, colours, tints, overprint, weights, Y scales and offsets,
+kenten placement and characters, and two warichu IDs (0x428E, 0x428F;
+2 and 2 in every IDML range, so their order is not known). Each holds
+the default value in every pair, and several IDs hold the same value, so
+none of them can be told apart. The converter does not write them.
 
 ### Root styles and text defaults
 

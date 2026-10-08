@@ -1435,6 +1435,20 @@ cell field is 1 for footnotes and 0 for the story, deleted texts and
 notes. Each footnote, note and deleted-text stretch ends with U+000D
 (2,577 of 2,577), which IDML does not write, as for a table cell.
 
+**Ruby strand (run kind 0x420D).** A story can list a strand of class
+0x420C (chunk 0x4216: u32 data object, u32 story) whose data objects
+(class 0x42B9) have chunk 0x262 with run kind 0x420D. The runs cover the
+whole story text. After the run length a record has u16 1 if attributes
+follow (0 otherwise), a u16 count and text attribute records
+(`attributes.md`). Over the little-endian corpus: 911 stories, 11,514
+runs, 7,442 with attributes. The records hold only ruby attributes, a
+copy of those on the character runs. IDML does not use the copy: all
+185 IDML ruby ranges of the pairs have the character run's values, and
+where the two differ (5 ranges, whose strand string lacks the U+3000
+separators; 16 ranges with 0x423E only on the character run) IDML
+follows the character run. IDs found only in the strand, such as 0x4232
+in 6,176 records, are not in IDML. The converter skips this strand.
+
 **Notes (class 0xA429).** A note is owned by a U+FEFF (186 of 186), and
 IDML writes a `Note` element in its place, inside the character range;
 the `Note` holds the note's text stretch as paragraph and character

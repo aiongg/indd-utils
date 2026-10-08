@@ -317,7 +317,9 @@ enum Layout {
 fn text_layout(id: u32) -> Option<Layout> {
     Some(match id {
         0x1B4A => Layout::Point,
-        0x1B02 | 0x1A414 | 0x1A423 | 0x1A424 => Layout::String,
+        // Ruby and kenten font styles are strings too (attributes.md,
+        // ruby, kenten and warichu).
+        0x1B02 | 0x1A414 | 0x1A423 | 0x1A424 | 0x4234 | 0x424B => Layout::String,
         // Stroke types of rules, underline and strikethrough.
         0x1B71 | 0x1B72 | 0x1B95 | 0x1B9D => Layout::RefOrCode,
         0x422E => Layout::Text,
@@ -609,6 +611,9 @@ mod tests {
         // Font style: flag byte, then an in-object string.
         let b = [0, 2, 0, 4, 0, 4, 0x40, b'B', b'o', b'l', b'd'];
         assert_eq!(text_value(0x1B02, &b), Value::String("Bold".into()));
+        // Ruby font style: an empty string whose second byte is 1.
+        let b = [0, 2, 1, 0, 0];
+        assert_eq!(text_value(0x4234, &b), Value::String(String::new()));
         // Ruby text: u32 length, then segments.
         let b = [2, 0, 0, 0, 2, 0x40, b'a', b'b'];
         assert_eq!(text_value(0x422E, &b), Value::Text("ab".into()));

@@ -387,6 +387,7 @@ impl<'a> Reader<'a> {
                             };
                             list.push((len, style, attrs));
                         }
+                        strand::RUBY => {}
                         _ => {
                             if let Some(r) = self.db.recorder() {
                                 r.unknown_strand_kind(kind)

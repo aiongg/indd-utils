@@ -288,6 +288,9 @@ pub mod strand {
     pub const TEXT_OWNER: u32 = 0x2A4;
     /// Tracked changes: user, kind and time of each change.
     pub const CHANGES: u32 = 0xA466;
+    /// A copy of the ruby attributes, which IDML does not use
+    /// (`objects.md`, ruby strand).
+    pub const RUBY: u32 = 0x420D;
 }
 
 /// Text wrap mode codes.

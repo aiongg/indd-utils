@@ -65,6 +65,8 @@ pub(super) enum Kind {
     String,
     /// A string, or the empty string for `Nothing`.
     StringOrNothing,
+    /// The empty string, written as `Nothing`; other strings are left out.
+    EmptyAsNothing,
     /// Text; left out when empty.
     Text,
     /// A language object, written as `$ID/<name>`.
@@ -213,6 +215,10 @@ impl Writer<'_> {
                     text("string", s)
                 }
             }),
+            Kind::EmptyAsNothing => v
+                .as_string()
+                .filter(|s| s.is_empty())
+                .map(|_| text("enumeration", "Nothing".into())),
             Kind::Text => match v {
                 Value::Text(t) if !t.is_empty() => Some(text("string", t.clone())),
                 _ => None,
