@@ -65,7 +65,14 @@ separately (rule and evidence: `docs/measurement.md`).
 ## Commands
 
 - `cargo test` (all tests), `cargo clippy --all-targets`, `cargo fmt`.
+- `tools/check_wasm.sh [file.indd...]`: build the library for
+  `wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`),
+  check that a conversion there imports no host function, and compare
+  its output with the native output for the fixtures (or the files
+  given). Needs Node.js for the last two steps. The library's conversion
+  path must not use `std::fs`, clocks or threads.
 - `python3 -I tools/fetch_fixtures.py`: fetch the fixture files before
+
   `cargo test`. To add a fixture, add its pinned URL, size and SHA-256 to
   `tests/fixtures/manifest.json` and its licence and source to
   `tests/fixtures/README.md`.

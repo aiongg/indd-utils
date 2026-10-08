@@ -177,4 +177,6 @@ Each cites `idml-values.md`.
 
 | `tools/compare.py` | fidelity against the reference IDML files, schema validation |
 | `tools/diff_outputs.py` | byte-for-byte output of two revisions over the corpus |
+| `tools/check_wasm.sh` | the library builds for `wasm32-unknown-unknown`, a conversion there imports no host function, and its output is the same as native |
+
 | `indd audit`, `tools/audit_corpus.py` | what the converter does not read yet |

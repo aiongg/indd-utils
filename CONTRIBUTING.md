@@ -45,6 +45,9 @@ accepted.
    document.
 4. For schema validation, get the IDML RelaxNG schemas and Jing and keep
    them outside the repository (see `tools/validate.sh`).
+5. For the WebAssembly check, run `rustup target add
+   wasm32-unknown-unknown` and install Node.js.
+
 
 ## Checks
 
@@ -56,7 +59,9 @@ cargo fmt
 cargo clippy --all-targets
 cargo test --release
 cargo doc --no-deps
+tools/check_wasm.sh                           # WebAssembly build, same output as native
 python3 -I tools/diff_outputs.py              # output of HEAD vs the working tree
+
 cargo build --release && python3 -I tools/compare.py --exclude own/
 ```
 

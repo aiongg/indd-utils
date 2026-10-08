@@ -60,6 +60,11 @@ for warning in &conversion.warnings {
 writer. A conversion keeps no global state, so several documents can be
 converted on different threads at once.
 
+The library also builds for WebAssembly (`wasm32-unknown-unknown`):
+`indd::convert` needs no file system or other host function, and gives
+the same package as a native build (`tools/check_wasm.sh`).
+
+
 ## Supported versions
 
 | Versions | Distinct samples (little-endian, big-endian) | State |
