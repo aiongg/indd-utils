@@ -39,7 +39,11 @@ accepted.
 1. Install a recent stable Rust and Python 3.
 2. `python3 -I tools/fetch_fixtures.py` downloads the test fixtures and
    checks their SHA-256.
-3. Put your samples in `corpus/` and run
+3. `python3 -I tools/fetch_corpus.py` downloads the openly licensed part
+   of the corpus (about 5.5 GB, listed with source and licence in
+   `tools/corpus-manifest.json`) into `corpus/open/` and checks every
+   file's SHA-256. `--source SLUG` fetches one source, `--list` lists
+   them. Put other samples in `corpus/` too, and run
    `python3 -I tools/inventory.py corpus/` to list their versions and
    pairs. A pair is an INDD file with an IDML exported from the same
    document.
