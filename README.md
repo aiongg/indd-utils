@@ -69,14 +69,16 @@ the same package as a native build (`tools/check_wasm.sh`).
 
 ## Supported versions
 
-| Versions | Distinct samples (little-endian, big-endian) | State |
-|---|---|---|
-| InDesign 3.0 and 4.0 | 21, 46 | Convert. Some object layouts differ from later versions ([`big-endian.md`](docs/format/big-endian.md)). Document preferences, object style text frame settings, the composite font (3.0) and the page number style (3.0) are left out with warnings. |
-| InDesign 5.0 and 6.0 | 175, 6 | Convert. Document preferences are left out with a warning. |
-| InDesign 7.0–7.5 | 526, 40 | Convert. Document preferences are left out with a warning. |
-| InDesign 8.0–21.6 | 3,368, 70 | Convert. Tables from 9.2 are not read. |
+| Versions | Distinct samples | State |
+|---|---:|---|
+| InDesign 1.x | 8 | Not supported (different container); reported as such. |
+| InDesign 3.0 and 4.0 | 67 | Convert. Some object layouts differ from later versions ([`big-endian.md`](docs/format/big-endian.md)). Document preferences, object style text frame settings, the composite font (3.0) and the page number style (3.0) are left out with warnings. |
+| InDesign 5.0 and 6.0 | 181 | Convert. Document preferences are left out with a warning. |
+| InDesign 7.0–7.5 | 566 | Convert. Document preferences are left out with a warning. |
+| InDesign 8.0–21.6 | 3,438 | Convert. Tables from 9.2 are not read. |
 
-The byte order flag in the header applies to object data only; the
+Files in both byte orders convert. Files saved on PowerPC Macs are
+big-endian; the byte order applies to object data only, and the
 database pages are little-endian in every file.
 
 ## What converts
