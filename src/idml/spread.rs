@@ -332,6 +332,9 @@ impl Writer<'_> {
         if let Some(l) = locked {
             x.attr("Locked", l.to_string());
         }
+        if let Some(a) = p.allow_overrides {
+            x.attr("AllowOverrides", a.to_string());
+        }
         if self.doc.version.major >= 8 {
             for (name, counts) in [
                 "ParentInterfaceChangeCount",

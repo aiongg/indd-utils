@@ -87,6 +87,8 @@ pub mod chunk {
     /// Document users: u32 count, then per user a flag byte, the name
     /// and u32 colour.
     pub const DOC_USERS: u32 = 0xA443;
+    /// Document label: u16 0x7B7B, u32 count, flagged key and value strings.
+    pub const DOC_LABEL: u32 = 0x1630B;
     pub const SPREAD_CHILDREN: u32 = 0x503;
     pub const SPREAD_TRANSFORM: u32 = 0x56E;
     pub const SPREAD_BINDING: u32 = 0x1B8;
@@ -124,6 +126,8 @@ pub mod chunk {
     pub const ITEM_CONTENT: u32 = 0x1623;
     pub const ITEM_PATHS: u32 = 0x162B;
     pub const ITEM_HIERARCHY: u32 = 0x15B;
+    /// u32: 1 when a master page item cannot be overridden.
+    pub const ITEM_ALLOW_OVERRIDES: u32 = 0x142D;
     pub const COLUMN_FRAME_LIST: u32 = 0x220;
     pub const FRAME_LIST_FRAMES: u32 = 0x205;
     pub const STORY_STRANDS: u32 = 0x223;
@@ -138,6 +142,8 @@ pub mod chunk {
     pub const STYLE_INFO: u32 = 0x230;
     pub const ITEM_ATTRS: u32 = 0x6E03;
     pub const STYLE_ATTRS: u32 = 0x23F;
+    /// Style export settings: tag maps, then u16 flags.
+    pub const STYLE_EXPORT: u32 = 0x28F0;
     pub const LANGUAGE_NAME: u32 = 0x2D0F;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
     /// Anchored object settings, of an anchor or an object style.

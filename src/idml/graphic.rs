@@ -267,7 +267,12 @@ impl Writer<'_> {
             x.attr("AppliedObjectStyle", style);
         }
         x.attr("ItemTransform", matrix(&g.transform));
-        self.settings(x, &g.props, None);
+        // IDML has no `AllowOverrides` on placed graphics.
+        let props = crate::model::ItemProps {
+            allow_overrides: None,
+            ..g.props.clone()
+        };
+        self.settings(x, &props, None);
         if g.kind == GraphicKind::Image {
             for (name, v) in self.item_attr_values(&g.attrs) {
                 if name == "FillColor" {

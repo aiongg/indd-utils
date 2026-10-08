@@ -64,6 +64,14 @@ impl Writer<'_> {
         }
         // `false` in every corpus IDML (docs/format/idml-values.md).
         x.attr("AccurateLABSpots", "false");
+        if !doc.label.is_empty() {
+            x.start("Properties").start("Label");
+            for (k, v) in &doc.label {
+                x.empty("KeyValuePair", &[("Key", k.clone()), ("Value", v.clone())]);
+            }
+            x.end();
+            x.end();
+        }
         self.languages(&mut x);
         x.empty("idPkg:Graphic", &[("src", "Resources/Graphic.xml".into())]);
         x.empty("idPkg:Fonts", &[("src", "Resources/Fonts.xml".into())]);

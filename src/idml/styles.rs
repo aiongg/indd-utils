@@ -791,6 +791,9 @@ impl Writer<'_> {
             {
                 x.attr("ExtendedKeyboardShortcut", e);
             }
+            for (name, value) in export_flags(s, v.major) {
+                x.attr(name, value);
+            }
             // Other styles get the values every IDML has on them.
             x.attrs_missing(n.attrs.iter());
             x.attrs_missing(values::when_written(tag, doc.version.major).iter());
@@ -817,4 +820,31 @@ impl Writer<'_> {
         Self::properties_with(x, &props, &extra);
         x.end();
     }
+}
+
+/// `SplitDocument`, `EmitCss` and `IncludeClass` of a paragraph or
+/// character style: the first u16 values after the tag map count of
+/// chunk 0x28F0, or `false`, `true`, `true` without the chunk. IDML has
+/// the first two from DOM 10, the third from DOM 13
+/// (`docs/format/objects.md`, styles).
+fn export_flags(s: &Style, major: u32) -> Vec<(&'static str, &'static str)> {
+    let need = match major {
+        0..=9 => return Vec::new(),
+        10..=12 => 2,
+        _ => 3,
+    };
+    let values: Vec<u16> = match &s.export_flags {
+        Some(f) if f.len() >= need => f[..need].to_vec(),
+        Some(_) => return Vec::new(),
+        None => [0, 1, 1][..need].to_vec(),
+    };
+    ["SplitDocument", "EmitCss", "IncludeClass"]
+        .into_iter()
+        .zip(values)
+        .filter_map(|(name, v)| match v {
+            0 => Some((name, "false")),
+            1 => Some((name, "true")),
+            _ => None,
+        })
+        .collect()
 }

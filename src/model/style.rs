@@ -22,6 +22,12 @@ pub struct Style {
     /// Keyboard shortcut: u32 key 10 bytes before the name's flag byte,
     /// then the two bytes 6 and 5 before it (`docs/format/objects.md`).
     pub shortcut: Option<(u32, u8, u8)>,
+    /// The u16 values after the tag map count of the export settings
+    /// (chunk 0x28F0): `SplitDocument`, `EmitCss` and, from InDesign 13,
+    /// `IncludeClass` (`docs/format/objects.md`, styles). Empty when the
+    /// chunk has tag maps, whose layout is not known; `None` without the
+    /// chunk.
+    pub export_flags: Option<Vec<u16>>,
 }
 
 /// A table of contents style (class 0x11605), from chunk 0x11605: a flag
@@ -175,6 +181,17 @@ impl<'a> Reader<'a> {
             }
             _ => Attrs::default(),
         };
+        // Export settings: u32 count of tag maps, the maps, then u16 flags.
+        let export_flags = self.chunk(uid, chunk::STYLE_EXPORT)?.map(|d| {
+            if self.enc().u32_at(&d, 0) == Some(0) {
+                (4..d.len().saturating_sub(1))
+                    .step_by(2)
+                    .filter_map(|o| self.enc().u16_at(&d, o))
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        });
         Ok(Some(Style {
             uid,
             name,
@@ -186,6 +203,7 @@ impl<'a> Reader<'a> {
             imported,
             unique_id,
             shortcut,
+            export_flags,
         }))
     }
 

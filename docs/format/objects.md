@@ -65,6 +65,13 @@ are in `big-endian.md`.
 | 0x222 | Two UID lists: the stories, then the XML backing story; IDML `StoryList` is both (`xml.md`) |
 | 0x4C01 | UID list: sections |
 | 0xA443 | Document users: u32 count, then per user a flag byte, the name as an in-object string, u32 colour |
+| 0x1630B | Label: u16 0x7B7B, u32 count *n*, then *n* pairs of key and value, each a flag byte (1 for a built-in key) and an in-object string |
+
+**Document label.** IDML writes `Document/Properties/Label` with one
+`KeyValuePair` (`Key`, `Value`) per stored pair, in stored order; the
+`$ID/` rule of the flag applies. Without the chunk there is no `Label`.
+Evidence: 436 of the 438 trustworthy pairs whose IDML has a document
+label match (one differs, one has no chunk).
 
 **Script byte of the user names.** The second byte of each user name's
 in-object string (the byte after the string tag) is a script code: 0
@@ -598,6 +605,7 @@ IDML value is the default in the table.
 | 0x2C10 (groups: 0x418) | u8 1 if a built-in key, then an in-object string | `Name`: the string, or `$ID/` and the key | `$ID/` |
 | 0x2C32 | u16, 0 = hidden | `Visible` | `true` |
 | 0x2C2D | u32, 1 = locked | `Locked` | `false` |
+| 0x142D | u32, 1 = overrides not allowed | `AllowOverrides` on items of master spreads (the spread in chunk 0x15B is a master spread): `false` for 1, else `true`; no item of a document spread and no placed graphic has it (11,791 of 11,791 trustworthy items) | `true` on master spreads |
 | 0x21D4E | u32 count *n*, *n* pairs of u32 | `ParentInterfaceChangeCount`: the numbers | empty |
 | 0x21D50 | same | `TargetInterfaceChangeCount` | empty |
 | 0x21D53 | same | `LastUpdatedInterfaceChangeCount` | empty |
@@ -1383,6 +1391,19 @@ these rows; character styles with *m1* = 1 (11 styles: `257 83`, `257 84`,
 reproduced for 5,273 of 5,273 paragraph styles and 2,191 of 2,202
 character styles. IDML has `ExtendedKeyboardShortcut` from DOM 15 on;
 the converter writes it from version 15.
+
+**Export flags (chunk 0x28F0).** u32 count of export tag maps, the
+maps, then u16 values: `SplitDocument`, `EmitCss` and, from DOM 13,
+`IncludeClass` (1 `true`, 0 `false`); later versions add more u16
+values. The tag maps (`StyleExportTagMap`) are not decoded, so the
+flags are read only when the count is 0. IDML has `SplitDocument` and
+`EmitCss` from DOM 10 and `IncludeClass` from DOM 13 on paragraph and
+character styles. Without the chunk the values are `false`, `true`,
+`true`. Evidence (trustworthy pairs, styles other than the root
+styles): every converted value equals the IDML (paragraph styles
+`SplitDocument` 3,751, `IncludeClass` 3,098, `EmitCss` 3,865; character
+styles 1,962, 1,717, 1,962). The styles with tag maps keep the observed
+values or none.
 
 **Empty nested, line and GREP styles.** Paragraph styles have
 `EmptyNestedStyles`, `EmptyLineStyles` and `EmptyGrepStyles` (DOM 8.1,

@@ -128,6 +128,9 @@ pub struct ItemProps {
     pub hidden: bool,
     /// Chunk 0x2C2D is 1.
     pub locked: bool,
+    /// `AllowOverrides`, for items of master spreads only: `false` when
+    /// chunk 0x142D is 1 (`docs/format/objects.md`).
+    pub allow_overrides: Option<bool>,
     /// Layout constraint flags (chunk 0x22228).
     pub layout_constraints: Option<u8>,
     /// The parent, target and last updated interface change counts
@@ -506,8 +509,22 @@ impl<'a> Reader<'a> {
             }
             None => None,
         };
+        let on_master = self
+            .chunk(uid, chunk::ITEM_HIERARCHY)?
+            .and_then(|d| self.enc().u32_at(&d, 0))
+            .is_some_and(|s| self.class(s) == Some(class::MASTER_SPREAD));
+        let allow_overrides = if on_master {
+            Some(
+                self.chunk(uid, chunk::ITEM_ALLOW_OVERRIDES)?
+                    .and_then(|d| self.enc().u32_at(&d, 0))
+                    != Some(1),
+            )
+        } else {
+            None
+        };
         Ok(ItemProps {
             name,
+            allow_overrides,
             hidden: self
                 .chunk(uid, chunk::ITEM_VISIBLE)?
                 .is_some_and(|d| d.len() >= 2 && self.cursor(&d).u16().ok() == Some(0)),

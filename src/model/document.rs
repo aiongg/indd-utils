@@ -22,6 +22,9 @@ pub struct Document {
     pub users: Vec<(u8, String)>,
     /// The script byte of the last document user's name.
     pub users_script: Option<u8>,
+    /// The document's label (chunk 0x1630B): key and value, as IDML
+    /// writes them.
+    pub label: Vec<(String, String)>,
     /// Index sort groups (preferences chunk 0x1307E), in order: name,
     /// include flag and header variant.
     pub index_groups: Vec<(String, bool, u16)>,
@@ -182,6 +185,10 @@ impl<'a> Reader<'a> {
         let constant_shade = self.constant_shade();
         let assignments = self.assignments();
         let users_script = self.users_script(DOC);
+        let label = self.label(DOC).unwrap_or_else(|e| {
+            self.warn(format!("document label left out: {e}"));
+            Vec::new()
+        });
         let users = self.users(DOC).unwrap_or_else(|e| {
             self.warn(format!("document users left out: {e}"));
             Vec::new()
@@ -240,6 +247,7 @@ impl<'a> Reader<'a> {
             table_styles: objects.table_styles,
             users,
             users_script,
+            label,
             sections,
             text_variables: objects.text_variables,
             hyperlinks: objects.hyperlinks,

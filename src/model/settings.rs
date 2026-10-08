@@ -173,6 +173,26 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
+    /// The label of an object (chunk 0x1630B of the document): u16 0x7B7B,
+    /// u32 count, then key and value of each pair as a flag byte (1 for a
+    /// built-in key) and an in-object string. See `docs/format/objects.md`.
+    pub(super) fn label(&self, uid: u32) -> Result<Vec<(String, String)>, Error> {
+        let Some(d) = self.chunk(uid, chunk::DOC_LABEL)? else {
+            return Ok(Vec::new());
+        };
+        let mut c = self.cursor(&d);
+        if c.u16()? != 0x7B7B {
+            return Err(Error::Corrupt("label of unknown layout".into()));
+        }
+        let n = c.u32()? as usize;
+        if n > d.len() / 8 {
+            return Err(Error::Corrupt(format!("{n} label pairs")));
+        }
+        (0..n)
+            .map(|_| Ok((c.name()?.idml(), c.name()?.idml())))
+            .collect()
+    }
+
     /// The script byte of the last document user's name: the second byte
     /// of its in-object string (`objects.md`, document users). Only read
     /// in little-endian files.
