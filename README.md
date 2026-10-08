@@ -77,9 +77,8 @@ the same package as a native build (`tools/check_wasm.sh`).
 | InDesign 7.0–7.5 | 566 | Convert. Document preferences are left out with a warning. |
 | InDesign 8.0–21.6 | 3,438 | Convert. Tables from 9.2 are not read. |
 
-Files in both byte orders convert. Files saved on PowerPC Macs are
-big-endian; the byte order applies to object data only, and the
-database pages are little-endian in every file.
+Files in both byte orders convert. The byte order applies to object
+data only; the database pages are little-endian in every file.
 
 ## What converts
 
