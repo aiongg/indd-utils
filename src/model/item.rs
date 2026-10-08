@@ -366,16 +366,18 @@ pub struct TextFramePreferences {
 /// damaged file cannot exhaust the stack.
 pub(super) const MAX_ITEM_DEPTH: usize = 100;
 
-/// The IDML element of a frame or shape: by the shape code of chunk
-/// 0x6204 (`code`), and where it has none (9, or no chunk), by the path.
-/// See `docs/format/objects.md`, page items.
-pub(super) fn classify(paths: &[Path], code: Option<u32>) -> Shape {
-    match code {
-        Some(1) => return Shape::GraphicLine,
-        Some(2 | 3) => return Shape::Rectangle,
-        Some(4 | 5) => return Shape::Oval,
-        Some(0 | 6..=8) => return Shape::Polygon,
-        _ => {}
+/// The IDML element of a frame or shape. `shape` is the u16 flag and the
+/// u32 shape code of chunk 0x6204: with flag 1 the code decides; with
+/// flag 0 or without the chunk, the path. See `docs/format/objects.md`,
+/// page items.
+pub(super) fn classify(paths: &[Path], shape: Option<(u16, u32)>) -> Shape {
+    if let Some((1, code)) = shape {
+        return match code {
+            1 => Shape::GraphicLine,
+            2 | 3 => Shape::Rectangle,
+            4 | 5 => Shape::Oval,
+            _ => Shape::Polygon,
+        };
     }
     let [path] = paths else {
         return Shape::Polygon;
@@ -384,7 +386,7 @@ pub(super) fn classify(paths: &[Path], code: Option<u32>) -> Shape {
         .points
         .iter()
         .all(|p| p.left == p.anchor && p.right == p.anchor);
-    if path.open && path.points.len() == 2 {
+    if path.open && path.points.len() == 2 && corners {
         return Shape::GraphicLine;
     }
     if !path.open && path.points.len() == 4 && corners {
@@ -406,10 +408,27 @@ pub(super) fn classify(paths: &[Path], code: Option<u32>) -> Shape {
             .points
             .iter()
             .all(|p| p.left != p.anchor && p.kind == 0)
+        && oval_anchors(path)
     {
         return Shape::Oval;
     }
     Shape::Polygon
+}
+
+/// Whether the second and fourth anchors of a four-point path lie on the
+/// midpoint of the first and third, along the axis on which those two
+/// differ (within 1e-8).
+fn oval_anchors(path: &Path) -> bool {
+    let a: Vec<(f64, f64)> = path.points.iter().map(|p| p.anchor).collect();
+    let [p0, p1, p2, p3] = a[..] else {
+        return false;
+    };
+    let on = |m: f64, u: f64, v: f64| (u - m).abs() <= 1e-8 && (v - m).abs() <= 1e-8;
+    if (p0.0 - p2.0).abs() < (p0.1 - p2.1).abs() {
+        on((p0.1 + p2.1) / 2.0, p1.1, p3.1)
+    } else {
+        on((p0.0 + p2.0) / 2.0, p1.0, p3.0)
+    }
 }
 
 impl<'a> Reader<'a> {
@@ -805,10 +824,10 @@ impl<'a> Reader<'a> {
             }
             kind
         } else {
-            let code = self
+            let shape = self
                 .chunk(uid, chunk::ITEM_SHAPE)?
-                .and_then(|d| self.enc().u32_at(&d, 2));
-            ItemKind::Shape(classify(&paths, code))
+                .and_then(|d| Some((self.enc().u16_at(&d, 0)?, self.enc().u32_at(&d, 2)?)));
+            ItemKind::Shape(classify(&paths, shape))
         };
         Ok(Some(PageItem {
             uid,

@@ -275,13 +275,45 @@ mod tests {
             classify(std::slice::from_ref(&rect), None),
             Shape::Rectangle
         );
-        // The stored shape code decides where there is one.
-        assert_eq!(classify(&[rect], Some(7)), Shape::Polygon);
+        // With flag 1 the shape code decides; with flag 0 the path.
+        assert_eq!(
+            classify(std::slice::from_ref(&rect), Some((1, 7))),
+            Shape::Polygon
+        );
+        assert_eq!(
+            classify(std::slice::from_ref(&rect), Some((0, 4))),
+            Shape::Rectangle
+        );
+        let diamond = Path {
+            points: vec![
+                corner(0., 1.),
+                corner(1., 0.),
+                corner(2., 1.),
+                corner(1., 2.),
+            ],
+            open: false,
+        };
+        assert_eq!(classify(&[diamond], Some((0, 2))), Shape::Polygon);
         let line = Path {
             points: vec![corner(0., 0.), corner(3., 1.)],
             open: true,
         };
-        assert_eq!(classify(&[line], Some(9)), Shape::GraphicLine);
+        assert_eq!(
+            classify(std::slice::from_ref(&line), Some((0, 9))),
+            Shape::GraphicLine
+        );
+        assert_eq!(classify(&[line], Some((1, 9))), Shape::Polygon);
+        let curve = Path {
+            points: vec![
+                PathPoint {
+                    left: (-1., 0.),
+                    ..corner(0., 0.)
+                },
+                corner(3., 1.),
+            ],
+            open: true,
+        };
+        assert_eq!(classify(&[curve], None), Shape::Polygon);
         let smooth = |x, y, kind| PathPoint {
             anchor: (x, y),
             left: (x - 1., y),
@@ -299,5 +331,14 @@ mod tests {
         };
         assert_eq!(classify(&[round(0)], None), Shape::Oval);
         assert_eq!(classify(&[round(1)], None), Shape::Polygon);
+        // The second and fourth anchors must lie on the midpoint of the
+        // first and third; the first and third need not.
+        let mut off = round(0);
+        off.points[1].anchor.0 += 1e-5;
+        assert_eq!(classify(&[off], None), Shape::Polygon);
+        let mut off = round(0);
+        off.points[0].anchor.1 += 1e-3;
+        assert_eq!(classify(&[off], None), Shape::Oval);
+        assert_eq!(classify(&[round(1)], Some((1, 4))), Shape::Oval);
     }
 }
