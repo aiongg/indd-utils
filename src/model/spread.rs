@@ -314,8 +314,12 @@ impl<'a> Reader<'a> {
         let locked = c.u16()? != 0;
         let visible = c.u16()? != 0;
         c.skip(14)?;
-        // A string follows; its position varies, so search for the tag.
-        let name = find_string(self.enc(), &data, 18)?;
+        // A string follows, at offset 19 in all corpus pairs; elsewhere
+        // search for the tag (objects.md, layers).
+        let name = match data.get(19) {
+            Some(2) if !self.enc().big_endian() => self.cursor(&data[19..]).string()?,
+            _ => find_string(self.enc(), &data, 18)?,
+        };
         let settings = self.layer_settings(&data)?;
         Ok(Layer {
             uid,

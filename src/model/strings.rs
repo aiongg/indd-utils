@@ -30,7 +30,9 @@ pub(super) fn find_flagged_string(
     })
 }
 
-/// Find the first in-object string at or after `from`.
+/// Find the first in-object string at or after `from`. The byte after
+/// the tag can have any value (`docs/format/objects.md`, in-object
+/// strings).
 pub(super) fn find_string(enc: Encoding, data: &[u8], from: usize) -> Result<String, Error> {
     if enc.big_endian() {
         // The tag (2), the byte before it in little-endian data, then the
@@ -47,7 +49,7 @@ pub(super) fn find_string(enc: Encoding, data: &[u8], from: usize) -> Result<Str
         return Ok(String::new());
     }
     for i in from..data.len().saturating_sub(4) {
-        if data[i] == 2 && data[i + 1] == 0 {
+        if data[i] == 2 {
             let n = enc.u16_from([data[i + 2], data[i + 3]]) as usize;
             if n > 0
                 && i + 6 <= data.len()
@@ -59,4 +61,18 @@ pub(super) fn find_string(enc: Encoding, data: &[u8], from: usize) -> Result<Str
         }
     }
     Ok(String::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_strings_with_any_second_byte() {
+        let enc = Encoding::default();
+        for second in [0, 1, 0x19] {
+            let d = [9, 9, 2, second, 2, 0, 2, 0x40, b'a', b'b'];
+            assert_eq!(find_string(enc, &d, 0).unwrap(), "ab");
+        }
+    }
 }

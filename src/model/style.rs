@@ -159,14 +159,14 @@ impl<'a> Reader<'a> {
         } else {
             None
         };
-        // A 36-character in-object string after the name: a GUID.
-        const GUID: [u8; 6] = [2, 0, 36, 0, 36, 0x40];
+        // A 36-character in-object string after the name: a GUID. The
+        // byte after the tag can have any value (objects.md, styles).
         let unique_id = if self.enc().big_endian() {
             None
         } else {
             data[at..]
-                .windows(GUID.len())
-                .position(|w| w == GUID)
+                .windows(6)
+                .position(|w| w[0] == 2 && w[2..] == [36, 0, 36, 0x40])
                 .and_then(|i| self.cursor(&data[at + i..]).string().ok())
         };
         let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {

@@ -45,8 +45,8 @@ are in `big-endian.md`.
   UTF-16 code units follow. A text of *n* code units is a sequence of
   segments adding up to *n*. Example: "WOMEN’S\r" is
   `05 40 "WOMEN" 01 80 19 20 02 40 "S\r"`.
-- **In-object strings:** u8 2, u8 (usually 0, meaning unknown), u16 length
-  in code units, then segments. 4,135 occurrences in three sample files.
+- **In-object strings:** u8 2, u8 (usually 0; a script code in some
+  strings, below), u16 length in code units, then segments. 4,135 occurrences in three sample files.
   In files from InDesign 2.0 the first byte is 1: in the four distinct 2.0
   files, the pattern tag, 0, length *n*, 0, segment header 0x4000 + *n*
   occurs 154 to 353 times per file with tag 1 and never with tag 2. In
@@ -83,6 +83,12 @@ scripts (1 for Japanese fonts, 25 for Simplified Chinese fonts). All
 users of a document have the same byte, except in one pair with users
 of bytes 0 and 7. The converter uses the byte of the last user to
 choose font family names (`fonts.md`, native family names).
+
+Other in-object strings carry the same kind of byte, so a search for a
+string must accept any second byte. In the 149 pairs typeset in
+Japanese it is 1 for most user-made names, and 3, 5, 7, 0x19 and 0x1D
+also occur, in style names, style GUIDs, layer names and ruby font
+styles. Layer names and style GUIDs (below) rely on this.
 
 **Document users.** IDML lists one `DocumentUser` per user in chunk
 0xA443, `Self` being `dDocumentUser` and the index in hexadecimal (491 of
@@ -328,7 +334,12 @@ trustworthy pairs that layer is not written. It is usually named
 name (2), so the name does not identify it. In all 1,053 layers of the trustworthy pairs the name starts at
 offset 19, and each field above equals the IDML value for 1,053 of 1,053
 layers (127 locked, 55 hidden, 59 not printable, 4 with locked guides,
-1 without `UI`, 2 ignoring text wrap). `ShowGuides` and `Expendable` are
+1 without `UI`, 2 ignoring text wrap). In the corpus of 2026-10, the
+string at offset 19 gives the IDML `Name` of 1,683 of 1,683 layers in
+all pairs, whatever its second byte (in the trustworthy pairs, 188
+layers have a byte other than 0, all with the IDML name). The converter reads the name at offset 19 when byte
+19 is the string tag, and otherwise searches for a string from offset
+18. `ShowGuides` and `Expendable` are
 true in every layer; the two fields that are 1 in every sample may hold
 them. The converter reads the fields only when the name starts at offset
 19 (in all little-endian corpus pairs, 1,465 layers).
@@ -1591,7 +1602,11 @@ is a 36-character in-object string after the name; where it is stored,
 IDML has it as `StyleUniqueId` in 2,769 of 2,793 styles (DOM 11 on; the
 other 24 have another GUID in IDML). Styles without a stored GUID
 (1,108 from DOM 11 on) have a `StyleUniqueId` in IDML that the INDD does
-not hold, which the converter leaves out.
+not hold, which the converter leaves out. The byte after the GUID's
+string tag is not always 0. In the trustworthy pairs of the corpus of
+2026-10, accepting any second byte gives 724 more styles (479
+paragraph, 245 character) the IDML `StyleUniqueId`; 4 more have another
+GUID in IDML, as above.
 
 **Kind field.** The kind and the `Imported` u16 after it can be read
 as one u32 in most files, because the second u16 is 0. The InDesign 7.5
