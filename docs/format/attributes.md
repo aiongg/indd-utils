@@ -180,11 +180,11 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B02 | `FontStyle` | flag + string | 474/474 ranges, 202/202 styles |
 | 0x1B03 | `PointSize` | f64 | 1,090/1,090 ranges |
 | 0x1B06 | `HorizontalScale` | fraction ×100 | 2/2 ranges, 75/75 styles |
-| 0x1B07 | `KerningMethod` | code: 15972 Metrics, 79875 Optical | 20/20 ranges, 81/81 styles |
+| 0x1B07 | `KerningMethod` | code: 15972 Metrics, 79875 Optical, 0x3E65 `$ID/Metrics - Roman Only` (27 styles) | 20/20 ranges, 81/81 styles |
 | 0x1B08 | `Ligatures` | 1 = true | 201/201 ranges |
 | 0x1B0A | `StrokeWeight` | f64 | 241/241 ranges |
 | 0x1B0B | `Tracking` | thousandths of an em ×1000 | 49/49 ranges, 94/94 styles |
-| 0x1B0C | `Composer` | code: 0x2001 HL Single, 0x2002 HL Composer, 0x2078 HL Composer Optyca | 4/4 ranges, 114/114 styles |
+| 0x1B0C | `Composer` | code: 0x2001 HL Single, 0x2002 HL Composer, 0x2078 HL Composer Optyca, 0x2079 HL Single Optyca, 0x2010 HL Composer J, 0x2011 HL Single J (runs/styles: 47/14, 0/30, 7/15) | 4/4 ranges, 114/114 styles |
 | 0x1B0D | `DropCapCharacters` | u16 | 79/79 styles; see below |
 | 0x1B0E | `DropCapLines` | u16 | 79/79 styles; see below |
 | 0x1B10 | `BaselineShift` | f64 | 79/79 styles; see below |
@@ -206,13 +206,13 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B29 | `TabList` (Properties) | list; see below | 110/110 styles |
 | 0x1B2A | `Underline` | 1 = true | 81/81 ranges |
 | 0x1B2B | `AppliedFont` (Properties) | font family UID | 1,071/1,071 ranges, 236/247 styles |
-| 0x1B2C | `OTFFigureStyle` | 1 ProportionalOldstyle, 2 ProportionalLining, 4 Default | 4/4 ranges, 138/138 styles |
+| 0x1B2C | `OTFFigureStyle` | 0 TabularLining (23 runs, 5 styles), 1 ProportionalOldstyle, 2 ProportionalLining, 4 Default | 4/4 ranges, 138/138 styles |
 | 0x1B2E | `MaximumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B2F | `MinimumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B31 | `MaximumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
 | 0x1B32 | `MinimumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
-| 0x1B37 | `StartParagraph` | 0 Anywhere, 2 NextPage | 78/78 styles; code 2 below |
-| 0x1B3C | `Position` | 0 Normal, 5 OTNumerator | 20/20 ranges, 78/78 styles |
+| 0x1B37 | `StartParagraph` | 0 Anywhere, 1 NextColumn, 2 NextPage, 3 NextFrame, 4 NextOddPage | 78/78 styles; codes below |
+| 0x1B3C | `Position` | 0 Normal, 1 Superscript, 2 Subscript, 3 OTSuperscript, 4 OTSubscript, 5 OTNumerator, 6 OTDenominator (runs/styles: 107/23, 4/7, 1/0, 3/0, 21/0 for 1, 2, 3, 4, 6) | 20/20 ranges, 78/78 styles |
 | 0x1B40 | `KeepLinesTogether` | 1 = true | 78/78 styles; see below |
 | 0x1B42 | `FillTint` | f64 | 24/24 ranges |
 | 0x1B46 | `GradientFillAngle` | f64 | 81/81 styles |
@@ -228,10 +228,10 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B55 | `RuleBelowTint` | f64 | 78/78 styles |
 | 0x1B56 | `RuleBelowOffset` | f64 | 78/78 styles |
 | 0x1B5D | `RuleBelow` | 1 = true | 83/83 styles |
-| 0x1B6A | `ParagraphBreakType` | 0 Anywhere, 1 NextColumn | 11/11 ranges, 78/78 styles |
+| 0x1B6A | `ParagraphBreakType` | 0 Anywhere, 1 NextColumn, 2 NextPage (115 runs) | 11/11 ranges, 78/78 styles |
 | 0x1B6B | `SingleWordJustification` | 0 LeftAlign, 3 FullyJustified | 80/80 styles |
 | 0x1B75 | `AllNestedStyles` (Properties) | list; see below | 14/14 styles |
-| 0x1B7E | `Justification` | 0 LeftAlign, 1 CenterAlign, 2 RightAlign, 4 LeftJustified, 5 CenterJustified | 70/70 ranges |
+| 0x1B7E | `Justification` | 0 LeftAlign, 1 CenterAlign, 2 RightAlign, 3 FullyJustified, 4 LeftJustified, 5 CenterJustified, 6 RightJustified, 8 ToBindingSide, 9 AwayFromBindingSide (runs/styles for 3, 6, 8, 9: 34/1, 3/0, 2/1, 7/14) | 70/70 ranges |
 | 0x1B80 | `DropcapDetail` | u32 | 5/5 ranges, 103/103 styles |
 | 0x1B8C | `OTFContextualAlternate` | 1 = true | 220/220 ranges |
 | 0x1B8D | `UnderlineColor` (Properties) | swatch UID, 0 = "Text Color" | 81/81 ranges |
@@ -239,7 +239,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B94 | `UnderlineWeight` | f64 | 81/81 ranges |
 | 0x1BB7 | `MiterLimit` | f64 | 161/161 ranges |
 | 0x1BB9 | `EndJoin` | 0 MiterEndJoin, 1 RoundEndJoin | 86/86 styles |
-| 0x1BBD | `SpanColumnType` | 0 SingleColumn, 1 SpanColumns | 41/41 ranges, 94/94 styles |
+| 0x1BBD | `SpanColumnType` | 0 SingleColumn, 1 SpanColumns, 2 SplitColumns (69 runs, 10 styles) | 41/41 ranges, 94/94 styles |
 | 0x1BBE | `SpanSplitColumnCount` (Properties) | u16; 1 = All | 12/12 ranges, 78/78 styles |
 | 0x1BBF | `SplitColumnInsideGutter` | f64 | 155/155 ranges |
 | 0x1BC4 | `SpanColumnMinSpaceAfter` | f64 | 84/84 styles |
@@ -261,7 +261,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x427B | `ShataiAdjustRotation` | 1 = true | root styles and a sample typeset vertically; see below |
 | 0x422D | `RubyFlag` | number; written when not 0 | a sample and its print PDF; see below |
 | 0x422E | `RubyString` | u32 length, text segments; written when not empty | a sample and its print PDF; see below |
-| 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList | 10/12 ranges |
+| 0x1A401 | `BulletsAndNumberingListType` | 0 NoList, 1 BulletList, 2 NumberedList (8 runs, 20 styles) | 10/12 ranges |
 | 0x1A406 | `BulletChar` (Properties) | u32 type, u32 value; see below | 1/1 ranges, 84/84 styles |
 | 0x1A413 | `BulletsFont` (Properties) | font family UID, 0 = `$ID/` | 1/1 ranges, 84/84 styles |
 | 0x1A414 | `BulletsFontStyle` (Properties) | flag + string; empty = `Nothing` | 1/1 ranges, 84/84 styles |
@@ -547,8 +547,14 @@ IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
   same layout, so the PDF does not tell them apart. The converter writes
   `NextPage`.
 
-One public template without an IDML has a style with code 4; with no
-reference, the converter leaves out codes other than 0 and 2.
+Later samples show the other codes in pairs: 1 `NextColumn` (1 style),
+3 `NextFrame` (1 run) and 4 `NextOddPage` (1 style), with no run or
+style that contradicts them.
+
+The new codes of the table were found by aligning INDD runs with IDML
+ranges at the same offset over 17,914 trustworthy stories and styles by
+name over all 654 pairs; no run or style contradicts them, and every
+converted value equals the IDML.
 
 ### More paragraph and character attributes
 

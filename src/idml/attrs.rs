@@ -175,7 +175,11 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x1B07,
         "KerningMethod",
-        Kind::Enum(&[(15972, "$ID/Metrics"), (79875, "$ID/Optical")]),
+        Kind::Enum(&[
+            (15972, "$ID/Metrics"),
+            (79875, "$ID/Optical"),
+            (0x3E65, "$ID/Metrics - Roman Only"),
+        ]),
         false,
     ),
     (0x1B0A, "StrokeWeight", Kind::Number, false),
@@ -188,6 +192,9 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
             (0x2001, "HL Single"),
             (0x2002, "HL Composer"),
             (0x2078, "HL Composer Optyca"),
+            (0x2079, "HL Single Optyca"),
+            (0x2010, "HL Composer J"),
+            (0x2011, "HL Single J"),
         ]),
         false,
     ),
@@ -225,6 +232,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
         0x1B2C,
         "OTFFigureStyle",
         Kind::Enum(&[
+            (0, "TabularLining"),
             (1, "ProportionalOldstyle"),
             (2, "ProportionalLining"),
             (4, "Default"),
@@ -238,13 +246,27 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x1B37,
         "StartParagraph",
-        Kind::Enum(&[(0, "Anywhere"), (2, "NextPage")]),
+        Kind::Enum(&[
+            (0, "Anywhere"),
+            (1, "NextColumn"),
+            (2, "NextPage"),
+            (3, "NextFrame"),
+            (4, "NextOddPage"),
+        ]),
         false,
     ),
     (
         0x1B3C,
         "Position",
-        Kind::Enum(&[(0, "Normal"), (5, "OTNumerator")]),
+        Kind::Enum(&[
+            (0, "Normal"),
+            (1, "Superscript"),
+            (2, "Subscript"),
+            (3, "OTSuperscript"),
+            (4, "OTSubscript"),
+            (5, "OTNumerator"),
+            (6, "OTDenominator"),
+        ]),
         false,
     ),
     (0x1B40, "KeepLinesTogether", Kind::Equals(1), false),
@@ -270,7 +292,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x1B6A,
         "ParagraphBreakType",
-        Kind::Enum(&[(0, "Anywhere"), (1, "NextColumn")]),
+        Kind::Enum(&[(0, "Anywhere"), (1, "NextColumn"), (2, "NextPage")]),
         false,
     ),
     (
@@ -301,8 +323,12 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
             (0, "LeftAlign"),
             (1, "CenterAlign"),
             (2, "RightAlign"),
+            (3, "FullyJustified"),
             (4, "LeftJustified"),
             (5, "CenterJustified"),
+            (6, "RightJustified"),
+            (8, "ToBindingSide"),
+            (9, "AwayFromBindingSide"),
         ]),
         false,
     ),
@@ -321,7 +347,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x1BBD,
         "SpanColumnType",
-        Kind::Enum(&[(0, "SingleColumn"), (1, "SpanColumns")]),
+        Kind::Enum(&[(0, "SingleColumn"), (1, "SpanColumns"), (2, "SplitColumns")]),
         false,
     ),
     (
@@ -375,7 +401,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x1A401,
         "BulletsAndNumberingListType",
-        Kind::Enum(&[(0, "NoList"), (1, "BulletList")]),
+        Kind::Enum(&[(0, "NoList"), (1, "BulletList"), (2, "NumberedList")]),
         false,
     ),
     (0x1A406, "BulletChar", Kind::BulletChar, true),
