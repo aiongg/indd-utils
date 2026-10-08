@@ -210,23 +210,49 @@ def validate(outs, args):
     return errs
 
 
+# Elements that wrap part of a story's text without being text themselves.
+# IDML puts them around ranges (ParagraphStyleRange > HyperlinkTextSource >
+# CharacterStyleRange, XMLElement > ParagraphStyleRange) or inside a range
+# around text; text_ranges looks through them (docs/measurement.md).
+WRAPPERS = {"XMLElement", "HyperlinkTextSource", "CrossReferenceSource", "Change",
+            "EndnoteRange"}
+# Children that are neither text nor a character position.
+NOT_TEXT = {"Properties", "XMLAttribute"}
+
+
 def text_ranges(story):
     """Map text offset -> attributes of the paragraph and character range
-    starting there, with keys prefixed PSR. and CSR."""
+    starting there, with keys prefixed PSR. and CSR. Ranges inside wrapper
+    elements count, at whatever depth. Offsets count Content in UTF-16 code
+    units and every other element (Br, Table, Footnote, an anchored frame) as
+    one position."""
     out = {}
     pos = 0
-    for psr in story.findall("ParagraphStyleRange"):
-        pa = {"PSR." + k: v for k, v in props(psr).items()}
-        for csr in psr.findall("CharacterStyleRange"):
-            start = pos
-            for el in csr:
-                if el.tag == "Content":
-                    pos += len((el.text or "").encode("utf-16-le")) // 2
-                elif el.tag != "Properties":
-                    pos += 1
-            if pos > start:
-                ca = {"CSR." + k: v for k, v in props(csr).items()}
-                out[start] = {**pa, **ca}
+
+    def walk(el, pa):
+        """Walk the children of `el` inside the paragraph attributes `pa`."""
+        nonlocal pos
+        for ch in el:
+            if ch.tag in NOT_TEXT:
+                continue
+            if ch.tag == "ParagraphStyleRange":
+                walk(ch, {"PSR." + k: v for k, v in props(ch).items()})
+            elif ch.tag == "CharacterStyleRange":
+                start = pos
+                walk(ch, pa)
+                if pos > start:
+                    ca = {"CSR." + k: v for k, v in props(ch).items()}
+                    # A range nested at the same offset (Change > range at
+                    # the start of this one) keeps the offset.
+                    out.setdefault(start, {**pa, **ca})
+            elif ch.tag in WRAPPERS:
+                walk(ch, pa)
+            elif ch.tag == "Content":
+                pos += len((ch.text or "").encode("utf-16-le")) // 2
+            else:
+                pos += 1
+
+    walk(story, {})
     return out
 
 

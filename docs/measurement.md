@@ -122,12 +122,45 @@ A **value** is one of these, in the reference IDML:
 | Attribute | Attribute other than `Self` | The output's attribute is equal, with numbers compared to 6 significant digits |
 | `<Properties>` child | Child of `Properties` (`P.Name`) | Equal text and attributes; a structured child (`PathGeometry`, lists) is compared as a whole |
 | Story text | Story | The text, with paragraph breaks, is identical |
-| Text range | Start of a paragraph and character style range | The output has a range starting at the same offset |
+| Text range | Start of a paragraph and character style range, at any depth inside wrappers (below) | The output has a range starting at the same offset |
 | Text range attribute | Attribute or `Properties` child of the range | Equal |
 
 When an element is not produced, its presence and all its values count as
 not reproduced. When a story's text differs, its text ranges cannot be
 lined up, so all their values count as not reproduced.
+
+#### Text ranges inside wrappers
+
+IDML puts some elements around text ranges or around text inside a range:
+`HyperlinkTextSource`, `CrossReferenceSource`, `XMLElement`, `Change` and
+`EndnoteRange`. They hold ranges at any level, for example
+`ParagraphStyleRange > HyperlinkTextSource > CharacterStyleRange`,
+`XMLElement > ParagraphStyleRange` at story level, or
+`CharacterStyleRange > Change > ParagraphStyleRange` for a tracked change.
+`compare.py` looks through them: every `ParagraphStyleRange` and
+`CharacterStyleRange` of the story counts, and the text inside a wrapper
+counts towards the offsets. Offsets count `Content` in UTF-16 code units
+and every other element (`Br`, `Table`, `Footnote`, an anchored frame) as
+one position; `Properties` and `XMLAttribute` count nothing. When a range
+nested in a wrapper starts at the same offset as the range around it, the
+nested range is the one compared. The wrapper elements themselves have a
+`Self` and count as elements.
+
+Counting them changed the trustworthy totals as follows:
+
+| Ranges counted | Reference values | Reproduced | Coverage | Extra values |
+|---|---:|---:|---:|---:|
+| Only `ParagraphStyleRange` children of the story and their `CharacterStyleRange` children | 11,142,835 | 10,501,458 | 94.24 % | 30,237 |
+| Also inside `HyperlinkTextSource` and `CrossReferenceSource` | 11,158,348 | 10,505,081 | 94.15 % | 26,634 |
+| Also inside `XMLElement`, `Change` and `EndnoteRange` | 11,508,691 | 10,505,081 | 91.28 % | 26,634 |
+
+Before, the skipped ranges were not counted, and every later range of the
+story started at a smaller offset in the reference than in the output: the
+converter's ranges were counted as extra and the reference's as missing.
+The 350,343 values inside `XMLElement`, `Change` and `EndnoteRange` come
+from 23 trustworthy pairs; one document with `XMLElement` around its text
+has 348,306 of them. They count although the converter does not reproduce
+them yet, because the headline counts everything InDesign writes.
 
 **Value coverage** is reproduced values divided by all values, summed over
 pairs, so each value counts once and large documents weigh more. Per-pair
