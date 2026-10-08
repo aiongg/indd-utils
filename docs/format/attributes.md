@@ -554,7 +554,9 @@ style that contradicts them.
 The new codes of the table were found by aligning INDD runs with IDML
 ranges at the same offset over 17,914 trustworthy stories and styles by
 name over all 654 pairs; no run or style contradicts them, and every
-converted value equals the IDML.
+value converted with a new code equals the IDML. (`KerningMethod` 79875
+is `$ID/Manual` in IDML for 19 runs of 3 documents; that is not
+decoded.)
 
 ### More paragraph and character attributes
 
