@@ -261,6 +261,31 @@ impl<'a> Reader<'a> {
                 }
             }
         }
+        // InDesign 5.0 text sources: items owned at their first and last
+        // character (hyperlinks.md).
+        if self.major.get() <= 5 {
+            let ends: HashMap<u32, usize> = owned
+                .iter()
+                .filter(|o| o.1 == hyperlink::class::SOURCE_END)
+                .map(|o| (o.2, o.0))
+                .collect();
+            for &(pos, cls, item) in &owned {
+                if cls != hyperlink::class::SOURCE_START {
+                    continue;
+                }
+                if let Some(&(source, end)) = self.source_markers()?.get(&item)
+                    && let Some(&last) = ends.get(&end)
+                    && last >= pos
+                {
+                    sources.push(SourceRange {
+                        start: pos,
+                        len: last + 1 - pos,
+                        source,
+                        paragraph: false,
+                    });
+                }
+            }
+        }
         // Text records count UTF-16 code units, every other strand counts
         // characters (a surrogate pair is one position). Convert the
         // positions to UTF-16 offsets.
@@ -316,10 +341,14 @@ impl<'a> Reader<'a> {
             match cls {
                 hyperlink::class::DESTINATION_OWNER => {
                     // The owner names its destination (hyperlinks.md).
-                    let dest = self
-                        .chunk(item, hyperlink::chunk::OWNER_DESTINATION)?
-                        .and_then(|d| self.enc().u32_at(&d, 0))
-                        .and_then(uid_or_none);
+                    let dest = match self.chunk(item, hyperlink::chunk::OWNER_DESTINATION)? {
+                        Some(d) => self.enc().u32_at(&d, 0),
+                        // InDesign 5.0.
+                        None => self
+                            .chunk(item, hyperlink::chunk::OWNER_DESTINATION_5)?
+                            .and_then(|d| self.enc().u32_at(&d, 8)),
+                    }
+                    .and_then(uid_or_none);
                     if let Some(dest) = dest
                         && let Some(d) = Destination::read(
                             dest,
@@ -480,6 +509,27 @@ impl<'a> Reader<'a> {
                 None => None,
             },
         })
+    }
+
+    /// InDesign 5.0 text sources by their start marker: (source UID, end
+    /// marker UID), from chunk 0x13524 of every text source.
+    fn source_markers(&self) -> Result<&HashMap<u32, (u32, u32)>, Error> {
+        if let Some(m) = self.source_markers.get() {
+            return Ok(m);
+        }
+        let mut m = HashMap::new();
+        for &(uid, cls) in self.db.classes() {
+            if cls != hyperlink::class::TEXT_SOURCE || self.db.object(uid)?.is_none() {
+                continue;
+            }
+            if let Some(d) = self.chunk(uid, hyperlink::chunk::SOURCE_MARKERS)?
+                && let (Some(start), Some(end)) =
+                    (self.enc().u32_at(&d, 0), self.enc().u32_at(&d, 4))
+            {
+                m.insert(start, (uid, end));
+            }
+        }
+        Ok(self.source_markers.get_or_init(|| m))
     }
 
     /// Read the XML nodes stored with story `uid` and place their markers.

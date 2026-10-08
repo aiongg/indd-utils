@@ -16,6 +16,11 @@ pub struct Reader<'a> {
     pub(super) frame_orientations: std::cell::RefCell<BTreeMap<u32, Vec<Option<Orientation>>>>,
     /// The groups whose page items are being read, outermost first.
     pub(super) item_path: std::cell::RefCell<Vec<u32>>,
+    /// The major version of the document, set when it is read.
+    pub(super) major: std::cell::Cell<u32>,
+    /// InDesign 5.0 text sources by their start marker: (source, end
+    /// marker). Built on first use.
+    pub(super) source_markers: std::cell::OnceCell<HashMap<u32, (u32, u32)>>,
 }
 
 pub(super) fn uid_or_none(v: u32) -> Option<u32> {
@@ -31,6 +36,8 @@ impl<'a> Reader<'a> {
             xml_nodes: Default::default(),
             frame_orientations: Default::default(),
             item_path: Default::default(),
+            major: Default::default(),
+            source_markers: Default::default(),
         }
     }
 

@@ -19,6 +19,10 @@ pub mod class {
     pub const BOOKMARK: u32 = 0x1354C;
     /// An item owned by a story at the position of a text destination.
     pub const DESTINATION_OWNER: u32 = 0x1353C;
+    /// InDesign 5.0: items owned by a story at the first and the last
+    /// character of a text source.
+    pub const SOURCE_START: u32 = 0x13508;
+    pub const SOURCE_END: u32 = 0x1353B;
     /// A story strand that holds text ranges in a tree.
     pub const RANGE_STRAND: u32 = 0xCA1C;
     /// A node of a range tree.
@@ -57,6 +61,10 @@ pub mod chunk {
     pub const TEXT_DESTINATION_OWNER: u32 = 0x13526;
     /// Destination owner: the destination UID.
     pub const OWNER_DESTINATION: u32 = 0x1352B;
+    /// Destination owner in InDesign 5.0: the destination UID at offset 8.
+    pub const OWNER_DESTINATION_5: u32 = 0x1351E;
+    /// Text source in InDesign 5.0: start and end marker UIDs.
+    pub const SOURCE_MARKERS: u32 = 0x13524;
     /// URL destination: the URL.
     pub const URL: u32 = 0x100B;
     pub const BOOKMARK: u32 = 0x13547;
@@ -72,8 +80,11 @@ pub struct Hyperlink {
     pub name: String,
     pub source: u32,
     pub hidden: bool,
-    /// `DestinationUniqueKey`, shared with the destination.
-    pub key: u32,
+    /// `DestinationUniqueKey`, shared with the destination; `None` in
+    /// InDesign 5.0 files.
+    pub key: Option<u32>,
+    /// The destination UID (InDesign 5.0 files, which have no keys).
+    pub destination: Option<u32>,
     /// Destination kind (u32 at offset 12 of chunk 0x13502).
     pub kind: u32,
     /// Chunk 0x13553 has the pattern of every corpus hyperlink, whose
@@ -216,7 +227,9 @@ pub struct Destination {
     pub uid: u32,
     pub name: String,
     pub hidden: bool,
-    pub key: u32,
+    /// `DestinationUniqueKey`; `None` in InDesign 5.0 files, whose
+    /// destination chunks end after the name.
+    pub key: Option<u32>,
     pub kind: DestinationKind,
 }
 
@@ -274,7 +287,8 @@ impl Hyperlink {
         self.kind == kind::EXTERNAL_PAGE
     }
 
-    pub fn read(uid: u32, obj: &Object) -> Result<Option<Hyperlink>, Error> {
+    /// Read a hyperlink of a document of major version `major`.
+    pub fn read(uid: u32, obj: &Object, major: u32) -> Result<Option<Hyperlink>, Error> {
         let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::HYPERLINK) else {
             return Ok(None);
@@ -283,9 +297,19 @@ impl Hyperlink {
         let source = c.u32()?;
         c.skip(2)?;
         let hidden = c.u16()? != 0;
-        let key = c.u32()?;
-        let kind = c.u32()?;
-        c.skip(8)?;
+        // InDesign 5.0: the destination UID twice, then the kind;
+        // later: the key, the kind and a u32 not identified.
+        let (key, destination, kind) = if major <= 5 {
+            let dest = c.u32()?;
+            c.skip(4)?;
+            (None, (dest != 0).then_some(dest), c.u32()?)
+        } else {
+            let key = c.u32()?;
+            let kind = c.u32()?;
+            c.skip(4)?;
+            (Some(key), None, kind)
+        };
+        c.skip(4)?;
         let name = c.name()?.name;
         let highlight = appearance(obj.chunk(chunk::HYPERLINK_APPEARANCE));
         Ok(Some(Hyperlink {
@@ -294,6 +318,7 @@ impl Hyperlink {
             source,
             hidden,
             key,
+            destination,
             kind,
             appearance_known: highlight.is_some(),
             highlight,
@@ -360,7 +385,11 @@ impl Destination {
         let hidden = c.u8()? != 0;
         c.skip(1)?;
         let name = c.name()?.name;
-        let key = c.u32()?;
+        let key = if c.remaining() >= 4 {
+            Some(c.u32()?)
+        } else {
+            None
+        };
         let kind = if class == class::TEXT_DESTINATION {
             // Chunk 0x13526: owner UID, u16 kind (InDesign 5.0: the owner
             // UID alone).

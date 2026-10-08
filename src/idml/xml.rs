@@ -120,6 +120,14 @@ impl Xml {
         self
     }
 
+    /// Set attribute `name` when there is a value.
+    pub fn attr_opt(&mut self, name: &str, value: Option<impl AsRef<str>>) -> &mut Self {
+        if let Some(v) = value {
+            self.attr(name, v);
+        }
+        self
+    }
+
     /// Whether the open start tag has attribute `name`.
     pub fn has_attr(&self, name: &str) -> bool {
         self.open && self.attrs.iter().any(|(k, _)| k == name)

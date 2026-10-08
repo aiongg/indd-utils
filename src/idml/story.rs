@@ -272,7 +272,7 @@ impl Writer<'_> {
                     .attr("Self", d.reference())
                     .attr("Name", &d.name)
                     .attr("Hidden", d.hidden.to_string())
-                    .attr("DestinationUniqueKey", d.key.to_string())
+                    .attr_opt("DestinationUniqueKey", d.key.map(|k| k.to_string()))
                     .end();
                 }
                 if !story.xml_markers.contains_key(&pos) {
@@ -686,7 +686,7 @@ mod tests {
             uid: 5,
             name: "a:b".into(),
             hidden: false,
-            key: 7,
+            key: Some(7),
             kind: DestinationKind::Text,
         };
         let story = Story {

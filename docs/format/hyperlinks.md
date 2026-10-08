@@ -365,9 +365,40 @@ InDesign 5.0 files use the 3.0 and 4.0 layout. 18 of the 108 distinct
 text sources (classes 0x13502 and 0x13503), destinations (0x13504,
 0x13505 and 0x13506), hyperlinks (0x13501) and bookmarks (0x1354C, in
 3 files; empty in the others). Read with the 6.0 layout, 17 of them give
-a list longer than the chunk. No 5.0 file has an IDML. Their page and
-URL destination objects (109, in 17 of these files) end before the fields
-described above, so the converter leaves them out with a warning.
+a list longer than the chunk. The other hyperlink objects of 5.0 files
+are described below.
+
+## InDesign 5.0
+
+No 5.0 file has an IDML. The following is from the 17 5.0 files with
+hyperlinks (122 hyperlinks, 118 text sources, 91 page and 18 URL
+destinations, 7 text destinations, 45 bookmarks); every object parses to
+the end of its chunk with it.
+
+- Page (0x13507), URL (0x13509) and text (0x13508) destination chunks
+  end after the name: there is no key. The converter writes no
+  `DestinationUniqueKey` for them (the schema allows that).
+- Hyperlink chunk 0x13502: u32 source, u16 0, u16 hidden, u32
+  destination UID, the same UID again, u32 kind (2000, 2001, 2002 as
+  above), u32 0x13501, flag byte and name. The destination UID is a page
+  destination (104), a URL destination (16) or 0 (2). The converter finds
+  the destination by UID instead of key.
+- Text destination chunk 0x13526 holds only the owner UID; the owner
+  (class 0x1353C) has chunk 0x1351E, whose u32 at offset 8 is the
+  destination.
+- Text sources have no chunk 0x1352E and no range tree. Chunk 0x13524
+  holds two UIDs: a start marker (class 0x13508) and an end marker (class
+  0x1353B). Both are owned items of the story at the source's first and
+  last character: of 118 sources, 116 start after a return or at the
+  start of the story, and in 113 the character after the end marker's
+  position is a return. The converter takes the extent as start-marker
+  position to end-marker position + 1. This is inferred from the text
+  structure, not checked against an IDML.
+- Bookmarks use the 6.0 layout (45 of 45 parse).
+
+With these rules the 17 files give 121 hyperlinks, 118 text sources, 7
+text destinations and 45 bookmarks, with no warnings, and every output
+validates.
 
 ## Order in designmap
 

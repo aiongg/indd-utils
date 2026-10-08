@@ -609,7 +609,7 @@ impl Writer<'_> {
                 DestinationKind::Text | DestinationKind::Paragraph => continue,
             }
             x.attr("Hidden", d.hidden.to_string())
-                .attr("DestinationUniqueKey", d.key.to_string());
+                .attr_opt("DestinationUniqueKey", d.key.map(|k| k.to_string()));
             if let Some([left, top, right, bottom]) = bounds {
                 // IDML writes the unset bounds (1e256) in exponent form.
                 let n = |v: f64| if v == 1e256 { "1e+256".into() } else { num(v) };
@@ -647,7 +647,10 @@ impl Writer<'_> {
             // hyperlink without one (hyperlinks.md).
             let dest = if h.other_document {
                 None
-            } else if let Some(d) = dests.iter().find(|d| d.key == h.key) {
+            } else if let Some(d) = dests.iter().find(|d| match h.destination {
+                Some(u) => d.uid == u,
+                None => h.key.is_some() && d.key == h.key,
+            }) {
                 Some(d.reference())
             } else if h.kind_is_none() {
                 Some("n".to_string())
@@ -675,7 +678,7 @@ impl Writer<'_> {
                 x.attr("Width", "Thin").attr("BorderStyle", "Solid");
             }
             x.attr("Hidden", h.hidden.to_string())
-                .attr("DestinationUniqueKey", h.key.to_string());
+                .attr_opt("DestinationUniqueKey", h.key.map(|k| k.to_string()));
             x.start("Properties");
             // Black on every corpus hyperlink with the known appearance,
             // apart from those to a page of another document.

@@ -133,6 +133,7 @@ impl<'a> Reader<'a> {
     /// An object that cannot be read is left out with a warning; the
     /// warnings are in `Document::warnings`.
     pub fn document(&self, version: Version) -> Result<Document, Error> {
+        self.major.set(version.major);
         // The first layer of the list is the internal layer, whatever its
         // name (objects.md, layers).
         let layers = self
@@ -396,7 +397,7 @@ impl<'a> Reader<'a> {
                 }
             }
             hyperlink::class::HYPERLINK => {
-                if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?)? {
+                if let Some(h) = Hyperlink::read(uid, &*self.object(uid)?, self.major.get())? {
                     out.hyperlinks.push(h);
                 }
             }
