@@ -464,13 +464,23 @@ attributes are the same in every IDML (`idml-values.md`).
 
 Chunk 0xCD28: u32, a flag byte (1 = built-in key) and the name
 (`[Page Grid]`, IDML `$ID/[Page Grid]`). IDML writes a `NamedGrid` per
-object, with a `GridDataInformation` that holds no INDD field of its
-own: it equals the layout grid settings of the document pages (chunk
-0xCD02, pages above) when all pages have the same, which is so in 494 of
-the 495 trustworthy pairs; the named grid's settings match those in
-493 of the 494. The converter writes the named grid with the pages'
-settings when they agree, and without `GridDataInformation` otherwise.
-Over the trustworthy pairs: 494 of 496 named grids, all names.
+object, in UID order, with a `GridDataInformation`:
+
+- A grid made by the user has its own chunk 0xCD02, with the layout of
+  the page chunk (layout grid, below), and IDML writes those settings.
+- The built-in `[Page Grid]` has only chunk 0xCD28. Its
+  `GridDataInformation` equals the document's layout grid preference
+  (`LayoutGridDataInformation`, chunk 0xCD2F, `preferences.md`) in every
+  attribute that preference has: 803 of 803 pairs of the corpus of
+  2026-10 (606 trustworthy). It does not always equal the pages' grid:
+  4 of the 574 trustworthy pairs whose pages all have the same grid
+  differ.
+
+The converter writes each named grid with its own settings, or with
+the layout grid preference. Over all pairs: 876 of 876 named grids, and
+every attribute of their `GridDataInformation` (`AppliedFont` 875: one
+family that IDML names in another form, `fonts.md`); 38 pairs have
+grids made by the user (2 or 3 named grids).
 
 ## Table of contents styles (0x11605)
 
@@ -629,9 +639,9 @@ documents), 12,224 of 12,224 over all pairs. A page whose flag is 0
 takes the direction from its master page: 44 such pages store 1 but have
 horizontal columns in IDML, like their master pages.
 
-**Layout grid (chunk 0xCD02).** u32 font family UID, a flag byte, the
-font style as an in-object string, five f64, four u32. IDML writes
-`GridDataInformation`:
+**Layout grid (chunk 0xCD02).** u32 font family UID, a flag byte (1 =
+built-in key, `$ID/`), the font style as an in-object string, five f64,
+four u32. IDML writes `GridDataInformation`:
 
 | Field | IDML | Evidence |
 |---|---|---|
@@ -640,15 +650,23 @@ font style as an in-object string, five f64, four u32. IDML writes
 | f64 1 to 5 | `PointSize`, `CharacterAki`, `LineAki`, `HorizontalScale` (×100), `VerticalScale` (×100) | see below |
 | u32 1 to 4 | `LineAlignment`, `GridAlignment`, `CharacterAlignment`; one not identified | see below |
 
-The numbers are 12, 0, 9, 1, 1 and the codes 3, 0, 3, 1 in all 2,246
-pages of the 250 distinct little-endian files, and all 832
-`GridDataInformation` elements of the corpus IDML files have
+In the first corpus the numbers were 12, 0, 9, 1, 1 and the codes 3, 0,
+3, 1 in all 2,246 pages of the 250 distinct little-endian files, and all
+832 `GridDataInformation` elements of the corpus IDML files had
 `PointSize="12"`, `CharacterAki="0"`, `LineAki="9"`, scales of 100,
 `LineAlignment="LeftOrTopLineJustify"` and `AlignEmCenter` for both
-alignments. The numbers 12 and 9 occur once, so those fields are
-located; the others are not proven. The converter writes each number only
-when it is the observed value, and the three alignments only when the
-codes are 3, 0, 3, 1. The other 42 pages are in one pair whose IDML
+alignments. The numbers 12 and 9 occur once, so those fields were
+located. The corpus of 2026-10 confirms them: pages with other sizes
+(such as 9.2126 and 6.9094) are in many pairs typeset in Japanese, and
+`PointSize` and `LineAki` match in 13,458 of 13,458 pages of all pairs.
+Named grids made by the user (above) locate `CharacterAki`: 37 of them
+over all pairs have a second f64 other than 0 (such as −0.354), and
+their IDML has the same value in 37 of 37. With the
+flag, `FontStyle` matches in all 13,458 pages (44 trustworthy pages have
+flag 1 and IDML `$ID/` before the style). The scales and the codes
+still have one value only: the converter writes the scales only when
+they are 1, and the three alignments only when the codes are 3, 0, 3,
+1. The other 42 pages are in one pair whose IDML
 names the family `Minion Pro (OTF)` where the INDD family name is
 `Minion Pro`; its `FontFamily` element has the same difference
 (`fonts.md`).

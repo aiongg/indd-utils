@@ -105,9 +105,35 @@ pub struct Columns {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridData {
     pub font: u32,
+    /// The font style as IDML writes it (`$ID/` for a built-in key).
     pub font_style: String,
     pub numbers: [f64; 5],
     pub codes: [u32; 4],
+}
+
+/// A named grid (class 0xCD12).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NamedGrid {
+    pub builtin: bool,
+    pub name: String,
+    /// Its own layout grid settings (chunk 0xCD02), if it has them.
+    pub grid: Option<GridData>,
+}
+
+impl GridData {
+    /// Layout grid settings at the cursor, as in chunk 0xCD02.
+    pub fn read(c: &mut Cursor) -> Result<GridData, Error> {
+        let font = c.u32()?;
+        let font_style = c.name()?.idml();
+        let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?, c.f64()?];
+        let codes = [c.u32()?, c.u32()?, c.u32()?, c.u32()?];
+        Ok(GridData {
+            font,
+            font_style,
+            numbers,
+            codes,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -558,20 +584,7 @@ impl<'a> Reader<'a> {
             None => None,
         };
         let grid = match self.chunk(uid, chunk::PAGE_GRID)? {
-            Some(d) => {
-                let mut c = self.cursor(&d);
-                let font = c.u32()?;
-                c.u8()?;
-                let font_style = c.string()?;
-                let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?, c.f64()?];
-                let codes = [c.u32()?, c.u32()?, c.u32()?, c.u32()?];
-                Some(GridData {
-                    font,
-                    font_style,
-                    numbers,
-                    codes,
-                })
-            }
+            Some(d) => Some(GridData::read(&mut self.cursor(&d))?),
             None => None,
         };
         // u32 count, then (unless it is 0) the two lists.
@@ -613,5 +626,29 @@ impl<'a> Reader<'a> {
             grid,
             settings,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::synthetic::flagged_string;
+
+    #[test]
+    fn reads_layout_grids_with_a_built_in_font_style() {
+        let enc = Encoding::default();
+        let mut d = enc.u32_bytes(7).to_vec();
+        d.extend(flagged_string(enc, 1, ""));
+        for f in [9.5, -0.25, 8.0, 1.0, 1.0] {
+            d.extend(enc.f64_bytes(f));
+        }
+        for u in [3, 0, 3, 1] {
+            d.extend(enc.u32_bytes(u));
+        }
+        let g = GridData::read(&mut enc.cursor(&d)).unwrap();
+        assert_eq!(g.font, 7);
+        assert_eq!(g.font_style, "$ID/");
+        assert_eq!(g.numbers, [9.5, -0.25, 8.0, 1.0, 1.0]);
+        assert_eq!(g.codes, [3, 0, 3, 1]);
     }
 }

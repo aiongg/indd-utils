@@ -367,21 +367,32 @@ impl<'a> Reader<'a> {
         })
     }
 
-    /// The named grids, in UID order.
-    pub(super) fn named_grids(&self) -> Vec<(bool, String)> {
+    /// The named grids, in UID order: built-in key, name and the grid's
+    /// own settings (chunk 0xCD02, which only grids made by the user
+    /// have; objects.md, named grids).
+    pub(super) fn named_grids(&self) -> Vec<NamedGrid> {
         let mut out = Vec::new();
         for &(uid, cls) in self.db.classes() {
             if cls != class::NAMED_GRID {
                 continue;
             }
-            let read = (|| -> Result<Option<(u32, bool, String)>, Error> {
+            let read = (|| -> Result<Option<NamedGrid>, Error> {
                 let Some(d) = self.chunk(uid, chunk::NAMED_GRID)? else {
                     return Ok(None);
                 };
                 let mut c = self.cursor(&d);
                 c.u32()?;
                 let builtin = c.flag()? == 1;
-                Ok(Some((uid, builtin, c.string()?)))
+                let name = c.string()?;
+                let grid = match self.chunk(uid, chunk::PAGE_GRID)? {
+                    Some(d) => Some(GridData::read(&mut self.cursor(&d))?),
+                    None => None,
+                };
+                Ok(Some(NamedGrid {
+                    builtin,
+                    name,
+                    grid,
+                }))
             })();
             match read {
                 Ok(Some(g)) => out.push(g),
@@ -389,8 +400,7 @@ impl<'a> Reader<'a> {
                 Err(e) => self.warn(format!("named grid {uid} left out: {e}")),
             }
         }
-        out.sort_by_key(|g| g.0);
-        out.into_iter().map(|(_, b, n)| (b, n)).collect()
+        out
     }
 }
 

@@ -788,15 +788,18 @@ impl Writer<'_> {
     pub(super) fn grid_data(&self, x: &mut Xml, g: &crate::model::GridData) {
         x.start("GridDataInformation")
             .attr("FontStyle", &g.font_style);
+        // `PointSize`, `CharacterAki` and `LineAki` are located; the
+        // scales are written only when they have the value of every sample
+        // (objects.md, layout grid).
         let [size, character_aki, line_aki, h_scale, v_scale] = g.numbers;
         for (name, value, observed, scale) in [
-            ("PointSize", size, 12.0, 1.0),
-            ("CharacterAki", character_aki, 0.0, 1.0),
-            ("LineAki", line_aki, 9.0, 1.0),
-            ("HorizontalScale", h_scale, 1.0, 100.0),
-            ("VerticalScale", v_scale, 1.0, 100.0),
+            ("PointSize", size, None, 1.0),
+            ("CharacterAki", character_aki, None, 1.0),
+            ("LineAki", line_aki, None, 1.0),
+            ("HorizontalScale", h_scale, Some(1.0), 100.0),
+            ("VerticalScale", v_scale, Some(1.0), 100.0),
         ] {
-            if value == observed {
+            if observed.is_none_or(|o| value == o) {
                 x.attr(name, num(value * scale));
             }
         }

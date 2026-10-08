@@ -44,7 +44,7 @@ pub struct Document {
     pub assignments: Vec<u32>,
     /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
     /// a built-in key, and the name), in UID order.
-    pub named_grids: Vec<(bool, String)>,
+    pub named_grids: Vec<NamedGrid>,
     pub spreads: Vec<Spread>,
     pub master_spreads: Vec<Spread>,
     pub stories: Vec<Story>,

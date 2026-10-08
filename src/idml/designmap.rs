@@ -165,23 +165,24 @@ impl Writer<'_> {
         };
         // Named grids. Their grid settings are those all document pages
         // have (objects.md, named grids).
-        let grids: Vec<_> = doc
-            .spreads
+        // A named grid without settings of its own has those of the
+        // document's layout grid (objects.md, named grids).
+        let layout_grid = doc
+            .prefs
+            .grids
             .iter()
-            .flat_map(|s| &s.pages)
-            .filter_map(|p| p.grid.as_ref())
-            .collect();
-        let grid = grids.first().filter(|g| grids.iter().all(|h| h == *g));
-        for (builtin, name) in &doc.named_grids {
-            let name = if *builtin {
-                builtin_key(name)
+            .find(|(tag, ..)| *tag == "LayoutGridDataInformation")
+            .map(|(_, g, _)| g);
+        for ng in &doc.named_grids {
+            let name = if ng.builtin {
+                builtin_key(&ng.name)
             } else {
-                name.clone()
+                ng.name.clone()
             };
             x.start("NamedGrid")
                 .attr("Self", format!("NamedGrid/{}", self_name(&name)))
                 .attr("Name", &name);
-            if let Some(g) = grid {
+            if let Some(g) = ng.grid.as_ref().or(layout_grid) {
                 self.grid_data(&mut x, g);
             }
             x.end();

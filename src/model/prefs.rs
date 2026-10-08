@@ -1317,26 +1317,14 @@ impl Reader<'_> {
             if let Some(d) = get(id)? {
                 let mut c = self.cursor(&d);
                 let read = (|| -> Result<(super::GridData, Option<f64>), Error> {
-                    let font = c.u32()?;
-                    c.u8()?;
-                    let font_style = c.string()?;
-                    let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?, c.f64()?];
-                    let codes = [c.u32()?, c.u32()?, c.u32()?, c.u32()?];
+                    let g = super::GridData::read(&mut c)?;
                     let count = if element == "StoryGridDataInformation" {
                         c.u32()?;
                         Some(c.f64()?)
                     } else {
                         None
                     };
-                    Ok((
-                        super::GridData {
-                            font,
-                            font_style,
-                            numbers,
-                            codes,
-                        },
-                        count,
-                    ))
+                    Ok((g, count))
                 })();
                 if let Ok((g, count)) = read {
                     grids.push((element, g, count));
