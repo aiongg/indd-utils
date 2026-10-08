@@ -103,15 +103,24 @@ impl CompositeFontEntry {
 
 impl CompositeFont {
     /// Chunk 0xCB02: the name, fields not identified, then a u16 count and
-    /// the entry UIDs, which end the chunk. Returns the name and the
-    /// entry UIDs.
+    /// the entry UIDs, which end the chunk. In files from InDesign 3.0
+    /// four zero bytes come before the name (`big-endian.md`). Returns the
+    /// name and the entry UIDs.
     pub fn read(obj: &crate::Object) -> Result<Option<(Name, Vec<u32>)>, Error> {
         let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::COMPOSITE_FONT) else {
             return Ok(None);
         };
         let mut c = enc.cursor(d);
-        let name = c.name()?;
+        let name = match c.name() {
+            Ok(name) => name,
+            Err(e) if d.starts_with(&[0; 4]) => {
+                c = enc.cursor(d);
+                c.skip(4)?;
+                c.name().map_err(|_| e)?
+            }
+            Err(e) => return Err(e),
+        };
         let start = c.pos();
         let Some(p) = (start..d.len().saturating_sub(1)).find(|&p| {
             let n = enc.u16_from([d[p], d[p + 1]]) as usize;
@@ -221,6 +230,26 @@ mod tests {
             assert_eq!(e.ranges, [(0x4E00, 0x4E01), (0x20000, 0x20001)]);
             assert_eq!(e.scale, [1; 4]);
             assert_eq!(e.characters(), "\u{4E00}\u{4E01}\u{20000}\u{20001}");
+        }
+    }
+
+    #[test]
+    fn composite_fonts_of_version_3_have_four_bytes_before_the_name() {
+        for enc in [Encoding::default(), big_endian()] {
+            let mut d = vec![0; 4];
+            d.extend(flagged_string(enc, 1, "[No composite font]"));
+            d.extend([0; 6]);
+            d.extend(enc.u16_bytes(1));
+            d.extend(enc.u32_bytes(0x55));
+            let obj = object(
+                0x54,
+                class::COMPOSITE_FONT,
+                &[(chunk::COMPOSITE_FONT, d)],
+                enc,
+            );
+            let (name, entries) = CompositeFont::read(&obj).unwrap().unwrap();
+            assert_eq!(name.idml(), "$ID/[No composite font]");
+            assert_eq!(entries, [0x55]);
         }
     }
 

@@ -75,7 +75,7 @@ not read. The byte after that is 0 in all but 13 strings of each file.
 | Ruler guide (chunk 0x3308, `objects.md`) | 52 bytes | 40 bytes, the first 40 bytes of the 52-byte layout | Reads it without the guide type; `GuideType` is left out |
 | Object style text frame settings (chunk 0x1B924) | 222, 162, 142 or 106 bytes | 104 bytes (4.0); the 3.0 file has no object styles | Left out with a warning |
 | Document preferences (chunk 0x533) | 146 bytes or more, except in three InDesign 7.x files | 118 bytes | Left out with a warning |
-| Composite font (chunk 0xCB02) | Starts with the flagged name | 4.0: the same. 3.0: four zero bytes, then the name | 3.0: left out with a warning |
+| Composite font (chunk 0xCB02) | Starts with the flagged name | 4.0: the same. 3.0: four zero bytes, then the name | Reads the name after the four bytes when it does not parse at 0 and they are 0 |
 | Section page number style (`objects.md`) | 0x4C15 or 0x4C17 | 4.0: 0x4C15. 3.0: 0x4C06 | 3.0: `PageNumberStyle` left out with a warning |
 
 Evidence for each row:
