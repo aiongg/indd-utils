@@ -94,8 +94,8 @@ impl Encoding {
         let mut pos = 0;
         while pos < bytes.len() {
             let head = bytes.get(pos..pos + 8)?;
-            let id = self.u32_from(head[..4].try_into().unwrap());
-            let len = self.u32_from(head[4..].try_into().unwrap()) as usize;
+            let id = self.u32_at(head, 0)?;
+            let len = self.u32_at(head, 4)? as usize;
             let data = bytes.get(pos + 8..(pos + 8).checked_add(len)?)?;
             out.push(Chunk { id, data });
             pos += 8 + len;
@@ -214,6 +214,17 @@ impl<'a> Cursor<'a> {
         Ok(out)
     }
 
+    /// The next `N` bytes, as an array.
+    fn array<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+        let out = *self
+            .data
+            .get(self.pos..)
+            .and_then(<[u8]>::first_chunk)
+            .ok_or_else(|| short("bytes", self.pos))?;
+        self.pos += N;
+        Ok(out)
+    }
+
     pub fn skip(&mut self, n: usize) -> Result<(), Error> {
         self.bytes(n).map(|_| ())
     }
@@ -223,19 +234,19 @@ impl<'a> Cursor<'a> {
     }
 
     pub fn u16(&mut self) -> Result<u16, Error> {
-        Ok(self.enc.u16_from(self.bytes(2)?.try_into().unwrap()))
+        Ok(self.enc.u16_from(self.array()?))
     }
 
     pub fn u32(&mut self) -> Result<u32, Error> {
-        Ok(self.enc.u32_from(self.bytes(4)?.try_into().unwrap()))
+        Ok(self.enc.u32_from(self.array()?))
     }
 
     pub fn i32(&mut self) -> Result<i32, Error> {
-        Ok(self.enc.i32_from(self.bytes(4)?.try_into().unwrap()))
+        Ok(self.enc.i32_from(self.array()?))
     }
 
     pub fn f64(&mut self) -> Result<f64, Error> {
-        Ok(self.enc.f64_from(self.bytes(8)?.try_into().unwrap()))
+        Ok(self.enc.f64_from(self.array()?))
     }
 
     /// A u32 count followed by that many u32 values.

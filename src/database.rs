@@ -131,15 +131,17 @@ impl<'a> Database<'a> {
 
     fn u16(&self, offset: usize) -> Result<u16, Error> {
         self.bytes
-            .get(offset..offset + 2)
-            .map(|b| u16::from_le_bytes(b.try_into().unwrap()))
+            .get(offset..)
+            .and_then(<[u8]>::first_chunk)
+            .map(|&b| u16::from_le_bytes(b))
             .ok_or_else(|| corrupt(format!("read past end of file at {offset:#x}")))
     }
 
     fn u32(&self, offset: usize) -> Result<u32, Error> {
         self.bytes
-            .get(offset..offset + 4)
-            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            .get(offset..)
+            .and_then(<[u8]>::first_chunk)
+            .map(|&b| u32::from_le_bytes(b))
             .ok_or_else(|| corrupt(format!("read past end of file at {offset:#x}")))
     }
 
@@ -283,8 +285,10 @@ impl<'a> Database<'a> {
                     "continued record at {offset:#x} is too short"
                 )));
             }
-            let next = u32::from_le_bytes(record[..4].try_into().unwrap());
-            let next_page = u32::from_le_bytes(record[4..8].try_into().unwrap());
+            // `record` starts at `offset + 4` and is at least 8 bytes long.
+            let next = self.u32(offset + 4)?;
+            let next_page = self.u32(offset + 8)?;
+
             let here = &record[8..];
             if here.is_empty() || here.len() >= len || next & 0xFFFF != 0 {
                 return Err(corrupt(format!("bad continuation at {offset:#x}")));

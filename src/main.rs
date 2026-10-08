@@ -2,7 +2,21 @@
 //! inside an INDD file (header, objects, chunks, XMP, audit). Run it
 //! without arguments for the list of subcommands.
 
+#![forbid(unsafe_code)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unimplemented,
+        clippy::todo,
+        clippy::unreachable
+    )
+)]
+
 use std::io::Write;
+
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:

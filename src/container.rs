@@ -21,12 +21,15 @@ const SEQUENCE_OFFSET: usize = 0x108;
 const DB_PAGES_OFFSET: usize = 0x118;
 const XMP_START: &[u8] = b"<?xpacket begin=";
 
+/// The little-endian u32 at `offset`. The callers check the length first;
+/// like slice indexing, this panics if `bytes` is too short.
 fn le_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+    u32::from_le_bytes(std::array::from_fn(|i| bytes[offset + i]))
 }
 
+/// The little-endian u64 at `offset`; see [`le_u32`].
 fn le_u64(bytes: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap())
+    u64::from_le_bytes(std::array::from_fn(|i| bytes[offset + i]))
 }
 
 /// One of the two master pages at the start of the file.

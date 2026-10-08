@@ -279,9 +279,8 @@ impl<'a> Reader<'a> {
             }
             if self.class(strand) == Some(hyperlink::class::RANGE_STRAND)
                 && let Some(tree) = self.chunk(strand, hyperlink::chunk::RANGE_TREE)?
-                && tree.len() >= 4
+                && let Some(first) = self.enc().u32_at(&tree, 0)
             {
-                let first = self.enc().u32_from(tree[..4].try_into().unwrap());
                 let pages = |uid| self.chunk(uid, hyperlink::chunk::RANGE_PAGE);
                 match hyperlink::source_ranges(self.enc(), first, pages) {
                     Ok(r) => sources.extend(r),

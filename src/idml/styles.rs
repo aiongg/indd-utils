@@ -563,13 +563,8 @@ impl Writer<'_> {
                 && b == c
                 && c == e
             {
-                node.set(&["TextFramePreference", "Properties"], Vec::new());
-                let props = node
-                    .children
-                    .iter_mut()
-                    .find(|c| c.tag == "TextFramePreference")
-                    .and_then(|t| t.children.iter_mut().find(|c| c.tag == "Properties"))
-                    .expect("set above");
+                let props = node.set(&["TextFramePreference", "Properties"], Vec::new());
+
                 props.children.retain(|c| c.tag != "InsetSpacing");
                 props.children.push(Node {
                     tag: "InsetSpacing".into(),

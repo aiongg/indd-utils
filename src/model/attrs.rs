@@ -270,8 +270,9 @@ impl Attrs {
                 match (i, &first) {
                     (0, _) => first = Some(decode(enc, id, t, data)),
                     (1, Some(Value::Ref(r))) if t == ty::CODE && len == 4 => {
-                        let code = enc.u32_from(data.try_into().unwrap());
-                        first = Some(Value::RefOrCode(*r, code));
+                        if let Some(code) = enc.u32_at(data, 0) {
+                            first = Some(Value::RefOrCode(*r, code));
+                        }
                     }
                     _ => {}
                 }
@@ -333,12 +334,13 @@ fn text_layout(id: u32) -> Option<Layout> {
 /// fit it); the others are numbers of 8, 4 or 2 bytes.
 fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
     let Some(layout) = text_layout(id) else {
-        return match data.len() {
-            8 => Value::Double(enc.f64_from(data.try_into().unwrap())),
-            4 => Value::Ref(enc.u32_from(data.try_into().unwrap())),
-            2 => Value::Enum(enc.u16_from(data.try_into().unwrap())),
-            _ => Value::Other(t, data.to_vec()),
+        let number = match data.len() {
+            8 => enc.f64_at(data, 0).map(Value::Double),
+            4 => enc.u32_at(data, 0).map(Value::Ref),
+            2 => enc.u16_at(data, 0).map(Value::Enum),
+            _ => None,
         };
+        return number.unwrap_or_else(|| Value::Other(t, data.to_vec()));
     };
     let mut c = enc.cursor(data);
     let value = match layout {
@@ -432,31 +434,32 @@ fn nested_styles(c: &mut Cursor) -> Option<Vec<NestedStyle>> {
 pub const OPACITY_STOPS: [u32; 3] = [0x1EB8C, 0x1EB95, 0x1EB9E];
 
 fn decode(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
-    let f = |o: usize| enc.f64_from(data[o..o + 8].try_into().unwrap());
+    let f = |o: usize| enc.f64_at(data, o);
     if OPACITY_STOPS.contains(&id)
-        && let Some(n) = data
-            .get(..4)
-            .map(|b| enc.u32_from(b.try_into().unwrap()) as usize)
+        && let Some(n) = enc.u32_at(data, 0).map(|n| n as usize)
         && n > 0
         && data.len() == 4 + n * 24
+        && let Some(stops) = (0..n)
+            .map(|i| {
+                let at = |k: usize| f(4 + (3 * i + k) * 8);
+                Some([at(0)?, at(1)?, at(2)?])
+            })
+            .collect::<Option<Vec<_>>>()
     {
-        return Value::Stops(
-            (0..n)
-                .map(|i| [0, 1, 2].map(|k| f(4 + (3 * i + k) * 8)))
-                .collect(),
-        );
+        return Value::Stops(stops);
     }
-    match (t, data.len()) {
-        (ty::DOUBLE, 8) => Value::Double(f(0)),
-        (ty::INT, 4) => Value::Int(enc.i32_from(data.try_into().unwrap())),
-        (ty::ENUM, 2) => Value::Enum(enc.u16_from(data.try_into().unwrap())),
-        (ty::REF, 4) => Value::Ref(enc.u32_from(data.try_into().unwrap())),
-        (ty::POINT, 16) => Value::Point(f(0), f(8)),
+    let value = match (t, data.len()) {
+        (ty::DOUBLE, 8) => f(0).map(Value::Double),
+        (ty::INT, 4) => enc.i32_at(data, 0).map(Value::Int),
+        (ty::ENUM, 2) => enc.u16_at(data, 0).map(Value::Enum),
+        (ty::REF, 4) => enc.u32_at(data, 0).map(Value::Ref),
+        (ty::POINT, 16) => f(0).zip(f(8)).map(|(x, y)| Value::Point(x, y)),
         // Other 4-byte types are references or codes (for example a
         // corner effect ID); keep the number.
-        (_, 4) => Value::Ref(enc.u32_from(data.try_into().unwrap())),
-        _ => Value::Other(t, data.to_vec()),
-    }
+        (_, 4) => enc.u32_at(data, 0).map(Value::Ref),
+        _ => None,
+    };
+    value.unwrap_or_else(|| Value::Other(t, data.to_vec()))
 }
 
 #[cfg(test)]

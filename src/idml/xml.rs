@@ -186,8 +186,16 @@ impl Xml {
         self
     }
 
+    /// Close the current element. Every `end` follows its `start` in the
+    /// writer's code, whatever the input; an `end` with no open element
+    /// is a writer bug, fails a debug assertion, and writes nothing in a
+    /// release build.
     pub fn end(&mut self) -> &mut Self {
-        let name = self.stack.pop().expect("end without start");
+        debug_assert!(!self.stack.is_empty(), "end without start");
+        let Some(name) = self.stack.pop() else {
+            return self;
+        };
+
         if self.open {
             self.flush_attrs();
             self.out.push_str(" />");

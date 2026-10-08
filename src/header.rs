@@ -28,8 +28,13 @@ pub enum ByteOrder {
 }
 
 impl ByteOrder {
+    /// The u32 at `offset` in this byte order.
+    ///
+    /// # Panics
+    ///
+    /// If `bytes` is shorter than `offset + 4`.
     pub fn read_u32(self, bytes: &[u8], offset: usize) -> u32 {
-        let b: [u8; 4] = bytes[offset..offset + 4].try_into().unwrap();
+        let b: [u8; 4] = std::array::from_fn(|i| bytes[offset + i]);
         match self {
             ByteOrder::Little => u32::from_le_bytes(b),
             ByteOrder::Big => u32::from_be_bytes(b),
@@ -78,7 +83,8 @@ impl Header {
             other => return Err(Error::UnknownByteOrder(other)),
         };
         Ok(Header {
-            kind: bytes[KIND_OFFSET..KIND_OFFSET + 8].try_into().unwrap(),
+            kind: std::array::from_fn(|i| bytes[KIND_OFFSET + i]),
+
             byte_order,
             version: Version {
                 major: byte_order.read_u32(bytes, MAJOR_OFFSET),

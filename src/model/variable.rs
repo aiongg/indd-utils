@@ -80,7 +80,8 @@ fn parse(enc: Encoding, uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
             }
             0xCAC0 => enc.u32_at(rest, 0) == Some(0x8C64) && zero(&rest[4..]),
             0xCAAA => {
-                style = Some(enc.u32_from(rest[4..8].try_into().unwrap()));
+                style = enc.u32_at(rest, 4);
+
                 zero(&rest[..4]) && zero(&rest[8..])
             }
             _ => zero(rest) && text.is_empty(),

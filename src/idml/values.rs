@@ -30,8 +30,9 @@ impl Node {
 
     /// Set the attributes of the descendant at `path`, creating missing
     /// elements (`Properties` as the first child), replacing values
-    /// already there in place and adding the others at the end.
-    pub fn set(&mut self, path: &[&str], attrs: Vec<(&str, String)>) {
+    /// already there in place and adding the others at the end. Returns
+    /// the descendant.
+    pub fn set(&mut self, path: &[&str], attrs: Vec<(&str, String)>) -> &mut Node {
         let mut node = self;
         for tag in path {
             let i = match node.children.iter().position(|c| c.tag == *tag) {
@@ -58,6 +59,7 @@ impl Node {
                 None => node.attrs.push((k.to_string(), v)),
             }
         }
+        node
     }
 
     /// Add the attributes and children of `other` that `self` lacks.
@@ -97,6 +99,25 @@ impl Node {
     }
 }
 
+/// An embedded values file, parsed. The files are generated and committed,
+/// and the test `embedded_files_parse` checks that each one parses and
+/// that every version bound in it is a number. A file that did not parse
+/// would give no observed values instead of stopping every conversion.
+fn embedded(text: &str) -> Node {
+    parse(text).unwrap_or_default()
+}
+
+/// Whether a block of a values file applies to InDesign version `major`:
+/// its `MinimumVersion` and `MaximumVersion`, where present, include
+/// `major`. A bound that is not a number excludes the block (see
+/// [`embedded`]).
+fn applies(block: &Node, major: u32) -> bool {
+    // `None`: no bound; `Some(None)`: a bound that is not a number.
+    let bound = |name: &str| block.attr(name).map(|v| v.parse::<u32>().ok());
+    bound("MinimumVersion").is_none_or(|v| v.is_some_and(|v| v <= major))
+        && bound("MaximumVersion").is_none_or(|v| v.is_some_and(|v| major <= v))
+}
+
 const ROOT_VALUES: &str = include_str!("root_values.xml");
 
 /// The observed values of root style element `tag` (`ParagraphStyle`,
@@ -106,12 +127,9 @@ pub fn root_style(tag: &str, major: u32) -> Node {
         tag: tag.to_string(),
         ..Node::default()
     };
-    let root = parse(ROOT_VALUES).expect("root_values.xml is well-formed");
+    let root = embedded(ROOT_VALUES);
     for block in &root.children {
-        let since = block
-            .attr("MinimumVersion")
-            .map_or(0, |v| v.parse().expect("MinimumVersion is a number"));
-        if since <= major
+        if applies(block, major)
             && let Some(n) = block.child(tag)
         {
             out.merge(n);
@@ -131,14 +149,9 @@ pub fn object_style(major: u32) -> Node {
     };
     // Parsed once: the converter asks for these values for every page item.
     static PARSED: std::sync::OnceLock<Node> = std::sync::OnceLock::new();
-    let root = PARSED.get_or_init(|| {
-        parse(OBJECT_STYLE_VALUES).expect("object_style_values.xml is well-formed")
-    });
+    let root = PARSED.get_or_init(|| embedded(OBJECT_STYLE_VALUES));
     for block in &root.children {
-        let since = block
-            .attr("MinimumVersion")
-            .map_or(0, |v| v.parse().expect("MinimumVersion is a number"));
-        if since <= major
+        if applies(block, major)
             && let Some(n) = block.child("ObjectStyle")
         {
             out.merge(n);
@@ -152,13 +165,10 @@ const PREFERENCE_VALUES: &str = include_str!("preference_values.xml");
 /// The observed preference elements (`TextDefault`, ...) for a document of
 /// InDesign version `major`, in the order the IDML files list them.
 pub fn preferences(major: u32) -> Vec<Node> {
-    let root = parse(PREFERENCE_VALUES).expect("preference_values.xml is well-formed");
+    let root = embedded(PREFERENCE_VALUES);
     let mut out: Vec<Node> = Vec::new();
     for block in &root.children {
-        let since = block
-            .attr("MinimumVersion")
-            .map_or(0, |v| v.parse().expect("MinimumVersion is a number"));
-        if since > major {
+        if !applies(block, major) {
             continue;
         }
         for n in &block.children {
@@ -175,19 +185,7 @@ const ELEMENT_VALUES: &str = include_str!("element_values.xml");
 
 fn element_values() -> &'static Node {
     static PARSED: std::sync::OnceLock<Node> = std::sync::OnceLock::new();
-    PARSED.get_or_init(|| parse(ELEMENT_VALUES).expect("element_values.xml is well-formed"))
-}
-
-/// Whether a block of `element_values.xml` applies to InDesign version
-/// `major`.
-fn applies(block: &Node, major: u32) -> bool {
-    let bound = |name: &str| {
-        block
-            .attr(name)
-            .map(|v| v.parse::<u32>().expect("version bounds are numbers"))
-    };
-    bound("MinimumVersion").is_none_or(|v| v <= major)
-        && bound("MaximumVersion").is_none_or(|v| major <= v)
+    PARSED.get_or_init(|| embedded(ELEMENT_VALUES))
 }
 
 /// The observed values of the elements on `path` (a tag, or a tag and a
@@ -389,6 +387,26 @@ fn parse(s: &str) -> Option<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_files_parse() {
+        for (name, text) in [
+            ("root_values.xml", ROOT_VALUES),
+            ("object_style_values.xml", OBJECT_STYLE_VALUES),
+            ("preference_values.xml", PREFERENCE_VALUES),
+            ("element_values.xml", ELEMENT_VALUES),
+        ] {
+            let root = parse(text).unwrap_or_else(|| panic!("{name} does not parse"));
+            assert!(!root.children.is_empty(), "{name} has no blocks");
+            for block in &root.children {
+                for bound in ["MinimumVersion", "MaximumVersion"] {
+                    if let Some(v) = block.attr(bound) {
+                        assert!(v.parse::<u32>().is_ok(), "{name}: {bound}=\"{v}\"");
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn unescapes_numeric_references() {
