@@ -21,13 +21,16 @@ fails and the other does not, and files whose warnings differ.
 
 Prints the counts, the differing package entries by kind, and the first
 --show N differing files; writes the full list to diff.tsv in the cache
-directory. The outputs stay in out/old and out/new there for inspection.
+directory. The outputs that differ, or where only one binary fails, stay
+in out/old and out/new there for inspection; the others are deleted as
+soon as they are compared, and each run starts with empty folders.
 Exit status 1 if any output, failure or warning differs.
 """
 
 import argparse
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -73,6 +76,8 @@ def build(rev):
     built = CACHE / "target" / sha / "release" / "indd"
     binary.write_bytes(built.read_bytes())
     binary.chmod(0o755)
+    # The binary is kept; the commit's build directory is not needed again.
+    shutil.rmtree(CACHE / "target" / sha)
     return binary
 
 
@@ -128,7 +133,16 @@ def kind(name):
 
 
 def compare(old, new, i, f):
+    """Compare one file's outputs; keep them only if they differ."""
     a, b = CACHE / "out" / "old" / f"{i}.idml", CACHE / "out" / "new" / f"{i}.idml"
+    result = compare_outputs(old, new, f, a, b)
+    if not result["entries"] and result["status"][0] == result["status"][1]:
+        a.unlink(missing_ok=True)
+        b.unlink(missing_ok=True)
+    return result
+
+
+def compare_outputs(old, new, f, a, b):
     sa, wa = convert(old, f, a)
     sb, wb = convert(new, f, b)
     result = {"file": f, "status": (sa, sb), "warnings": wa != wb, "entries": []}
@@ -159,7 +173,8 @@ def main():
 
     old, new = build(args.old), build(args.new)
     for d in ("old", "new"):
-        (CACHE / "out" / d).mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(CACHE / "out" / d, ignore_errors=True)
+        (CACHE / "out" / d).mkdir(parents=True)
     files = corpus_files(args.exclude, args.file)
     print(f"{len(files)} files; old {args.old} ({old}), new {args.new} ({new})",
           file=sys.stderr)
@@ -192,7 +207,7 @@ def main():
         print(f"  [{i}] {r['file'].relative_to(corpus)}: status {r['status']}, "
               f"warnings {'differ' if r['warnings'] else 'same'}, "
               f"entries {' '.join(r['entries'][:5])}")
-    print(f"details: {CACHE / 'diff.tsv'}; outputs in {CACHE / 'out'}")
+    print(f"details: {CACHE / 'diff.tsv'}; differing outputs in {CACHE / 'out'}")
     return 1 if differ or status or warned else 0
 
 
