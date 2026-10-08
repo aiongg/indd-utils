@@ -50,8 +50,10 @@ impl Writer<'_> {
         if major >= 13 {
             x.attr("IsEndnoteStory", s.is_endnote.to_string());
         }
+        // Without chunk 0xA44C the title is `$ID/` (objects.md, stories).
+        let title = s.settings.title.as_deref().unwrap_or("$ID/");
         x.attr("TrackChanges", "false")
-            .attr("StoryTitle", "$ID/")
+            .attr("StoryTitle", title)
             .attr("AppliedNamedGrid", "n");
         // The TOC style that made the story, if any (objects.md).
         let toc = s
@@ -76,25 +78,37 @@ impl Writer<'_> {
         let mut x = Xml::new();
         self.package_root(&mut x, "Story");
         self.story_start(&mut x, "Story", s);
-        x.empty(
-            "StoryPreference",
-            &[
-                ("OpticalMarginAlignment", "false".into()),
-                ("OpticalMarginSize", "12".into()),
-                ("FrameType", "TextFrameType".into()),
-                // Read from the story's frames; otherwise the value every
-                // exported IDML has (`idml-values.md`).
-                (
-                    "StoryOrientation",
-                    match s.orientation {
-                        Some(Orientation::Vertical) => "Vertical",
-                        _ => "Horizontal",
-                    }
-                    .into(),
-                ),
-                ("StoryDirection", "LeftToRightDirection".into()),
-            ],
-        );
+        // Optical margin and direction from the story's chunks; without
+        // them, the values every story without the chunks has (objects.md,
+        // stories).
+        let (size, alignment) = match s.settings.optical_margin {
+            Some((size, 1)) => (num(size), Some("true")),
+            Some((size, 0)) => (num(size), Some("false")),
+            Some((size, _)) => (num(size), None),
+            None => ("12".into(), Some("false")),
+        };
+        let direction = match s.settings.direction {
+            Some(1) => Some("RightToLeftDirection"),
+            None => Some("LeftToRightDirection"),
+            Some(_) => None,
+        };
+        let mut prefs: Vec<(&str, String)> = Vec::new();
+        if let Some(a) = alignment {
+            prefs.push(("OpticalMarginAlignment", a.into()));
+        }
+        prefs.push(("OpticalMarginSize", size));
+        prefs.push(("FrameType", "TextFrameType".into()));
+        // Read from the story's frames; otherwise the value every
+        // exported IDML has (`idml-values.md`).
+        let orientation = match s.orientation {
+            Some(Orientation::Vertical) => "Vertical",
+            _ => "Horizontal",
+        };
+        prefs.push(("StoryOrientation", orientation.into()));
+        if let Some(d) = direction {
+            prefs.push(("StoryDirection", d.into()));
+        }
+        x.empty("StoryPreference", &prefs);
         x.empty(
             "InCopyExportOption",
             &[
@@ -855,6 +869,7 @@ mod tests {
             xml_element: None,
             orientation: None,
             toc_style: None,
+            settings: Default::default(),
         };
         let src = TextSource {
             uid: 0x40,
@@ -930,6 +945,7 @@ mod tests {
             xml_element: None,
             orientation: None,
             toc_style: None,
+            settings: Default::default(),
         };
         let doc = Document::default();
         let w = Writer::for_test(&doc);
@@ -991,6 +1007,7 @@ mod tests {
             xml_element: None,
             orientation: None,
             toc_style: None,
+            settings: Default::default(),
         };
         let doc = Document {
             xml: XmlStructure {

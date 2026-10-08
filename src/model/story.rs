@@ -76,6 +76,20 @@ pub struct Story {
     pub orientation: Option<Orientation>,
     /// The TOC style that made the story (chunk 0x8C40).
     pub toc_style: Option<u32>,
+    /// Story settings in their own chunks.
+    pub settings: StoryChunks,
+}
+
+/// Settings of a story stored in its own chunks (`docs/format/objects.md`,
+/// stories). `None` where the story has no chunk.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StoryChunks {
+    /// `StoryTitle` as IDML writes it (chunk 0xA44C).
+    pub title: Option<String>,
+    /// Chunk 0x50F96: u16.
+    pub direction: Option<u16>,
+    /// Chunk 0x2EE: `OpticalMarginSize` and the alignment u16.
+    pub optical_margin: Option<(f64, u16)>,
 }
 
 /// A footnote: its text runs, at their offsets in the story text, which
@@ -763,6 +777,21 @@ impl<'a> Reader<'a> {
             orientation: None,
             // The story names an object (class 0x8C20) whose chunk 0x11613
             // is the TOC style.
+            settings: StoryChunks {
+                title: match self.chunk(uid, chunk::STORY_TITLE)? {
+                    Some(d) => {
+                        let mut c = self.cursor(&d);
+                        Some(c.name()?.idml())
+                    }
+                    None => None,
+                },
+                direction: self
+                    .chunk(uid, chunk::STORY_DIRECTION)?
+                    .and_then(|d| self.enc().u16_at(&d, 0)),
+                optical_margin: self
+                    .chunk(uid, chunk::STORY_OPTICAL_MARGIN)?
+                    .and_then(|d| Some((self.enc().f64_at(&d, 2)?, self.enc().u16_at(&d, 12)?))),
+            },
             toc_style: match self
                 .chunk(uid, chunk::STORY_TOC)?
                 .and_then(|d| self.enc().u32_at(&d, 0))

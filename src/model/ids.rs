@@ -133,6 +133,12 @@ pub mod chunk {
     pub const STORY_STRANDS: u32 = 0x223;
     /// The table of contents (class 0x8C20) that made a story.
     pub const STORY_TOC: u32 = 0x8C40;
+    /// Story title: a flag byte and an in-object string.
+    pub const STORY_TITLE: u32 = 0xA44C;
+    /// Story direction: u16, 1 for right to left.
+    pub const STORY_DIRECTION: u32 = 0x50F96;
+    /// Optical margin: u16, f64 size, u16, u16 alignment, u16.
+    pub const STORY_OPTICAL_MARGIN: u32 = 0x2EE;
     /// The TOC style of a table of contents.
     pub const TOC_STYLE_OF: u32 = 0x11613;
     pub const TOC_STYLE: u32 = 0x11605;

@@ -1187,6 +1187,19 @@ Each record starts with a u32 run length in UTF-16 code units. Text
 records continue with text segments. Style records continue with the
 style UID.
 
+**Story settings.** Three chunks of the story object (trustworthy
+pairs, 18,610 stories):
+
+| Chunk | Layout | IDML | Without the chunk | Evidence |
+|---|---|---|---|---|
+| 0xA44C | flag byte (1 for a built-in key), in-object string | `Story` `StoryTitle` (`$ID/` and the key for flag 1) | `$ID/` | 18,610 of 18,610 (30 with a name) |
+| 0x50F96 | u16: 1 | `StoryPreference` `StoryDirection="RightToLeftDirection"` | `LeftToRightDirection` | 18,610 of 18,610 (780 right to left, 10 documents) |
+| 0x2EE (16 bytes) | u16 0; f64 at 2; u16 at 10 (not identified); u16 at 12 (1 `true`); u16 0 | `StoryPreference` `OpticalMarginSize`, `OpticalMarginAlignment` | 12, `false` | alignment 18,610 of 18,610; size 18,601 of 18,610 |
+
+The 9 other sizes are stories in DOM 16 and 20 documents with 9.2126 in
+IDML and no chunk; not explained. Another value of the direction or
+alignment u16 leaves the attribute out.
+
 **Owned items (run kind 0x209).** Each record: u32 run length, u16
 count, then that many (u32 class, u32 UID) pairs, the objects owned by
 the text position at the start of the run. An item anchored in text has
