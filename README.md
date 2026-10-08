@@ -9,12 +9,14 @@ affiliated with or endorsed by Adobe.
 
 ## Status
 
-The converter turns INDD and INDT files into IDML packages. Every output
-from the test corpus validates against the IDML RelaxNG schemas. It
-writes the document
-structure, pages, page items, placed graphics, story text with its
-formatting, styles, swatches, tables, hyperlinks, fonts and XML
-structure. Many attributes are still missing (see
+The converter turns INDD and INDT files into IDML packages. It writes
+the document structure, pages, page items, placed graphics, story text
+with its formatting, footnotes, endnotes, notes and tracked changes,
+styles, swatches, tables, hyperlinks and cross-references, fonts and XML
+structure. Its output validates against the IDML RelaxNG schemas, except
+for endnote markup, which it writes as InDesign does and which the
+published schema rejects ([`docs/measurement.md`](docs/measurement.md)).
+Some attributes are still missing (see
 [Current numbers](#current-numbers)), so the output is not yet the same
 as InDesign's own IDML export.
 
@@ -86,11 +88,11 @@ Each area below links to the document that holds the evidence.
 | Document structure | Spreads, master spreads, layers, sections (start, length, continued numbering, Arabic and lower-case Roman page numbers), the story list. [`objects.md`](docs/format/objects.md) |
 | Pages and masters | Page bounds, transforms, applied master, margins and columns, page names, ruler guides, master names and prefixes. [`objects.md`](docs/format/objects.md) |
 | Page items and graphics | Text frames (with threading), rectangles, ovals, polygons, graphic lines and groups: transforms, paths, fill and stroke, corners, applied object style, text wrap, frame fitting, anchored objects. Placed images, PDF, EPS and SVG with their bounds, clipping path settings and links; graphics pasted without a link keep their data. Transparency: blending, drop shadow, inner shadow and gradient feather where the samples tell the attributes apart. [`objects.md`](docs/format/objects.md), [`attributes.md`](docs/format/attributes.md), [`transparency.md`](docs/format/transparency.md) |
-| Text and typography | Story text, paragraph and character ranges with their local formatting (100 text attributes, among them font, size, leading, tracking, indents, spacing, tabs, rules, shading, borders, bullets and numbering, nested styles, span columns, languages), text frame settings, text variables and their instances. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
+| Text and typography | Story text, paragraph and character ranges with their local formatting (100 text attributes, among them font, size, leading, tracking, indents, spacing, tabs, rules, shading, borders, bullets and numbering, nested styles, span columns, languages), text frame settings, text variables and their instances, footnotes and endnotes with their options, notes, tracked changes, index page references, ruby, tate-chu-yoko. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
 | Styles | Paragraph, character, object, cell and table styles, with style groups, `BasedOn` and `NextStyle`. [`objects.md`](docs/format/objects.md), [`tables.md`](docs/format/tables.md) |
 | Colours and swatches | Process, spot and registration colours, tints, gradients, inks, colour groups, the `None` swatch. [`objects.md`](docs/format/objects.md) |
 | Tables | Tables in stories and in cells: rows, columns, headers and footers, cells with spans, cell text, cell and table formatting, applied styles. [`tables.md`](docs/format/tables.md) |
-| Links and cross-references | Hyperlinks with text sources, page and URL destinations, bookmarks, cross-reference formats. [`hyperlinks.md`](docs/format/hyperlinks.md), [`cross-references.md`](docs/format/cross-references.md) |
+| Links and cross-references | Hyperlinks with text, paragraph and page item sources; text, page, URL and external page destinations; bookmarks; cross-reference sources and formats. [`hyperlinks.md`](docs/format/hyperlinks.md), [`cross-references.md`](docs/format/cross-references.md) |
 | Fonts | Font families and fonts with their names, styles, types and PostScript names; composite font entries. [`fonts.md`](docs/format/fonts.md) |
 | CJK | Kinsoku and mojikumi tables, composite fonts, grid alignment of paragraphs. [`objects.md`](docs/format/objects.md), [`fonts.md`](docs/format/fonts.md) |
 | XML | Tags, the XML structure with elements placed in story text, the backing story. [`xml.md`](docs/format/xml.md) |
@@ -109,20 +111,18 @@ Reasons:
 
 | Feature | Reason |
 |---|---|
-| Cross-reference sources, hyperlink text destinations, page item sources | Not in public samples |
-| Footnotes, endnotes, notes, conditional text, index topics, buttons and forms | Not in public samples |
-| Ruby, kenten, warichu, tate-chu-yoko | Not in public samples |
+| Conditional text, buttons and forms | Not in public samples |
+| Kenten, warichu | Not in public samples |
 | XML attributes, comments, processing instructions, DTDs; XML elements that cross paragraphs | Not in public samples (left out with a warning) |
 | Hyperlink sources that cross a style range | Not in public samples with an IDML (left out with a warning) |
 | Most transparency effects (glows, bevel, satin, feathers other than gradient), drop shadow offsets | Not provable |
-| Table and cell border weights, colours and types; cell edge gap colours | Not provable |
+| Which table border attribute is which side (all four sides are equal in every sample) | Not provable |
 | Font `Status`, variable font design axes | Not provable (`Status` depends on the exporting machine) |
 | Many attributes with one value in nearly every sample (`Visible`, `Locked`, `Name` of page items, …) | Not provable |
 | Tables from InDesign 9.2 | Not started (different layout) |
 | Document preferences from InDesign 3.0–7.5, object style text frame settings from 4.0 | Not started (different layouts) |
-| Group transforms: most groups have no transform chunk, and the identity transform written differs from the reference for 275 of 289 groups | Not started |
 | Transparency of placed graphics and object styles | Not started |
-| Link metadata other than the URI and state | Not started |
+| Index topics, print settings | Not started (in progress) |
 | Text on a path, QR codes | Not started |
 
 ## How fidelity is measured
@@ -154,11 +154,11 @@ privately held samples:
 
 | Measure | Result |
 |---|---|
-| Conversion failures | 0 of 654 paired files; 22 of 3,618 other files, all of them not INDD files or truncated |
-| Schema validation failures | 0 |
-| Value coverage, trustworthy pairs | 88.72 % (9,885,604 of 11,142,835 values) |
-| Value coverage, all pairs | 86.81 % |
-| Story text, trustworthy pairs | 18,509 of 18,610 stories exact, 100 differ, 1 missing |
+| Conversion failures | 0 of 654 paired files; 22 of 3,618 other files (11 not INDD files, 8 InDesign 1.x files, 2 truncated, 1 without an object database) |
+| Schema validation failures | 0 paired files, 11 other files |
+| Value coverage, trustworthy pairs | 96.85 % (11,266,452 of 11,632,968 values) |
+| Value coverage, all pairs | 94.89 % |
+| Story text, trustworthy pairs | 18,602 of 18,610 stories exact, 8 differ, 0 missing |
 <!-- numbers:end -->
 
 
