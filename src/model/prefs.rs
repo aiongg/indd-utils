@@ -36,8 +36,8 @@ pub struct Prefs {
     pub item_default_entries: Vec<(u32, u32, u32)>,
     /// `Properties` children: element, name, value.
     pub props: Vec<(&'static str, &'static str, PrefProp)>,
-    /// Print records (element, bytes), written in base64 as `PrintRecord`.
-    pub print_records: Vec<(&'static str, Vec<u8>)>,
+    /// Records of the print settings, written in base64.
+    pub print_records: Vec<PrintBlob>,
     /// Footnote options (chunk 0x2820).
     pub footnotes: Option<FootnoteOptions>,
     /// Endnote options (chunk 0x2261E).
@@ -224,6 +224,10 @@ impl FootnoteOptions {
     }
 }
 
+/// A record of the print settings, written in base64: element, attribute
+/// (`PrintRecord`, `PaperSizeSelector`) and bytes.
+pub type PrintBlob = (&'static str, &'static str, Vec<u8>);
+
 /// The value of a `Properties` child of a preference element.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrefProp {
@@ -240,29 +244,62 @@ fn flagged(c: &mut Cursor) -> Result<(u8, String), Error> {
     Ok((flag, c.string()?))
 }
 
+/// Attributes of the print settings that `PrintBookletPrintPreference`
+/// does not have (`docs/format/preferences.md`, print settings).
+const NOT_IN_BOOKLET: [&str; 6] = [
+    "PrintSpreads",
+    "Thumbnails",
+    "Tile",
+    "TilingOverlap",
+    "ThumbnailsPerPage",
+    "IncludeSlugToPrint",
+];
+
+/// A built-in key or plain text: flag 1 gives `$ID/` and the key, flag 0
+/// the text; other flags give nothing.
+fn key_or_text((flag, text): (u8, String)) -> Option<String> {
+    match flag {
+        1 => Some(builtin_key(&text)),
+        0 => Some(text),
+        _ => None,
+    }
+}
+
 /// Print settings (chunk 0xA4C, and 0xAF2 for booklets): see
-/// `docs/format/preferences.md`, print preferences.
+/// `docs/format/preferences.md`, print settings. The two chunks have one
+/// layout: a head of fields and strings, then fixed blocks with strings
+/// between them, then the paper size selector.
 fn print_prefs(
     enc: Encoding,
     d: &[u8],
     element: &'static str,
     values: &mut Vec<PrefValue>,
     props: &mut Vec<(&'static str, &'static str, PrefProp)>,
-    records: &mut Vec<(&'static str, Vec<u8>)>,
+    records: &mut Vec<PrintBlob>,
 ) -> Result<(), Error> {
+    let booklet = element == "PrintBookletPrintPreference";
     let mut set = |name: &'static str, value: String| {
-        values.push(PrefValue {
-            element,
-            name,
-            value,
-        })
+        if !(booklet && NOT_IN_BOOKLET.contains(&name)) {
+            values.push(PrefValue {
+                element,
+                name,
+                value,
+            })
+        }
     };
     let mut c = enc.cursor(d);
     let has_record = c.u8()? != 0;
     c.u8()?;
     let n = c.u32()? as usize;
-    records.push((element, c.bytes(n)?.to_vec()));
-    c.skip(if has_record { 6 } else { 2 })?;
+    records.push((element, "PrintRecord", c.bytes(n)?.to_vec()));
+    let device = if has_record {
+        c.u16()?;
+        c.u32()?
+    } else {
+        c.u16()?;
+        0
+    };
+    set("DeviceType", device.to_string());
     let preset = flagged(&mut c)?;
     let to = c.u32()?;
     let printer = flagged(&mut c)?;
@@ -278,13 +315,18 @@ fn print_prefs(
         (1, _) => {}
         (_, name) => prop("ActivePrinterPreset", "string", name.into()),
     }
+    let prepress = (printer.0, printer.1.as_str()) == (1, "kPrepress File");
     match (printer.0, printer.1.as_str()) {
         (1, "kPrepress File") => prop("Printer", "enumeration", "PostscriptFile".into()),
+        (1, "") => prop("Printer", "string", "$ID/".into()),
         (1, _) => {}
         (_, name) => prop("Printer", "string", name.into()),
     }
     match (ppd.0, ppd.1.as_str()) {
-        (1, "kDevice Independent") => prop("PPD", "enumeration", "DeviceIndependent".into()),
+        (1, "kDevice Independent") if prepress => {
+            prop("PPD", "enumeration", "DeviceIndependent".into())
+        }
+        (1, "kDevice Independent") => prop("PPD", "string", builtin_key("kDevice Independent")),
         (1, "") => prop("PPD", "string", "$ID/".into()),
         (1, _) => {}
         (_, name) => prop("PPD", "string", name.into()),
@@ -324,23 +366,193 @@ fn print_prefs(
     if let Some((ty, text)) = paper {
         props.push((element, "PaperSize", PrefProp::Text(ty, text)));
     }
-    let q = c.pos();
-    let f = |o: usize| enc.cursor(&d[q + o..]).f64();
-    set("PaperWidthRange", format!("{} {}", num(f(8)?), num(f(16)?)));
-    set(
-        "PaperHeightRange",
-        format!("{} {}", num(f(32)?), num(f(40)?)),
-    );
-    match enc.cursor(&d[q + 84..]).u16()? {
+    let mut enums: Vec<(&'static str, &'static str)> = Vec::new();
+    let f = |b: &[u8], o: usize| enc.cursor(&b[o..]).f64().map(num);
+    let flag = |v: u8| match v {
+        0 => Some("false".to_string()),
+        1 => Some("true".to_string()),
+        _ => None,
+    };
+    let set_flag = |set: &mut dyn FnMut(&'static str, String), name, v: u8| {
+        if let Some(v) = flag(v) {
+            set(name, v);
+        }
+    };
+
+    // Block A: paper ranges, orientation, copies.
+    let a = c.bytes(126)?;
+    set("PaperWidthRange", format!("{} {}", f(a, 8)?, f(a, 16)?));
+    set("PaperHeightRange", format!("{} {}", f(a, 32)?, f(a, 40)?));
+    set("PaperOffsetRange", format!("{} {}", f(a, 56)?, f(a, 64)?));
+    match enc.cursor(&a[84..]).u16()? {
         0 => set("PrintPageOrientation", "Portrait".into()),
         1 => set("PrintPageOrientation", "Landscape".into()),
         _ => {}
     }
-    set("Copies", enc.cursor(&d[q + 104..]).u32()?.to_string());
-    match d.get(q + 118) {
-        Some(0) => set("PrintBlankPages", "false".into()),
-        Some(1) => set("PrintBlankPages", "true".into()),
+    set("Copies", enc.cursor(&a[104..]).u32()?.to_string());
+    set_flag(&mut set, "PrintBlankPages", a[118]);
+    // The page range text; IDML writes `AllPages` whatever it holds.
+    flagged(&mut c)?;
+
+    // Block B: spreads, colour output, composite screening.
+    let b = c.bytes(30)?;
+    set_flag(&mut set, "PrintSpreads", b[4]);
+    let output = match b[6] {
+        0 => Some("CompositeGray"),
+        1 => Some("CompositeRGB"),
+        2 => Some("CompositeCMYK"),
+        5 => Some("CompositeLeaveUnchanged"),
+        _ => None,
+    };
+    if let Some(o) = output {
+        set("ColorOutput", o.into());
+        set("PreserveColorNumbers", (o != "CompositeRGB").to_string());
+    }
+    set_flag(&mut set, "TextAsBlack", b[10]);
+    set("CompositeAngle", f(b, 14)?);
+    set("CompositeFrequency", f(b, 22)?);
+    if let Some(v) = key_or_text(flagged(&mut c)?) {
+        set("CompositeScreening", v);
+    }
+    if let Some(v) = key_or_text(flagged(&mut c)?) {
+        set("SeparationScreening", v);
+    }
+
+    // Block C: scaling and page position.
+    let s = c.bytes(25)?;
+    match s[0] {
+        0 => enums.push(("ScaleMode", "ScaleToFit")),
+        1 => enums.push(("ScaleMode", "ScaleWidthHeight")),
         _ => {}
+    }
+    set_flag(&mut set, "ScaleProportional", s[4]);
+    set("ScaleWidth", f(s, 6)?);
+    set("ScaleHeight", f(s, 14)?);
+    match s[22] {
+        0 => enums.push(("PagePosition", "UpperLeft")),
+        3 => enums.push(("PagePosition", "Centered")),
+        _ => {}
+    }
+    flagged(&mut c)?;
+
+    // Block D: tiling, thumbnails, graphics and fonts.
+    let g = c.bytes(48)?;
+    if g[0] <= 2 {
+        set("Tile", (g[0] == 1).to_string());
+        set("Thumbnails", (g[0] == 2).to_string());
+    }
+    set("TilingOverlap", f(g, 8)?);
+    match g[16] {
+        2 => enums.push(("ThumbnailsPerPage", "K1x2")),
+        4 => enums.push(("ThumbnailsPerPage", "K2x2")),
+        9 => enums.push(("ThumbnailsPerPage", "K3x3")),
+        _ => {}
+    }
+    match g[20] {
+        0 => enums.push(("SendImageData", "AllImageData")),
+        1 => enums.push(("SendImageData", "OptimizedSubsampling")),
+        _ => {}
+    }
+    match g[24] {
+        0 => enums.push(("DataFormat", "Binary")),
+        1 => enums.push(("DataFormat", "ASCII")),
+        _ => {}
+    }
+    set("BitmapResolution", enc.cursor(&g[30..]).u16()?.to_string());
+    match g[42] {
+        0 => enums.push(("FontDownloading", "None")),
+        1 => enums.push(("FontDownloading", "Complete")),
+        2 => enums.push(("FontDownloading", "Subset")),
+        _ => {}
+    }
+    set_flag(&mut set, "DownloadPPDFonts", g[46]);
+    let mark_type = match flagged(&mut c)? {
+        (1, k) if k.is_empty() => Some("Default"),
+        (1, k) if k == "kJMarksWithCircle" => Some("JMarkWithCircle"),
+        _ => None,
+    };
+
+    // Block E: printer marks, bleed, slug, colour profile.
+    let e = c.bytes(72)?;
+    match e[0] {
+        1 => enums.push(("MarkLineWeight", "P25pt")),
+        2 => enums.push(("MarkLineWeight", "P50pt")),
+        4 => enums.push(("MarkLineWeight", "P07mm")),
+        5 => enums.push(("MarkLineWeight", "P10mm")),
+        _ => {}
+    }
+    set("MarkOffset", f(e, 4)?);
+    let marks = [
+        ("CropMarks", e[12]),
+        ("PageInformationMarks", e[14]),
+        ("ColorBars", e[16]),
+        ("RegistrationMarks", e[18]),
+        ("BleedMarks", e[20]),
+    ];
+    for (name, v) in marks {
+        set_flag(&mut set, name, v);
+    }
+    if marks.iter().all(|(_, v)| *v <= 1) {
+        set(
+            "AllPrinterMarks",
+            marks.iter().all(|(_, v)| *v == 1).to_string(),
+        );
+    }
+    set_flag(&mut set, "UseDocumentBleedToPrint", e[22]);
+    set("BleedTop", f(e, 24)?);
+    set_flag(&mut set, "BleedChain", e[32]);
+    set("BleedInside", f(e, 34)?);
+    set("BleedBottom", f(e, 42)?);
+    set("BleedOutside", f(e, 50)?);
+    set_flag(&mut set, "IncludeSlugToPrint", e[58]);
+    let profile = match e[68] {
+        0 => Some("PostScriptCMS"),
+        1 => Some("UseDocument"),
+        _ => None,
+    };
+    flagged(&mut c)?;
+    c.skip(4)?;
+    flagged(&mut c)?;
+
+    // Block G: screen frequencies and angles of the inks.
+    let k = c.bytes(98)?;
+    for (o, name) in [
+        (12, "CyanFrequency"),
+        (20, "CyanAngle"),
+        (30, "MagentaFrequency"),
+        (38, "MagentaAngle"),
+        (48, "YellowFrequency"),
+        (56, "YellowAngle"),
+        (66, "BlackFrequency"),
+        (74, "BlackAngle"),
+        (82, "SpotFrequency"),
+        (90, "SpotAngle"),
+    ] {
+        set(name, f(k, o)?);
+    }
+    let preset = match flagged(&mut c)? {
+        (1, key) => Some(builtin_key(&key)),
+        (3, name) if name == "[High Resolution]" || name == "[Vysoké rozlišení]" => {
+            Some(builtin_key("kFlSt_HighDefaultName"))
+        }
+        _ => None,
+    };
+    if let Some(p) = preset {
+        set("FlattenerPresetName", p);
+    }
+
+    // The paper size selector.
+    c.skip(6)?;
+    let n = c.u32()? as usize;
+    records.push((element, "PaperSizeSelector", c.bytes(n)?.to_vec()));
+
+    for (name, v) in enums {
+        set(name, v.into());
+    }
+    for (name, v) in [("MarkType", mark_type), ("Profile", profile)] {
+        if let Some(v) = v {
+            props.push((element, name, PrefProp::Text("enumeration", v.into())));
+        }
     }
     Ok(())
 }
@@ -371,6 +583,8 @@ mod id {
     pub const ENDNOTE_OPTIONS: u32 = 0x2261E;
     pub const PRINT: u32 = 0xA4C;
     pub const PRINT_BOOKLET: u32 = 0xAF2;
+    /// Booklet options: page range, margins.
+    pub const BOOKLET_OPTIONS: u32 = 0xAF0;
     pub const PASTEBOARD: u32 = 0x5D2;
     pub const XML_TAGS: u32 = 0xBF4F;
     pub const GRIDS_IN_BACK: u32 = 0x567;
@@ -831,6 +1045,26 @@ impl Reader<'_> {
             }
         }
 
+        // Booklet options: u32, a flagged string (not mapped), 4 bytes,
+        // then the four margins.
+        if let Some(d) = get(id::BOOKLET_OPTIONS)? {
+            let mut c = self.cursor(&d);
+            let margins = (|| -> Result<[f64; 4], Error> {
+                c.u32()?;
+                flagged(&mut c)?;
+                c.skip(4)?;
+                Ok([c.f64()?, c.f64()?, c.f64()?, c.f64()?])
+            })();
+            if let Ok(m) = margins {
+                for (name, v) in ["TopMargin", "BottomMargin", "LeftMargin", "RightMargin"]
+                    .into_iter()
+                    .zip(m)
+                {
+                    set("PrintBookletOption", name, num(v));
+                }
+            }
+        }
+
         // Grids.
         if let Some(d) = get(id::BASELINE_GRID)?.filter(|d| d.len() >= 26) {
             let f = |o: usize| self.cursor(&d[o..]).f64();
@@ -969,6 +1203,158 @@ mod tests {
         assert!(t.no_splitting && t.straddling == Some(true));
         assert!(t.rules[0].on && !t.rules[1].on);
         assert_eq!((t.rules[0].stroke, t.rules[0].weight), (0x5A29, 0.5));
+    }
+
+    /// A flagged in-object string of single-byte text.
+    fn fstr(d: &mut Vec<u8>, flag: u8, text: &str) {
+        d.extend([flag, 2, 0]);
+        d.extend((text.len() as u16).to_le_bytes());
+        if !text.is_empty() {
+            d.extend((0x4000 | text.len() as u16).to_le_bytes());
+            d.extend(text.as_bytes());
+        }
+    }
+
+    #[test]
+    fn reads_print_settings() {
+        let enc = Encoding::default();
+        let mut d = vec![1, 0];
+        d.extend(3u32.to_le_bytes());
+        d.extend([1, 2, 3]);
+        d.extend(0u16.to_le_bytes());
+        d.extend(7u32.to_le_bytes());
+        fstr(&mut d, 1, "kPrSt_DefaultName");
+        d.extend(2u32.to_le_bytes());
+        fstr(&mut d, 1, "kPrepress File");
+        fstr(&mut d, 1, "");
+        fstr(&mut d, 1, "kDevice Independent");
+        fstr(&mut d, 0, "file.ppd");
+        d.extend(3u32.to_le_bytes());
+        d.extend(2400f64.to_le_bytes());
+        for v in [0.0, 0.0, 612.0, 792.0, 0.0, 0.0, 612.0, 792.0] {
+            d.extend(f64::to_le_bytes(v));
+        }
+        d.extend((-1i32).to_le_bytes());
+        fstr(&mut d, 1, "");
+        let mut a = vec![0u8; 126];
+        a[84] = 1;
+        a[104] = 2;
+        d.extend(a);
+        fstr(&mut d, 1, "");
+        let mut b = vec![0u8; 30];
+        b[6] = 1;
+        b[14..22].copy_from_slice(&45f64.to_le_bytes());
+        d.extend(b);
+        fstr(&mut d, 1, "kDefault");
+        fstr(&mut d, 0, "71 lpi / 600 dpi");
+        let mut s = vec![0u8; 25];
+        s[22] = 3;
+        d.extend(s);
+        fstr(&mut d, 0, "");
+        let mut g = vec![0u8; 48];
+        g[0] = 2;
+        g[16] = 4;
+        g[30..32].copy_from_slice(&300u16.to_le_bytes());
+        g[42] = 2;
+        d.extend(g);
+        fstr(&mut d, 1, "kJMarksWithCircle");
+        let mut e = vec![0u8; 72];
+        e[0] = 4;
+        for o in [12, 14, 16, 18, 20] {
+            e[o] = 1;
+        }
+        e[24..32].copy_from_slice(&9f64.to_le_bytes());
+        e[58] = 1;
+        d.extend(e);
+        fstr(&mut d, 1, "");
+        d.extend([0; 4]);
+        fstr(&mut d, 1, "");
+        let mut k = vec![0u8; 98];
+        k[20..28].copy_from_slice(&15f64.to_le_bytes());
+        d.extend(k);
+        fstr(&mut d, 3, "[High Resolution]");
+        d.extend([0; 6]);
+        d.extend(2u32.to_le_bytes());
+        d.extend([9, 9]);
+        d.extend(0u32.to_le_bytes());
+
+        let (mut values, mut props, mut records) = (Vec::new(), Vec::new(), Vec::new());
+        print_prefs(
+            enc,
+            &d,
+            "PrintPreference",
+            &mut values,
+            &mut props,
+            &mut records,
+        )
+        .unwrap();
+        let get = |n: &str| {
+            values
+                .iter()
+                .find(|v| v.name == n)
+                .map(|v| v.value.as_str())
+        };
+        assert_eq!(get("DeviceType"), Some("7"));
+        assert_eq!(get("PrintToDisk"), Some("true"));
+        assert_eq!(get("PrintPageOrientation"), Some("Landscape"));
+        assert_eq!(get("Copies"), Some("2"));
+        assert_eq!(get("ColorOutput"), Some("CompositeRGB"));
+        assert_eq!(get("PreserveColorNumbers"), Some("false"));
+        assert_eq!(get("CompositeAngle"), Some("45"));
+        assert_eq!(get("CompositeScreening"), Some("$ID/kDefault"));
+        assert_eq!(get("SeparationScreening"), Some("71 lpi / 600 dpi"));
+        assert_eq!(get("ScaleMode"), Some("ScaleToFit"));
+        assert_eq!(get("PagePosition"), Some("Centered"));
+        assert_eq!(
+            (get("Tile"), get("Thumbnails")),
+            (Some("false"), Some("true"))
+        );
+        assert_eq!(get("ThumbnailsPerPage"), Some("K2x2"));
+        assert_eq!(get("BitmapResolution"), Some("300"));
+        assert_eq!(get("FontDownloading"), Some("Subset"));
+        assert_eq!(get("MarkLineWeight"), Some("P07mm"));
+        assert_eq!(get("AllPrinterMarks"), Some("true"));
+        assert_eq!(get("BleedTop"), Some("9"));
+        assert_eq!(get("IncludeSlugToPrint"), Some("true"));
+        assert_eq!(get("CyanAngle"), Some("15"));
+        assert_eq!(
+            get("FlattenerPresetName"),
+            Some("$ID/kFlSt_HighDefaultName")
+        );
+        let prop = |n: &str| props.iter().find(|p| p.1 == n).map(|p| p.2.clone());
+        assert_eq!(
+            prop("PPD"),
+            Some(PrefProp::Text("enumeration", "DeviceIndependent".into()))
+        );
+        assert_eq!(
+            prop("MarkType"),
+            Some(PrefProp::Text("enumeration", "JMarkWithCircle".into()))
+        );
+        assert_eq!(
+            prop("Profile"),
+            Some(PrefProp::Text("enumeration", "PostScriptCMS".into()))
+        );
+        assert_eq!(
+            records,
+            vec![
+                ("PrintPreference", "PrintRecord", vec![1, 2, 3]),
+                ("PrintPreference", "PaperSizeSelector", vec![9, 9]),
+            ]
+        );
+
+        // Booklets have no tiling, thumbnail or slug settings.
+        let (mut values, mut props, mut records) = (Vec::new(), Vec::new(), Vec::new());
+        print_prefs(
+            enc,
+            &d,
+            "PrintBookletPrintPreference",
+            &mut values,
+            &mut props,
+            &mut records,
+        )
+        .unwrap();
+        assert!(!values.iter().any(|v| NOT_IN_BOOKLET.contains(&v.name)));
+        assert!(values.iter().any(|v| v.name == "ColorOutput"));
     }
 
     #[test]

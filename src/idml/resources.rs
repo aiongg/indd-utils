@@ -21,6 +21,7 @@ pub(super) const PREFERENCE_TAGS: &[&str] = &[
     "XMLPreference",
     "PrintPreference",
     "PrintBookletPrintPreference",
+    "PrintBookletOption",
 ];
 
 impl Writer<'_> {
@@ -591,16 +592,14 @@ impl Writer<'_> {
                     .extend(fitting.into_iter().map(|(k, v)| (k.to_string(), v)));
             }
         }
-        for (tag, data) in &prefs.print_records {
+        for (tag, name, data) in &prefs.print_records {
             let mut text = base64_lines(data);
             // IDML ends a last line of full length with a line feed.
             if text.rsplit('\n').next().is_some_and(|l| l.len() == 76) {
                 text.push('\n');
             }
             let i = ours_of(&mut ours, tag);
-            ours[i]
-                .attrs
-                .push(("PrintRecord".into(), builtin_key(&text)));
+            ours[i].attrs.push((name.to_string(), builtin_key(&text)));
         }
         for (tag, name, value) in &prefs.props {
             let mut n = Node {

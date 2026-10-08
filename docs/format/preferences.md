@@ -233,18 +233,24 @@ frame fitting attributes of the list are written to the preference
 ## Print settings (`PrintPreference`, `PrintBookletPrintPreference`)
 
 Chunk 0xA4C holds the print settings and chunk 0xAF2 those of booklet
-printing, in the same layout. Its start, in order (a "string" is a flag
-byte, 1 for a built-in key, then an in-object string):
+printing. Both have one layout: a head of fields and strings, seven
+fixed blocks (A to G) with strings between them, and a tail. All 1,308
+chunks of the 654 pairs (DOM 7 to 21) parse with it, with the same block
+lengths. A "string" is a flag byte (1 for a built-in key, 0 for plain
+text; 2 and 3 also occur) and an in-object string. Booleans are u8: 1
+`true`, 0 `false`. A code not listed leaves the attribute out.
+
+### Head
 
 | Field | IDML |
 |---|---|
-| u8 1 if a print record follows, u8, u32 length *n*, *n* bytes | `PrintRecord`: `$ID/` and the bytes in base64, 76 characters per line, a line feed after every full line |
-| 6 bytes with a print record, 2 without | |
-| String | `ActivePrinterPreset`: built-in `kPrSt_DefaultName` is `Default`, built-in empty `Custom`, otherwise the name (string) |
+| u8 1 if a print record follows, u8, u32 length *n*, *n* bytes | `PrintRecord`: `$ID/` and the bytes in base64, 76 characters per line |
+| With a record: u16 0, u32. Without: 2 bytes | `DeviceType`: the u32 in decimal; 0 without a record |
+| String | `ActivePrinterPreset`: built-in `kPrSt_DefaultName` is `Default`, built-in empty `Custom` (enumerations), otherwise the name (string) |
 | u32 | `PrintTo`; `PrintToDisk` is `true` when it is 2 |
-| String | `Printer`: built-in `kPrepress File` is `PostscriptFile`, otherwise the name |
-| String | not identified (empty in every file) |
-| String | `PPD`: built-in `kDevice Independent` is `DeviceIndependent`, built-in empty the string `$ID/`, otherwise the name |
+| String | `Printer`: built-in `kPrepress File` is the enumeration `PostscriptFile`, built-in empty the string `$ID/`, otherwise the name |
+| String | not identified (built-in empty in every file) |
+| String | `PPD`: built-in `kDevice Independent` is the enumeration `DeviceIndependent` when the printer is `kPrepress File`, otherwise the string `$ID/kDevice Independent`; built-in empty the string `$ID/`; otherwise the name |
 | String | `PPDFile` (`$ID/` and the text for a built-in string) |
 | u32 | `PostScriptLevel`: 2 `Level2`, 3 `Level3` |
 | f64 | `PrintResolution` |
@@ -252,17 +258,108 @@ byte, 1 for a built-in key, then an in-object string):
 | 4 f64 | `ImageablePaperSizeRect`: left, top, right, bottom |
 | i32, then a string | `PaperSize`: −3 the string, −2 `DefinedByDriver`, −1 `Custom` |
 
-After that string, at these offsets from its end: f64 −1 at 0 and 24
-(`PaperWidth` and `PaperHeight` are `Auto` in every file), f64 pairs at 8
-and 32 (`PaperWidthRange`, `PaperHeightRange`), u16 at 84
-(`PrintPageOrientation`: 0 `Portrait`, 1 `Landscape`), u32 at 104
-(`Copies`), u8 at 118 (`PrintBlankPages`). The rest of the chunk (marks,
-bleeds, screening, colour output, scaling and the paper size selector) is
-not decoded.
+IDML ends the base64 text with a line feed when its last line is full
+(76 characters). This holds for `PrintRecord` and `PaperSizeSelector`.
 
-Evidence: every field above matches in all 654 pairs for both chunks,
-except `PPD` (653, one built-in key written as a string in IDML),
-`Printer` of booklets (653) and `PPDFile` of booklets (652). The paper rectangles are written as IDML
-writes them: with the digits of the shortest form that reads back, the
-last rounded half to even from the exact value (583.2000122070312, not
-…313).
+### Blocks
+
+"A+8" is offset 8 in block A.
+
+| Part | Field | IDML |
+|---|---|---|
+| A (126 bytes) | f64 at A+8 and A+16 | `PaperWidthRange` ("min max") |
+| | f64 at A+32 and A+40 | `PaperHeightRange` |
+| | f64 at A+56 and A+64 | `PaperOffsetRange` |
+| | u16 at A+84 | `PrintPageOrientation`: 0 `Portrait`, 1 `Landscape` |
+| | u32 at A+104 | `Copies` |
+| | u8 at A+118 | `PrintBlankPages` |
+| String | page range text (empty, or text such as `1-2`) | not mapped: IDML `PageRange` is `AllPages` in every file |
+| B (30 bytes) | u8 at B+4 | `PrintSpreads` |
+| | u8 at B+6 | `ColorOutput`: 0 `CompositeGray`, 1 `CompositeRGB`, 2 `CompositeCMYK`, 5 `CompositeLeaveUnchanged` |
+| | u8 at B+10 | `TextAsBlack` |
+| | f64 at B+14, B+22 | `CompositeAngle`, `CompositeFrequency` |
+| String | | `CompositeScreening`: `$ID/` and the key for a built-in string, else the text |
+| String | | `SeparationScreening`, same rule |
+| C (25 bytes) | u8 at C+0 | `ScaleMode`: 0 `ScaleToFit`, 1 `ScaleWidthHeight` |
+| | u8 at C+4 | `ScaleProportional` |
+| | f64 at C+6, C+14 | `ScaleWidth`, `ScaleHeight` |
+| | u8 at C+22 | `PagePosition`: 0 `UpperLeft`, 3 `Centered` |
+| String | | not identified (plain and empty in every file) |
+| D (48 bytes) | u8 at D+0 | 0: `Tile` and `Thumbnails` `false`; 1: `Tile` `true`; 2: `Thumbnails` `true` |
+| | f64 at D+8 | `TilingOverlap` |
+| | u8 at D+16 | `ThumbnailsPerPage`: 2 `K1x2`, 4 `K2x2`, 9 `K3x3` |
+| | u8 at D+20 | `SendImageData`: 0 `AllImageData`, 1 `OptimizedSubsampling` |
+| | u8 at D+24 | `DataFormat`: 0 `Binary`, 1 `ASCII` |
+| | u16 at D+30 | `BitmapResolution` |
+| | u8 at D+42 | `FontDownloading`: 0 `None`, 1 `Complete`, 2 `Subset` |
+| | u8 at D+46 | `DownloadPPDFonts` |
+| String | | `MarkType` (enumeration): built-in empty `Default`, built-in `kJMarksWithCircle` `JMarkWithCircle` |
+| E (72 bytes) | u8 at E+0 | `MarkLineWeight`: 1 `P25pt`, 2 `P50pt`, 4 `P07mm`, 5 `P10mm` |
+| | f64 at E+4 | `MarkOffset` |
+| | u8 at E+12, 14, 16, 18, 20 | `CropMarks`, `PageInformationMarks`, `ColorBars`, `RegistrationMarks`, `BleedMarks` |
+| | u8 at E+22 | `UseDocumentBleedToPrint` |
+| | f64 at E+24 | `BleedTop` |
+| | u8 at E+32 | `BleedChain` |
+| | f64 at E+34, E+42, E+50 | `BleedInside`, `BleedBottom`, `BleedOutside` |
+| | u8 at E+58 | `IncludeSlugToPrint` |
+| | u8 at E+68 | `Profile` (enumeration): 1 `UseDocument`, 0 `PostScriptCMS` |
+| String, F (4 bytes), string | | not identified (built-in empty strings in every file) |
+| G (98 bytes) | f64 at G+12, G+20 | `CyanFrequency`, `CyanAngle` |
+| | f64 at G+30, G+38 | `MagentaFrequency`, `MagentaAngle` |
+| | f64 at G+48, G+56 | `YellowFrequency`, `YellowAngle` |
+| | f64 at G+66, G+74 | `BlackFrequency`, `BlackAngle` |
+| | f64 at G+82, G+90 | `SpotFrequency`, `SpotAngle` |
+| String | | `FlattenerPresetName`: `$ID/` and the key for a built-in string; flag 3 with `[High Resolution]` (or its Czech name, `[Vysoké rozlišení]`) is `$ID/kFlSt_HighDefaultName`; other names are left out |
+| Tail | 6 zero bytes, u32 *n*, *n* bytes, then u16 (DOM 7 to 9) or u32 (DOM 10 on), 0 or 1 | `PaperSizeSelector`: `$ID/` and the *n* bytes in base64, as `PrintRecord` |
+
+Also in every block are f64 −1 at A+0 and A+24 (`PaperWidth` and
+`PaperHeight` are `Auto` in every file). The other bytes of the blocks
+are not mapped: the IDML attributes left (`Collating`, `Sequence`,
+`Trapping`, `PrintCyan`, `Intent`, …) have one value in every file, so
+they cannot be told apart.
+
+Three attributes are derived from fields:
+
+- `AllPrinterMarks` is `true` exactly when the five marks of block E are
+  all `true` (`PrintPreference`: 2 of 2 `true`, 487 of 487 `false`;
+  booklets: 5 of 5 and 484 of 484).
+- `PreserveColorNumbers` is `false` when `ColorOutput` is
+  `CompositeRGB` and `true` otherwise. Two of the 37 documents with
+  `CompositeGray` have `false`.
+- `PrintToDisk` (above).
+
+`BitmapPrinting` is not stored: no byte of any chunk of the preferences
+object (0x2202) or of the document object, nor of the print record,
+follows it. The converter does not write it.
+
+`PrintBookletPrintPreference` has no `PrintSpreads`, `Thumbnails`,
+`Tile`, `TilingOverlap`, `ThumbnailsPerPage`, `IncludeSlugToPrint` or
+`PageRange` (schema); the converter reads the fields and does not write
+these.
+
+Evidence: each attribute above was compared over the 489 trustworthy
+pairs for both elements; every one matches in all 489, except
+`PreserveColorNumbers` (487, the two `CompositeGray` documents) and
+`MarkType` (488: one DOM 16.1 document stores `kJMarksWithCircle` and
+its IDML has `Default`). Over all 654 pairs, the only further misses are
+`PPDFile` of two stale booklet pairs (a built-in path written without
+`$ID/`). The paper rectangles are written as IDML writes them: with the
+digits of the shortest form that reads back, the last rounded half to
+even from the exact value (583.2000122070312, not …313). Several
+ranges and rectangles are f32 values widened to f64
+(`16.600000381469727`); they match only when written in full.
+
+Which of two equal fields is which is assumed, because they are equal
+in every sample: `CyanFrequency` and `MagentaFrequency` (the stride of
+the ink entries supports the order), `ScaleWidth` and `ScaleHeight`,
+and `BleedTop`, `BleedInside` and `BleedOutside`.
+
+### Booklet options (`PrintBookletOption`)
+
+Chunk 0xAF0 of the preferences object: u32, a string (a page range or
+paper name, not mapped), 4 bytes, then f64 `TopMargin`, `BottomMargin`,
+`LeftMargin`, `RightMargin`, then 34 bytes (`AutoAdjustMargins` and the
+other attributes have one value in every file). The chunk is in 11
+trustworthy pairs (12 of all pairs); the margins match in all of them.
+Without the chunk, IDML has the margins 36 (478 of 478). Left and right
+are equal in every sample, so their order is assumed.
