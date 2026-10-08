@@ -489,19 +489,24 @@ every other font.
 ## Number format
 
 IDML writes a number as the shortest decimal that reads back as the same
-64-bit value, in plain notation (no exponent). When that decimal needs 17
-significant digits, there can be two 17-digit candidates equally close to
-the value; IDML then takes the one with the even last digit. For example
-the value 150.235992431640625 is written `150.23599243164062`, not
-`…063`. This is the 17-digit decimal nearest to the exact value, with
-ties to even.
+64-bit value. When two decimals of that length read back as the value,
+IDML takes the one nearest to the exact binary value, and of two equally
+near (the value lies exactly halfway, common for values that came from
+32-bit floats) the one with the even last digit. For example the value
+150.235992431640625 is written `150.23599243164062`, not `…063`.
+Numbers below 1e-4 are written with an exponent of at least two digits
+(`5.684341886080802e-14`, `1.8897456811828306e-05`); all others are
+written in plain notation.
 
-Evidence: all 20,524 `GraphicBounds` values of images, PDF, EPS, SVG and
-WMF graphics and imported pages in the trustworthy pairs follow this
-rule (compared with the text Python's `repr` gives for the same value).
-The INDD values (chunk 0x1633) match 1,001 of 1,001 PDF and 338 of 338
-EPS graphics with this format; Rust's shortest form differs in the last
-digit for 208 of these values. The converter writes every number this
+Evidence: of the 1,090,937 distinct numeric texts in the attributes of
+the 654 reference IDMLs of the corpus before 2026-10, the rule gives the
+same text for all but 67, which are text values rather than numbers
+(`DOMVersion="17.0"`, `2.000`, `0.80`). Rust's shortest form differs on
+7,674 of them: ties written with the odd digit, and small numbers
+written without an exponent. The INDD values of `GraphicBounds` (chunk
+0x1633), written this way, equal the IDML text in all 1,774 PDF, 407 EPS
+and 233 SVG graphics of the 803 pairs (`compare.py` compares
+`Properties` children as text). The converter writes every number this
 way.
 
 ## Preferences

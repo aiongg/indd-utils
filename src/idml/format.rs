@@ -142,58 +142,65 @@ pub(super) fn ui_color_property(tag: &str, rgb: [f64; 3]) -> Option<Node> {
 }
 
 /// A number as IDML text: the shortest decimal that reads back as the same
-/// value, in plain notation. When that needs 17 significant digits, IDML
-/// takes the 17-digit decimal nearest to the value, with ties to the even
-/// digit (`150.23599243164062`, where Rust's shortest form has `…063`);
-/// see `docs/format/idml-values.md`, number format. IDML keeps negative
-/// zero (`1 -0 -0 1 0 0`). IDML has no text for NaN or infinity; they are
+/// value. When two decimals of that length read back as the value, IDML
+/// takes the one nearest to the exact value, with ties to the even digit
+/// (`150.23599243164062`, where Rust's shortest form has `…063`). Numbers
+/// below 1e-4 are written with an exponent of at least two digits
+/// (`5.684341886080802e-14`), all others in plain notation; see
+/// `docs/format/idml-values.md`, number format. IDML keeps negative zero
+/// (`1 -0 -0 1 0 0`). IDML has no text for NaN or infinity; they are
 /// written as 0, which keeps the package valid.
 pub fn num(v: f64) -> String {
     if !v.is_finite() {
         return "0".to_string();
     }
-    let short = format!("{v}");
-    if significant_digits(&short) < 17 {
-        return short;
+    if v == 0.0 {
+        return if v.is_sign_negative() { "-0" } else { "0" }.into();
     }
-    // `{:.16e}` rounds the exact value to 17 digits, ties to even.
-    let sci = format!("{v:.16e}");
+    // The shortest digits that read back as v, then the decimal of that
+    // length nearest to the exact value (`{:.*e}` rounds ties to even),
+    // if it also reads back as v.
+    let shortest = format!("{v:e}");
+    let Some((mantissa, _)) = shortest.split_once('e') else {
+        return format!("{v}");
+    };
+    let len = mantissa.chars().filter(char::is_ascii_digit).count();
+    let nearest = format!("{:.*e}", len.saturating_sub(1), v);
+    let sci = if nearest.parse::<f64>() == Ok(v) {
+        nearest
+    } else {
+        shortest
+    };
     let Some((mantissa, exp)) = sci.split_once('e') else {
-        return short;
+        return format!("{v}");
     };
     let Ok(exp) = exp.parse::<i32>() else {
-        return short;
+        return format!("{v}");
     };
     let (sign, mantissa) = match mantissa.strip_prefix('-') {
         Some(m) => ("-", m),
         None => ("", mantissa),
     };
-    let digits: String = mantissa.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
     let digits = digits.trim_end_matches('0');
-    // The decimal point goes after `exp + 1` digits.
-    let point = exp + 1;
-    let text = if point <= 0 {
-        format!("0.{}{digits}", "0".repeat(point.unsigned_abs() as usize))
-    } else if point as usize >= digits.len() {
-        format!("{digits}{}", "0".repeat(point as usize - digits.len()))
+    let digits = if digits.is_empty() { "0" } else { digits };
+    let text = if exp < -4 {
+        let (first, rest) = digits.split_at(1);
+        let point = if rest.is_empty() { "" } else { "." };
+        format!("{first}{point}{rest}e-{:02}", -exp)
+    } else if exp < 0 {
+        format!("0.{}{digits}", "0".repeat((-exp - 1) as usize))
     } else {
-        let (int, frac) = digits.split_at(point as usize);
-        format!("{int}.{frac}")
+        // The decimal point goes after `exp + 1` digits.
+        let point = exp as usize + 1;
+        if point >= digits.len() {
+            format!("{digits}{}", "0".repeat(point - digits.len()))
+        } else {
+            let (int, frac) = digits.split_at(point);
+            format!("{int}.{frac}")
+        }
     };
     format!("{sign}{text}")
-}
-
-/// The number of significant digits of a number in plain notation.
-fn significant_digits(text: &str) -> usize {
-    let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
-    let digits = digits.trim_start_matches('0');
-    // Trailing zeros of an integer are not significant either; `{}` writes
-    // no trailing zeros after a decimal point.
-    if text.contains('.') {
-        digits.len()
-    } else {
-        digits.trim_end_matches('0').len()
-    }
 }
 
 /// A link time (FILETIME: 100 ns intervals since 1601-01-01 UTC) as IDML
@@ -380,6 +387,12 @@ mod tests {
         assert_eq!(num(0.2779084995276255), "0.2779084995276255");
         assert_eq!(num(1e20), "100000000000000000000");
         assert_eq!(num(0.1 + 0.2), "0.30000000000000004");
+        // Ties at fewer digits, and small numbers with an exponent.
+        assert_eq!(num(0.125), "0.125");
+        assert_eq!(num(5.684341886080802e-14), "5.684341886080802e-14");
+        assert_eq!(num(1.8897456811828306e-05), "1.8897456811828306e-05");
+        assert_eq!(num(1e-5), "1e-05");
+        assert_eq!(num(0.0001), "0.0001");
         for v in [1.0 / 3.0, 2.0 / 3.0, 1e-7 / 3.0, 123456.789e3 / 7.0] {
             assert_eq!(num(v).parse::<f64>().unwrap(), v);
         }
