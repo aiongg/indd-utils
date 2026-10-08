@@ -1297,6 +1297,28 @@ and the text wrap equal the IDML in 634 of 634. `StrokeType` (634),
 IDML writes `StrokeType="StrokeStyle/$ID/Solid"` on 627 items whose
 attribute list has no stroke type.
 
+## Placed InDesign pages (class 0x6607)
+
+A placed page of another InDesign document is a child of a frame, like
+an image, and has the chunks of placed graphics (transform 0x151,
+bounds 0x1633, link 0x8CBC, text wrap). IDML writes it as
+`ImportedPage`. Chunk 0x2505 (68 bytes) holds the page: its u32 at 0
+plus 1 is `PageNumber`.
+
+The converter writes `ImportedPage` with `PageNumber`, the attributes
+of placed graphics (`ImageTypeName` from the link format, `$ID/InDesign
+Format Name`), `Properties/GraphicBounds`, `TextWrapPreference` and
+`Link`. Not decoded, and left out: `ImportedPageCrop` (41 of 42 are
+`CropContent`, 1 `CropBleed`; the byte at 18 of 0x2505 is 0 in 28 and
+1 in 13 `CropContent` items, so it is not that field),
+`MetadataPacketPreference` (an XMP packet of an object of class 0x12609
+that chunk 0x12629 names), `ClippingPathSettings`, `GraphicLayerOption`
+and `PDFAttribute`.
+
+Evidence: 42 `ImportedPage` elements in 8 pairs (38 in 7 trustworthy
+pairs). `ItemTransform`, `GraphicBounds` and `PageNumber` equal the
+IDML in 42 of 42.
+
 ## Graphics pasted without a link
 
 A graphic with no link (its chunk 0x8CBC names no link) can hold its file

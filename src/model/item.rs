@@ -205,6 +205,8 @@ pub enum GraphicKind {
     Pdf,
     Eps,
     Svg,
+    /// A placed InDesign page (class 0x6607).
+    ImportedPage,
 }
 
 /// A link (class 0x8C42) and its link resource (class 0x8C41). See
@@ -275,6 +277,8 @@ pub struct Graphic {
     /// Image import options (chunk 0x1714): apply the Photoshop clipping
     /// path, alpha channel name.
     pub import: Option<(bool, Name)>,
+    /// The index of a placed InDesign page (chunk 0x2505, u32 at 0).
+    pub page_index: Option<u32>,
 }
 
 /// Image properties (chunk 0x1708): u32 count, then records of u32 key,
@@ -917,6 +921,7 @@ impl<'a> Reader<'a> {
             Some(class::PDF) => GraphicKind::Pdf,
             Some(class::EPS) => GraphicKind::Eps,
             Some(class::SVG) => GraphicKind::Svg,
+            Some(class::IMPORTED_PAGE) => GraphicKind::ImportedPage,
             _ => return Ok(None),
         };
         let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
@@ -1037,6 +1042,10 @@ impl<'a> Reader<'a> {
                         _ => None,
                     }
                 }
+                _ => None,
+            },
+            page_index: match self.chunk(uid, chunk::IMPORTED_PAGE_INFO)? {
+                Some(d) if kind == GraphicKind::ImportedPage => self.enc().u32_at(&d, 0),
                 _ => None,
             },
         }))

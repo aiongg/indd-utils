@@ -27,6 +27,8 @@ pub mod class {
     pub const EPS_TEXT: u32 = 0x660B;
     /// Text on the path of a shape or frame (IDML `TextPath`).
     pub const TEXT_PATH: u32 = 0xB320;
+    /// A placed InDesign page (IDML `ImportedPage`).
+    pub const IMPORTED_PAGE: u32 = 0x6607;
     /// The column of a text path's multi-column frame.
     pub const TEXT_PATH_COLUMN: u32 = 0xB318;
     /// A plain byte stream, such as the file of an embedded graphic.
@@ -254,6 +256,8 @@ pub mod chunk {
     pub const VECTOR_POLICIES: u32 = 0x7C42;
     /// PDF placement: page number, transparent background, crop.
     pub const PDF_PLACEMENT: u32 = 0x251B;
+    /// Placed InDesign page: u32 page index at 0, other fields.
+    pub const IMPORTED_PAGE_INFO: u32 = 0x2505;
     /// Layers of an image, PDF or imported page.
     pub const GRAPHIC_LAYERS: u32 = 0x177A;
     /// Applied layer comp of an image (i32 at 4).

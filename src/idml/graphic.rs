@@ -215,9 +215,15 @@ impl Writer<'_> {
             GraphicKind::Pdf => "PDF",
             GraphicKind::Eps => "EPS",
             GraphicKind::Svg => "SVG",
+            GraphicKind::ImportedPage => "ImportedPage",
         };
         let [left, top, right, bottom] = g.bounds;
         x.start(tag).attr("Self", uref(Some(g.uid)));
+        // The page number is the stored index + 1 (objects.md, placed
+        // InDesign pages).
+        if let Some(i) = g.page_index.and_then(|i| i.checked_add(1)) {
+            x.attr("PageNumber", i.to_string());
+        }
         match g.kind {
             GraphicKind::Image => {
                 if g.link.is_some()
@@ -254,6 +260,7 @@ impl Writer<'_> {
             GraphicKind::Svg => {
                 x.attr("UseSVGAs", "EmbedCode");
             }
+            GraphicKind::ImportedPage => {}
         }
         x.attr("LocalDisplaySetting", "Default");
         if let Some(f) = g.link.as_ref().and_then(|l| l.format.as_ref()) {
@@ -281,7 +288,7 @@ impl Writer<'_> {
                 }
             }
         }
-        if major >= 21 && g.kind != GraphicKind::Eps {
+        if major >= 21 && !matches!(g.kind, GraphicKind::Eps | GraphicKind::ImportedPage) {
             x.attr("FlexItemWidthMode", "FlexFixed")
                 .attr("FlexItemHeightMode", "FlexFixed");
         }
@@ -309,7 +316,8 @@ impl Writer<'_> {
             ],
         );
         x.end();
-        if g.kind != GraphicKind::Svg {
+        // The clipping settings of a placed page are not decoded.
+        if !matches!(g.kind, GraphicKind::Svg | GraphicKind::ImportedPage) {
             self.clipping(x, g, tag);
         }
         if g.kind == GraphicKind::Image {
