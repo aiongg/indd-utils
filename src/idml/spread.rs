@@ -520,6 +520,31 @@ impl Writer<'_> {
         };
         x.attrs_missing(self.observed(observed).iter());
         Self::path_geometry(x, &item.paths);
+        // A frame grid (objects.md, frame grids).
+        if let ItemKind::TextFrame {
+            preferences: Some(p),
+            ..
+        } = &item.kind
+            && p.frame_grid
+        {
+            let count = self
+                .doc
+                .prefs
+                .grids
+                .iter()
+                .find(|(tag, ..)| *tag == "StoryGridDataInformation")
+                .and_then(|(_, _, c)| *c);
+            if let Some(c) = count {
+                x.empty(
+                    "GridDataInformation",
+                    &[
+                        ("GridView", "GridViewEnum".into()),
+                        ("CharacterCountLocation", "BottomAlign".into()),
+                        ("CharacterCountSize", num(c)),
+                    ],
+                );
+            }
+        }
         for t in &item.text_paths {
             self.text_path(x, t);
         }

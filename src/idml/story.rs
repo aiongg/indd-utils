@@ -120,6 +120,12 @@ impl Writer<'_> {
         }
         x.attrs_missing(self.observed("Story/StoryPreference").iter());
         x.end();
+        // The layout grid of a frame grid story (objects.md, frame grids).
+        if frame_type == Some("FrameGridType")
+            && let Some(g) = &s.settings.grid
+        {
+            self.grid_data(&mut x, g);
+        }
         x.start("InCopyExportOption");
         x.attrs_missing(self.observed("Story/InCopyExportOption").iter());
         x.end();

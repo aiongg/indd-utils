@@ -360,6 +360,8 @@ pub struct TextFramePreferences {
     pub footnotes: Option<[f64; 2]>,
     /// Inset spacing (the frame's chunk 0x3723): top, left, bottom, right.
     pub inset: [f64; 4],
+    /// A frame grid (chunk 0xCD41 starts with u16 1).
+    pub frame_grid: bool,
 }
 
 /// Groups nested deeper than this are left out, with a warning, so that a
@@ -527,6 +529,10 @@ impl<'a> Reader<'a> {
                 .map(|d| d.iter().any(|&b| b != 0)),
             footnotes,
             inset,
+            frame_grid: self
+                .chunk(mcf, chunk::FRAME_GRID)?
+                .and_then(|d| self.enc().u16_at(&d, 0))
+                == Some(1),
         }))
     }
 

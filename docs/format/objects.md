@@ -1455,6 +1455,30 @@ Japanese (DOM 12, 13 and 18). Another frame type value leaves
 `FrameType` out. For another orientation value the converter uses the
 orientation of the story's frames (text orientation, below).
 
+**Frame grids.** Over all pairs of the corpus of 2026-10:
+
+- Chunk 0xCD41 of a text frame's multi-column frame object (class
+  0x263, the child that the frame's chunk 0x15B lists) is `00 00` for a
+  plain frame (23,537 of 23,537) and starts with u16 1 for a frame grid
+  (248 of 248; 100, 146, 192 or 238 bytes). IDML writes an empty
+  `GridDataInformation` in the `TextFrame` for exactly these 248 frames,
+  after `Properties`, with `GridView="GridViewEnum"`,
+  `CharacterCountLocation="BottomAlign"` and `CharacterCountSize` equal
+  to the `CharacterCountSize` of the document's story grid preference
+  (chunk 0xCD2E, `preferences.md`): 248 of 248 in 39 documents. The rest
+  of the chunk is not decoded.
+- The stories of these frames are the frame grid stories of chunk 0x2EE
+  (above): 57 of 57. They have chunk 0xCD02 in the story object, with
+  the layout of the page chunk (layout grid, below), and IDML writes a
+  `GridDataInformation` in the `Story`, after `StoryPreference` and
+  before `InCopyExportOption`, with the same values: 57 of 57 for every
+  attribute. 223 other stories have the chunk but are not frame grid
+  stories, and IDML writes no `GridDataInformation` for them. One frame
+  grid story in the trustworthy pairs has the IDML element but no
+  chunk.
+
+The converter writes both elements by these rules.
+
 **Owned items (run kind 0x209).** Each record: u32 run length, u16
 count, then that many (u32 class, u32 UID) pairs, the objects owned by
 the text position at the start of the run. An item anchored in text has

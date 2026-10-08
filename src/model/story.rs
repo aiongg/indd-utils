@@ -93,6 +93,8 @@ pub struct StoryChunks {
     /// Chunk 0x2EE: the text orientation u16 at 0 and the frame type u16
     /// at 14.
     pub layout: Option<(u16, u16)>,
+    /// Chunk 0xCD02: the layout grid of a frame grid story.
+    pub grid: Option<GridData>,
 }
 
 /// A footnote: its text runs, at their offsets in the story text, which
@@ -799,6 +801,10 @@ impl<'a> Reader<'a> {
                 layout: margin
                     .as_ref()
                     .and_then(|d| Some((self.enc().u16_at(d, 0)?, self.enc().u16_at(d, 14)?))),
+                grid: match self.chunk(uid, chunk::PAGE_GRID)? {
+                    Some(d) => Some(GridData::read(&mut self.cursor(&d))?),
+                    None => None,
+                },
             },
             toc_style: match self
                 .chunk(uid, chunk::STORY_TOC)?

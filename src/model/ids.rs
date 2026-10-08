@@ -228,6 +228,8 @@ pub mod chunk {
     pub const FRAME_COLUMN_RULE_OVERRIDE: u32 = 0x2265A;
     pub const FRAME_FOOTNOTES: u32 = 0x22608;
     pub const FRAME_IGNORE_WRAP: u32 = 0x3730;
+    /// Frame grid of a multi-column frame: u16 1 at 0 for a frame grid.
+    pub const FRAME_GRID: u32 = 0xCD41;
     /// Inset spacing of a text frame (on the frame, not its columns).
     pub const FRAME_INSET: u32 = 0x3723;
     pub const FRAME_JUSTIFICATION: u32 = 0x2CE;
