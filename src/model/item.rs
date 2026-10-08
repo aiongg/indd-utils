@@ -113,6 +113,26 @@ pub struct PageItem {
     pub props: ItemProps,
     /// Export options (chunk 0x1E206); `None` without the chunk.
     pub export: Option<ExportOptions>,
+    /// Text on the item's path (chunk 0xB30A).
+    pub text_paths: Vec<TextPath>,
+}
+
+/// Text on the path of a shape or frame (class 0xB320). See
+/// `docs/format/objects.md`, text on a path.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextPath {
+    pub uid: u32,
+    pub story: Option<u32>,
+    pub previous: Option<u32>,
+    pub next: Option<u32>,
+    /// `FlipPathEffect`.
+    pub flipped: bool,
+    pub start: f64,
+    pub end: f64,
+    /// The three codes at 8 of chunk 0xB30A are those of every sample
+    /// (`CenterPathAlignment`, `BaselineTextAlignment`,
+    /// `RainbowPathEffect`, `PathSpacing` 0).
+    pub default_codes: bool,
 }
 
 /// Alternative text and tagging settings of a page item (chunk 0x1E206).
@@ -806,6 +826,68 @@ impl<'a> Reader<'a> {
                 self.warn(format!("item {uid}: export options left out: {e}"));
                 None
             }),
+            text_paths: self
+                .text_path(uid)
+                .unwrap_or_else(|e| {
+                    self.warn(format!("item {uid}: text on its path left out: {e}"));
+                    None
+                })
+                .into_iter()
+                .collect(),
+        }))
+    }
+
+    /// The text on the path of an item (chunk 0xB30A): u32 text path UID,
+    /// u32, three codes (8 bytes), u8 flip at 16, f64 start at 18 and end
+    /// at 26. The story and thread come from the column (class 0xB318) of
+    /// the text path's multi-column frame (chunk 0xB334). See
+    /// `docs/format/objects.md`, text on a path.
+    fn text_path(&self, uid: u32) -> Result<Option<TextPath>, Error> {
+        let Some(d) = self.chunk(uid, chunk::ITEM_TEXT_PATH)? else {
+            return Ok(None);
+        };
+        let mut c = self.cursor(&d);
+        let path = c.u32()?;
+        if path == 0 || self.class(path) != Some(class::TEXT_PATH) {
+            return Ok(None);
+        }
+        c.u32()?;
+        let codes = c.bytes(8)?;
+        let default_codes = self.enc().u16_at(codes, 0) == Some(1)
+            && self.enc().u16_at(codes, 2) == Some(4)
+            && self.enc().u32_at(codes, 4) == Some(3);
+        let flipped = c.u8()? == 1;
+        c.u8()?;
+        let start = c.f64()?;
+        let end = c.f64()?;
+        let column = self
+            .children(path, chunk::TEXT_PATH_FRAME)?
+            .into_iter()
+            .filter(|&m| self.class(m) == Some(class::MULTI_COLUMN_FRAME))
+            .map(|m| self.children(m, chunk::ITEM_HIERARCHY))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .find(|&col| self.class(col) == Some(class::TEXT_PATH_COLUMN));
+        let (story, previous, next) = match column.map(|col| self.text_frame_links(col)) {
+            Some(Ok(ItemKind::TextFrame {
+                story,
+                previous,
+                next,
+                ..
+            })) => (story, previous, next),
+            Some(Err(e)) => return Err(e),
+            _ => (None, None, None),
+        };
+        Ok(Some(TextPath {
+            uid: path,
+            story,
+            previous,
+            next,
+            flipped,
+            start,
+            end,
+            default_codes,
         }))
     }
 

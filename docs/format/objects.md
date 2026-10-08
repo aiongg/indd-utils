@@ -1223,6 +1223,37 @@ with a warning.
 `LayerCompOption AppliedLayerComp`: chunk 0x9209 of the image, i32 at
 offset 4 (−1, −2 or a comp number). 11 of 11.
 
+## Text on a path (class 0xB320)
+
+A shape or text frame with text on its path names a text path object
+in chunk 0xB30A (600, 392 or 336 bytes). Items without text on their
+path can have the chunk too, with 0 in the first u32.
+
+| Offset in 0xB30A | Contents | IDML `TextPath` |
+|---|---|---|
+| 0 | u32 text path UID (class 0xB320), 0 for none | `Self` |
+| 4 | u32, the same UID | |
+| 8 | u16 1, u16 4, u32 3 in all 41 | `PathAlignment="CenterPathAlignment"`, `TextAlignment="BaselineTextAlignment"`, `PathEffect="RainbowPathEffect"`, `PathSpacing="0"` (which field is which is not known) |
+| 16 | u8: 1 `Flipped`, 0 `NotFlipped` | `FlipPathEffect` |
+| 18 | f64 | `StartBracket` |
+| 26 | f64 | `EndBracket` |
+
+The text path object has chunk 0xB334: u32 (its own UID), u32 0, then a
+UID list with one multi-column frame (class 0x263). That frame's 0x15B
+child list holds a column of class 0xB318, which gives the story and
+the thread as the column of a text frame does (text frames, below):
+`ParentStory`, `PreviousTextFrame` and `NextTextFrame` (`n` in every
+sample).
+
+IDML writes `TextPath` as a child of its shape or frame, directly after
+`Properties`, with the attributes in the order of the table (then the
+two thread attributes). The converter writes the four constant values
+only when the bytes at 8 are those of every sample.
+
+Evidence: 42 `TextPath` elements with an INDD object in the pairs (36
+in trustworthy pairs; parents: polygons, an oval and text frames), all
+values equal in 42 of 42, both `FlipPathEffect` values occurring.
+
 ## EPS text (class 0x660B)
 
 Text kept from a placed EPS or PDF graphic as text that cannot be

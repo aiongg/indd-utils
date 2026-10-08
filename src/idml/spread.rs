@@ -105,6 +105,30 @@ pub(super) const SIZING: [&str; 5] = [
 ];
 
 impl Writer<'_> {
+    /// A `TextPath` (`docs/format/objects.md`, text on a path).
+    fn text_path(&self, x: &mut Xml, t: &crate::model::TextPath) {
+        x.start("TextPath")
+            .attr("Self", uref(Some(t.uid)))
+            .attr("ParentStory", uref(t.story));
+        if t.default_codes {
+            x.attr("PathAlignment", "CenterPathAlignment")
+                .attr("TextAlignment", "BaselineTextAlignment")
+                .attr("PathEffect", "RainbowPathEffect");
+        }
+        x.attr(
+            "FlipPathEffect",
+            if t.flipped { "Flipped" } else { "NotFlipped" },
+        );
+        if t.default_codes {
+            x.attr("PathSpacing", "0");
+        }
+        x.attr("StartBracket", num(t.start))
+            .attr("EndBracket", num(t.end))
+            .attr("PreviousTextFrame", uref(t.previous))
+            .attr("NextTextFrame", uref(t.next));
+        x.end();
+    }
+
     /// The `Properties` of EPS text: `PathBoundingBox`, `EPSTextData` and
     /// `EPSTextAttributeBounds` (`docs/format/objects.md`, EPS text).
     fn eps_text_properties(x: &mut Xml, e: &crate::model::EpsText) {
@@ -477,6 +501,9 @@ impl Writer<'_> {
         };
         x.attrs_missing(self.observed(observed).iter());
         Self::path_geometry(x, &item.paths);
+        for t in &item.text_paths {
+            self.text_path(x, t);
+        }
         if let ItemKind::EpsText(e) = &item.kind {
             Self::eps_text_properties(x, e);
         }

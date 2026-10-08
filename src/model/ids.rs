@@ -25,6 +25,10 @@ pub mod class {
     pub const SVG: u32 = 0x6639;
     /// Text kept from a placed EPS or PDF graphic (IDML `EPSText`).
     pub const EPS_TEXT: u32 = 0x660B;
+    /// Text on the path of a shape or frame (IDML `TextPath`).
+    pub const TEXT_PATH: u32 = 0xB320;
+    /// The column of a text path's multi-column frame.
+    pub const TEXT_PATH_COLUMN: u32 = 0xB318;
     /// A plain byte stream, such as the file of an embedded graphic.
     pub const RAW_DATA: u32 = 0x129;
     pub const FONT_FAMILY: u32 = 0x3E03;
@@ -130,6 +134,11 @@ pub mod chunk {
     pub const PAGE_COLUMNS: u32 = 0x528;
     pub const PAGE_GRID: u32 = 0xCD02;
     pub const ITEM_TRANSFORM: u32 = 0x151;
+    /// Text on a path of a shape or frame: u32 text path UID (0 for
+    /// none), then its settings.
+    pub const ITEM_TEXT_PATH: u32 = 0xB30A;
+    /// Text path: u32, u32, UID list holding its multi-column frame.
+    pub const TEXT_PATH_FRAME: u32 = 0xB334;
     /// EPS text: its text record (IDML `EPSTextData`).
     pub const EPS_TEXT_DATA: u32 = 0x6611;
     /// EPS text: four f64 (IDML `EPSTextAttributeBounds`), then other
