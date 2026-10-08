@@ -22,6 +22,9 @@ pub struct Document {
     pub users: Vec<(u8, String)>,
     /// The script byte of the last document user's name.
     pub users_script: Option<u8>,
+    /// The code of the last session in the save history (chunk 0x1D8):
+    /// 0x0101 for a session of a Japanese or Chinese edition.
+    pub last_session_code: Option<u16>,
     /// The document's label (chunk 0x1630B): key and value, as IDML
     /// writes them.
     pub label: Vec<(String, String)>,
@@ -187,6 +190,7 @@ impl<'a> Reader<'a> {
         let constant_shade = self.constant_shade();
         let assignments = self.assignments();
         let users_script = self.users_script(DOC);
+        let last_session_code = self.last_session_code(DOC);
         let numbering_lists = self.numbering_lists().unwrap_or_else(|e| {
             self.warn(format!("numbering lists left out: {e}"));
             Vec::new()
@@ -253,6 +257,7 @@ impl<'a> Reader<'a> {
             table_styles: objects.table_styles,
             users,
             users_script,
+            last_session_code,
             label,
             numbering_lists,
             sections,

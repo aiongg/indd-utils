@@ -82,6 +82,14 @@ struct Writer<'a> {
 type Observed = std::rc::Rc<Vec<(String, String)>>;
 
 impl Writer<'_> {
+    /// Whether the last session in the save history was one of a
+    /// Japanese or Chinese edition (code 0x0101); `None` when the history
+    /// cannot be read. Values that follow the exporting InDesign's
+    /// language depend on it (`docs/format/objects.md`, save history).
+    pub(super) fn japanese_session(&self) -> Option<bool> {
+        self.doc.last_session_code.map(|c| c == 0x0101)
+    }
+
     /// The attributes every IDML of the document's version has on the
     /// elements on `path` (`docs/format/idml-values.md`).
     fn observed(&self, path: &str) -> Observed {

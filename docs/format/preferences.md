@@ -445,9 +445,12 @@ several languages, `ReplaceExistingIndex` `false` once,
 `IncludeSectionHeadings` `false` once, user style references).
 
 Without the chunk, IDML has `Title="Index"` in most documents and a
-translation in the others (`索引`, `Indice`, `Указатель`, …). The title
-follows the language of the exporting application, which is not stored
-in the INDD, so the converter writes no `Title` without the chunk.
+translation in the others (`索引`, `Indice`, `Указатель`, …), and
+`BetweenEntriesSeparator` `; ` or `、`. Both follow the language of the
+exporting application. The language code of the document's last
+session (`objects.md`, save history) shows a Japanese or Chinese
+edition: the converter writes `Title="索引"` and `、` for code 0x0101,
+and `; ` (no title) for other codes, whose titles vary.
 
 ## Chapter numbering (`ChapterNumberPreference`)
 

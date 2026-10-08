@@ -299,17 +299,16 @@ values come from the INDD.
 | `Page` | 13,733 | `AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName"` from DOM 7; `SnapshotBlendingMode="IgnoreLayoutSnapshots"`, `OptionalPage="false"` from 8 |
 | `Layer` | 1,755 | `ShowGuides` and `Expendable` (`true`) from DOM 7 |
 
+`Page` `GridStartingPoint` is left out: 28 pages of DOM 18 files have
+another value than `TopOutside`.
+
 Every spread has one `FlattenerPreference`, so the converter writes the
 element on every spread. For a spread without the flattener chunk
 (`objects.md`, flattener settings) it also writes
-`LineArtAndTextResolution="300"` and `GradientAndMeshResolution="150"`.
-`GridStartingPoint` is left out: 28 pages of DOM 18 files have another
-value than `TopOutside`.
-
-These are not in every IDML: 5,045 of the 5,074 trustworthy spreads
-without the chunk have them, and the other 29 (all spreads of 9
-documents) have 400 and 400. No INDD field tells the two groups apart
-(`objects.md`). The other attributes of these elements come
+`LineArtAndTextResolution` and `GradientAndMeshResolution`: 300 and
+150, or 400 and 400 after a session of a Japanese or Chinese edition,
+by the language code of the save history (`objects.md`, flattener
+settings). The other attributes of these elements come
 from the INDD (`objects.md`).
 
 ### Document settings in designmap.xml

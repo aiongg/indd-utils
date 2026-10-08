@@ -252,6 +252,35 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
+    /// The code of the last record of the save history (chunk 0x1D8 of
+    /// the document): u32 count, then per session u16 kind, u16 platform,
+    /// two u16, u16 code, a flag byte and the application version string,
+    /// u16 build and a FILETIME (two u32). `None` when the chunk is
+    /// missing or empty or does not parse. See `docs/format/objects.md`,
+    /// save history.
+    pub(super) fn last_session_code(&self, doc: u32) -> Option<u16> {
+        let d = self.chunk(doc, chunk::DOC_HISTORY).ok()??;
+        let mut c = self.cursor(&d);
+        let n = c.u32().ok()? as usize;
+        // A record with an empty string has 25 bytes.
+        if n == 0 || n > d.len() / 25 {
+            return None;
+        }
+        let mut code = None;
+        for _ in 0..n {
+            for _ in 0..4 {
+                c.u16().ok()?;
+            }
+            code = Some(c.u16().ok()?);
+            c.flag().ok()?;
+            c.string().ok()?;
+            c.u16().ok()?;
+            c.u32().ok()?;
+            c.u32().ok()?;
+        }
+        code
+    }
+
     /// The script byte of the last document user's name: the second byte
     /// of its in-object string (`objects.md`, document users). Only read
     /// in little-endian files.
@@ -452,4 +481,53 @@ fn index_groups(c: &mut crate::object::Cursor) -> Result<Vec<(String, bool, u16)
         return Err(Error::Corrupt(format!("{} bytes left", c.remaining())));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::synthetic;
+    use crate::object::Encoding;
+
+    /// A save history with one record per code.
+    fn history(codes: &[u16]) -> Vec<u8> {
+        let mut d = (codes.len() as u32).to_le_bytes().to_vec();
+        for &code in codes {
+            for v in [7u16, 0, 10, 0, code] {
+                d.extend_from_slice(&v.to_le_bytes());
+            }
+            d.extend(synthetic::flagged_string(
+                Encoding::default(),
+                1,
+                "16.1.0.20",
+            ));
+            d.extend_from_slice(&20u16.to_le_bytes());
+            d.extend_from_slice(&[0; 8]);
+        }
+        d
+    }
+
+    fn last_code(chunk: Option<Vec<u8>>) -> Option<u16> {
+        let chunks = synthetic::chunks(
+            &chunk
+                .into_iter()
+                .map(|d| (chunk::DOC_HISTORY, d))
+                .collect::<Vec<_>>(),
+        );
+        let objects = [(1, class::DOCUMENT, chunks)];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        Reader::new(&db).last_session_code(1)
+    }
+
+    #[test]
+    fn reads_the_code_of_the_last_session() {
+        assert_eq!(last_code(Some(history(&[0x0100, 0x0101]))), Some(0x0101));
+        assert_eq!(last_code(Some(history(&[0x0101, 0x0100]))), Some(0x0100));
+        assert_eq!(last_code(Some(history(&[]))), None);
+        assert_eq!(last_code(None), None);
+        let mut cut = history(&[0x0101]);
+        cut.pop();
+        assert_eq!(last_code(Some(cut)), None);
+    }
 }

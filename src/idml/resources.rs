@@ -842,6 +842,18 @@ impl Writer<'_> {
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v)),
             );
+        } else if let Some(japanese) = self.japanese_session() {
+            // Without the chunk, the title and the separator follow the
+            // language of the last session (`preferences.md`, index
+            // options). Other languages have different titles.
+            let i = ours_of(&mut ours, "IndexOptions");
+            if japanese {
+                ours[i].attrs.push(("Title".into(), "索引".into()));
+            }
+            let separator = if japanese { "、" } else { "; " };
+            ours[i]
+                .attrs
+                .push(("BetweenEntriesSeparator".into(), separator.into()));
         }
         ours.push(self.footnote_option());
         for mut n in ours {

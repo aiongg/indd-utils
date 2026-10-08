@@ -65,6 +65,7 @@ are in `big-endian.md`.
 | 0x222 | Two UID lists: the stories, then the XML backing story; IDML `StoryList` is both (`xml.md`) |
 | 0x4C01 | UID list: sections |
 | 0xA443 | Document users: u32 count, then per user a flag byte, the name as an in-object string, u32 colour |
+| 0x1D8 | Save history: u32 count, then one record per session (below) |
 | 0x1630B | Label: u16 0x7B7B, u32 count *n*, then *n* pairs of key and value, each a flag byte (1 for a built-in key) and an in-object string |
 
 **Document label.** IDML writes `Document/Properties/Label` with one
@@ -98,6 +99,74 @@ flag 2 user. The colour UID names an interface colour, but the IDML
 `BrickRed` in 4 files and `Gold` in 1), so it is left out of the
 conversion and of the measurement (`measurement.md`).
 
+**Save history (chunk 0x1D8).** A u32 count, then one record per
+session that saved the document, oldest first:
+
+| Field | Contents |
+|---|---|
+| u16 | kind (not used) |
+| u16 | platform (not used) |
+| u16, u16 | not identified |
+| u16 | language code (below) |
+| flag byte, in-object string | application version, such as `16.1.0.20` |
+| u16 | build (not used) |
+| u32, u32 | FILETIME of the session, high part first (not used) |
+
+Evidence: the layout parses every record of 4,431 of the 4,439
+distinct valid corpus files outside the privately held samples (4,272
+little-endian, 159 big-endian), from InDesign 3.0 to 21. Of the other
+8, six are InDesign 2.x files whose strings have another tag
+(in-object strings, above) and two (one 3.x, one 13.x) have no chunk. All 803
+pairs parse.
+
+**Language code.** The u16 of the last record is 0x0100 in 4,018 of
+those files, 0x0101 in 335, 0x0103 in 53 and 0x0400 in 25. It follows
+the language edition of the application of that session:
+
+- All 149 pairs typeset in Japanese that the corpus gained in 2026-10
+  have 0x0101; so do 11 earlier pairs, among them the 7 whose default
+  story tag name (preferences chunk 0xBF4F) is Japanese or Chinese.
+  No document with a tag name in another language (Korean, German,
+  French, Russian, …) has 0x0101 (654 pairs before 2026-10).
+- The values IDML writes in the exporting InDesign's language follow
+  it (below): in 0x0101 documents the flattener resolution, the index
+  title and separator and the endnote separator are those of a
+  Japanese edition.
+- 0x0103 occurs in documents in Latin and Hebrew script; it gives the
+  same values as 0x0100 in all 12 pairs that have it.
+
+The converter reads the code of the last record only, and only uses
+whether it is 0x0101. The record count is checked against the chunk
+size; a chunk that does not parse gives no code.
+
+**Values that follow the language of the last session.** Over all 803
+pairs (160 with code 0x0101):
+
+| Value | 0x0101 | Other codes |
+|---|---|---|
+| Spread `FlattenerPreference` resolutions, no chunk 0x10833 | 400, 400 | 300, 150 |
+| `IndexOptions` `BetweenEntriesSeparator`, no chunk 0x13010 (`preferences.md`) | `、` in 157 of 159 | `; ` in 632 of 632 |
+| `IndexOptions` `Title`, no chunk 0x13010 | `索引` in 158 of 159 | `Index` in 624 of 632, and `Indice`, `Rejstřík`, `Índice`, `Указатель` |
+| `EndnoteOption` `EndnoteSeparatorText` and `EndnoteMarkerPositioning`, no chunk 0x2261E (`footnotes.md`) | U+3000 and `RubyMarker` in 17 of 18 | tab and `SuperscriptMarker` in 123 of 123 |
+| `EndnoteOption` `EndnoteTitle`, no chunk 0x2261E | `文末脚注` (15, DOM 13), `後注` (2, DOM 19 and 20), `Endnotes` (1) | `Endnotes` in 93 of 123, and 4 other titles |
+| `Assignment` `Name` | `$ID/UnassignedInCopy` in 157 of 160 | `$ID/UnassignedInCopy` in 612 of 643 |
+
+One trustworthy pair from version 16.1 has code 0x0101 but the values
+of another language in every row (flattener 300 and 150 on its 9
+spreads, `Index`, `; `, tab, `Endnotes`). Its IDML is dated 55.5 hours
+after the last session in the INDD, while the IDMLs of 9 other 0x0101
+documents are dated 0 to 40 seconds after it (plus their time zone).
+So that IDML was exported in a session the INDD does not record, by an
+application of another language.
+
+The converter uses the code where it decides the value: the flattener
+resolutions, the index separator, the index title `索引` for 0x0101,
+and the endnote separator and marker position. It writes no index
+title for other codes (the code does not tell the Latin-script
+languages apart), no endnote title without the chunk, and no
+assignment `Name`: names that are not `$ID/UnassignedInCopy` occur
+with every code.
+
 ## Spreads (0x501) and master spreads (0x1401)
 
 | Chunk | Contents |
@@ -129,16 +198,16 @@ offsets 20 and 28, 2 at 36 and 800 at 44. Their IDML has
 `LineArtAndTextResolution` and `GradientAndMeshResolution` 400 and
 `RasterVectorBalance` 50. The converter writes the f64 at 20 and 28 as
 the two resolutions; which is which is not known, as they are equal in
-every sample. Without the chunk, 5,045 trustworthy spreads have 300
-and 150 and 29 spreads (all spreads of 9 documents, DOM 8 to 20) have
-400 and 400. No field decides this: the bytes of 300 and 150 or of 400
-and 400 do not occur in those files, and no chunk of the preferences or
-the document object follows it. The 9 documents all contain objects of
-classes 0x4207, 0x4208 and 0x4218, which only 4 of the 480 other
-trustworthy documents contain, so the setting probably comes from the edition of the
-application that made the document. The converter writes 300 and 150
-for spreads without the chunk (`idml-values.md`, spreads). The other
-four values are the same in every IDML (`idml-values.md`).
+every sample. Without the chunk, the IDML has 400 and 400 when the
+last session of the save history (document, above) has code 0x0101,
+and 300 and 150 otherwise: 7,481 of the 7,490 spreads of all 803 pairs
+match, the other 9 being the spreads of the pair exported in a
+session the INDD does not record. No stored resolution decides it: the
+bytes of 400 as f64 occur in 1 of the 10 such documents of the 654
+pairs before 2026-10, and no byte of the spread chunks separates the
+two groups. The converter writes the resolutions by this rule, and
+none when the history cannot be read. The other four values are the
+same in every IDML (`idml-values.md`).
 
 **Spread layers (0x301)** hold the items of one document layer on one
 spread. Chunk 0x302: u32 document layer UID, u16 1 for the layer's guide
@@ -351,8 +420,9 @@ strings and fields that are the same in every pair. IDML names it
 `$ID/UnassignedInCopy` in 476 pairs and gives the stored name in 19, in
 files of several languages and versions, so the name follows the
 computer that exported the IDML; the converter leaves `Name` out (it is
-optional in the schema) and the measurement too. The other attributes
-are the same in every IDML (`idml-values.md`).
+optional in the schema) and the measurement too. The language code of
+the save history does not decide it either (document, above). The other
+attributes are the same in every IDML (`idml-values.md`).
 
 ## Named grids (0xCD12)
 

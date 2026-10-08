@@ -794,13 +794,20 @@ impl Writer<'_> {
         }
         let major = self.doc.version.major;
         if !master && let Some(mut fp) = values::element("Spread/FlattenerPreference", major) {
-            // Without the flattener chunk, IDML has 300 and 150 in nearly
-            // every spread (`idml-values.md`, spreads).
-            let [line_art, gradient] = s.flattener_resolution.unwrap_or([300.0, 150.0]);
-            fp.attrs
-                .insert(0, ("GradientAndMeshResolution".into(), num(gradient)));
-            fp.attrs
-                .insert(0, ("LineArtAndTextResolution".into(), num(line_art)));
+            // Without the flattener chunk, IDML has 400 and 400 after a
+            // session of a Japanese or Chinese edition, otherwise 300 and
+            // 150 (`objects.md`, flattener settings).
+            let res = s.flattener_resolution.or(match self.japanese_session() {
+                Some(true) => Some([400.0, 400.0]),
+                Some(false) => Some([300.0, 150.0]),
+                None => None,
+            });
+            if let Some([line_art, gradient]) = res {
+                fp.attrs
+                    .insert(0, ("GradientAndMeshResolution".into(), num(gradient)));
+                fp.attrs
+                    .insert(0, ("LineArtAndTextResolution".into(), num(line_art)));
+            }
             fp.write(&mut x);
         }
         for p in &s.pages {

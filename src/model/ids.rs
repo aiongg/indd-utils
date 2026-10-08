@@ -89,6 +89,8 @@ pub mod chunk {
     /// Document users: u32 count, then per user a flag byte, the name
     /// and u32 colour.
     pub const DOC_USERS: u32 = 0xA443;
+    /// Document save history: u32 count, then one record per session.
+    pub const DOC_HISTORY: u32 = 0x1D8;
     /// Document label: u16 0x7B7B, u32 count, flagged key and value strings.
     pub const DOC_LABEL: u32 = 0x1630B;
     /// Preferences: u32 default numbering list, u16 count, list UIDs, i32 -1.

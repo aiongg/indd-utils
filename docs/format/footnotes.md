@@ -223,9 +223,12 @@ from the value file.
 **Without the chunk** (149 files with DOM 13 or later) the marker and
 text styles are the defaults, which the converter writes. The title is
 the exporting InDesign's localized default (`Endnotes` 108, `Notes de
-fin` 18, `Eindnoten` 12, 4 others), and the separator and marker
-position follow it (U+3000 and `RubyMarker` in 4, tab and
-`SuperscriptMarker` in 145); these are left out.
+fin` 18, `Eindnoten` 12, 4 others in the 654 pairs before 2026-10), and
+the separator and marker position follow its language. The converter
+writes U+3000 and `RubyMarker` when the last session of the save history
+has language code 0x0101, and tab and `SuperscriptMarker` otherwise
+(140 of 141 pairs; `objects.md`, save history). The title is left
+out.
 
 ## IsEndnoteStory
 

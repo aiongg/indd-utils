@@ -518,13 +518,33 @@ impl Writer<'_> {
             ..Node::default()
         };
         let Some(e) = self.doc.prefs.endnotes.as_ref() else {
-            // Without the chunk the styles are the defaults (149 of 149);
-            // the title and separator depend on the exporting InDesign's
-            // language.
+            // Without the chunk the styles are the defaults (149 of 149).
+            // The separator and the marker position follow the language
+            // of the last session; the title differs between languages and
+            // versions (footnotes.md, endnote options).
             n.attrs
                 .push(("EndnoteMarkerStyle".into(), self.style_ref(None, false)));
             n.attrs
                 .push(("EndnoteTextStyle".into(), self.style_ref(None, true)));
+            if let Some(japanese) = self.japanese_session() {
+                let (separator, position) = if japanese {
+                    ("\u{3000}", "RubyMarker")
+                } else {
+                    ("\t", "SuperscriptMarker")
+                };
+                n.attrs
+                    .push(("EndnoteSeparatorText".into(), separator.into()));
+                n.children.push(Node {
+                    tag: "Properties".into(),
+                    children: vec![Node {
+                        tag: "EndnoteMarkerPositioning".into(),
+                        attrs: vec![("type".into(), "enumeration".into())],
+                        text: Some(position.into()),
+                        ..Node::default()
+                    }],
+                    ..Node::default()
+                });
+            }
             return Some(n);
         };
         let mut attr = |k: &str, v: String| n.attrs.push((k.to_string(), v));
