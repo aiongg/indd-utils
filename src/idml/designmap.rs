@@ -317,7 +317,7 @@ impl Writer<'_> {
                 },
             };
             x.start("ABullet")
-                .attr("Self", format!("dABullet{i}"))
+                .attr("Self", format!("dABullet{i:x}"))
                 .attr("CharacterType", *kind)
                 .attr("CharacterValue", b.value.to_string());
             Self::properties(

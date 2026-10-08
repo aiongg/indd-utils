@@ -2335,7 +2335,9 @@ bullet u32 character type (0 `UnicodeOnly`, 1 `UnicodeWithFont`, 2
 family UID (0 = none), a flag byte (1 = built-in key, `$ID/`) and the
 font style as an in-object string, then a byte: 0, or 1 followed by four
 more bytes. IDML writes one `ABullet` per entry in `designmap.xml`, with
-`Self="dABullet<index>"`, `CharacterType`, `CharacterValue` and the
+`Self="dABullet<index>"` (the index in hexadecimal: `dABullet9`,
+`dABulleta`, `dABulletb` in the 2 documents with more than ten bullets),
+`CharacterType`, `CharacterValue` and the
 `BulletsFont` (the family name, `$ID/` for none) and `BulletsFontStyle`
 properties.
 
