@@ -87,15 +87,15 @@ Each area below links to the document that holds the evidence.
 | Area | Converted |
 |---|---|
 | Document structure | Spreads, master spreads, layers, sections (start, length, continued numbering, Arabic and lower-case Roman page numbers), the story list. [`objects.md`](docs/format/objects.md) |
-| Pages and masters | Page bounds, transforms, applied master, margins and columns, page names, ruler guides, master names and prefixes. [`objects.md`](docs/format/objects.md) |
+| Pages and masters | Page bounds, transforms, applied master, margins and columns, page names, ruler guides, master names and prefixes, primary text frames. [`objects.md`](docs/format/objects.md) |
 | Page items and graphics | Text frames (with threading), rectangles, ovals, polygons, graphic lines and groups: transforms, paths, fill and stroke, corners, applied object style, text wrap, frame fitting, anchored objects, text on a path. EPS text. Placed images, PDF, EPS, SVG and InDesign pages with their bounds, clipping path settings and links; graphics pasted without a link keep their data. Transparency: blending, drop shadow, inner shadow, outer and inner glow and gradient feather where the samples tell the attributes apart. [`objects.md`](docs/format/objects.md), [`attributes.md`](docs/format/attributes.md), [`transparency.md`](docs/format/transparency.md) |
-| Text and typography | Story text, paragraph and character ranges with their local formatting (about 200 text attributes, among them font, size, leading, tracking, indents, spacing, hyphenation, keeps, tabs, rules, underline and strikethrough, shading, borders, bullets and numbering lists, nested styles, span columns, directions, OpenType and CJK settings, languages), story settings, text frame settings, text variables and their instances, footnotes and endnotes with their options, notes, tracked changes, ruby, tate-chu-yoko. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
+| Text and typography | Story text, paragraph and character ranges with their local formatting (about 200 text attributes, among them font, size, leading, tracking, indents, spacing, hyphenation, keeps, tabs, rules, underline and strikethrough, shading, borders, bullets and numbering lists, nested styles, span columns, directions, OpenType and CJK settings, languages), story settings, text frame settings, text variables and their instances, footnotes and endnotes with their options, notes, tracked changes, ruby (text, type, alignment, position, offsets, scaling and spacing), kenten kind and size, warichu, tate-chu-yoko. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
 | Styles | Paragraph, character, object, cell and table styles, with style groups, `BasedOn` and `NextStyle`. [`objects.md`](docs/format/objects.md), [`tables.md`](docs/format/tables.md) |
 | Colours and swatches | Process, spot and registration colours, tints, gradients, inks, colour groups, the `None` swatch. [`objects.md`](docs/format/objects.md) |
 | Tables | Tables in stories and in cells: rows, columns, headers and footers, cells with spans, cell text, cell and table formatting, applied styles. [`tables.md`](docs/format/tables.md) |
 | Links and cross-references | Hyperlinks with text, paragraph and page item sources; text, page, URL and external page destinations; bookmarks; cross-reference sources and formats. [`hyperlinks.md`](docs/format/hyperlinks.md), [`cross-references.md`](docs/format/cross-references.md) |
 | Fonts | Font families and fonts with their names (including built-in and native-script names), styles, types, PostScript names and Typekit IDs; missing fonts; composite font entries. [`fonts.md`](docs/format/fonts.md) |
-| CJK | Kinsoku and mojikumi tables, composite fonts, grid alignment of paragraphs. [`objects.md`](docs/format/objects.md), [`fonts.md`](docs/format/fonts.md) |
+| CJK | Kinsoku and mojikumi tables (with the spacing of custom mojikumi tables), composite fonts, grid alignment of paragraphs, layout grids of pages, named grids, frame grids and their stories. [`objects.md`](docs/format/objects.md), [`fonts.md`](docs/format/fonts.md) |
 | XML | Tags, the XML structure with elements placed in story text, the backing story. [`xml.md`](docs/format/xml.md) |
 | Index | The index with its topics, page references in the text, index options and header groups, index sort groups. [`index.md`](docs/format/index.md), [`preferences.md`](docs/format/preferences.md) |
 | Document lists | TOC styles, trap presets, numbering lists, the language list, named grids, document users, the document label. [`objects.md`](docs/format/objects.md), [`idml-values.md`](docs/format/idml-values.md) |
@@ -114,7 +114,7 @@ Reasons:
 | Feature | Reason |
 |---|---|
 | Conditional text, buttons and forms | Not in public samples |
-| Kenten, warichu | Not in public samples |
+| Ruby and kenten fonts, colours, weights and Y scales; kenten placement and characters; warichu characters before and after a break | Not provable (every sample has the default value) |
 | XML attributes, comments, processing instructions, DTDs; XML elements that cross paragraphs | Not in public samples (left out with a warning) |
 | Hyperlink sources that cross a style range | Not in public samples with an IDML (left out with a warning) |
 | Most transparency effects (bevel, satin, feathers other than gradient, some glow values), drop shadow offsets | Not provable |
@@ -160,8 +160,8 @@ privately held samples:
 | Conversion failures | 0 of 803 paired files; 0 of 3,656 other files |
 | Rejected files | 0 of 803 paired files; 22 of 3,656 other files (11 not INDD files, 8 InDesign 1.x files, 2 truncated, 1 without an object database) |
 | Schema validation failures | 0 paired files, 11 other files |
-| Value coverage, trustworthy pairs | 98.07 % (12,049,823 of 12,287,557 values) |
-| Value coverage, all pairs | 96.21 % |
+| Value coverage, trustworthy pairs | 98.16 % (12,061,254 of 12,287,557 values) |
+| Value coverage, all pairs | 96.30 % |
 | Story text, trustworthy pairs | 19,416 of 19,424 stories exact, 8 differ, 0 missing |
 <!-- numbers:end -->
 
