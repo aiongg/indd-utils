@@ -51,7 +51,9 @@ delimiter and include-delimiter values above only where those fields are
 0, and leaves them out otherwise. It leaves out blocks with other type
 codes (none occur in the corpus); the other blocks keep their index.
 
-## Not converted
+## Sources in text
 
-No corpus pair has a cross-reference source (`CrossReferenceSource`), so
-cross-references in text are not converted.
+Cross-reference sources in text are text sources with chunk 0x135A0;
+`hyperlinks.md` describes them. Cross-reference sources inside
+footnotes and tracked changes are not converted, because their text is
+not.

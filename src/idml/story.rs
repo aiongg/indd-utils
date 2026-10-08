@@ -136,6 +136,33 @@ impl Writer<'_> {
     /// `scope` is the `Self` of the enclosing story or table cell, which
     /// prefixes the `Self` of tables inside the text.
     pub(super) fn text_ranges(&self, x: &mut Xml, runs: &[TextRun], story: &Story, scope: &str) {
+        let run_end = |t: &TextRun| t.start + t.text.encode_utf16().count();
+        // Sources written around character ranges: their runs are split at
+        // the source's ends (hyperlinks.md, extent and placement).
+        let (lo, hi) = match (runs.first(), runs.last()) {
+            (Some(a), Some(b)) => (a.start, run_end(b)),
+            _ => (0, 0),
+        };
+        let para: Vec<&SourceRange> = story
+            .sources
+            .iter()
+            .filter(|r| r.paragraph && r.start >= lo && r.start < hi)
+            .filter(|r| {
+                runs.iter()
+                    .any(|t| t.start <= r.start && r.start < run_end(t))
+            })
+            .collect();
+        let split;
+        let runs = if para.is_empty() {
+            runs
+        } else {
+            let cuts: Vec<usize> = para
+                .iter()
+                .flat_map(|r| [r.start, r.start + r.len])
+                .collect();
+            split = split_runs_at(runs, &cuts);
+            &split[..]
+        };
         let mut runs: Vec<&TextRun> = runs.iter().collect();
         let mut last_text = None;
         if let Some(last) = runs.last()
@@ -154,6 +181,7 @@ impl Writer<'_> {
                 _ => &runs[i].text,
             }
         };
+        let sources = para;
         let mut i = 0;
         while i < n {
             let para = (runs[i].paragraph_style, &runs[i].paragraph_attrs);
@@ -165,13 +193,29 @@ impl Writer<'_> {
             }
             Self::properties(x, &props);
             let mut st = TextState::default();
+            // End offset of the open paragraph-level source.
+            let mut open: Option<usize> = None;
             while i < n && (runs[i].paragraph_style, &runs[i].paragraph_attrs) == para {
                 let r = runs[i];
+                if open.is_none()
+                    && let Some(s) = sources.iter().find(|s| s.start == r.start)
+                    && let Some(src) = self.doc.text_sources.get(&s.source)
+                {
+                    self.source_start(x, src);
+                    open = Some(s.start + s.len);
+                }
                 self.csr_start(x, r);
                 st.csr = true;
                 self.run_content(x, text_of(i), r, story, scope, &mut st);
                 st.close_csr(x);
+                if open.is_some_and(|end| end <= run_end(r)) {
+                    x.end();
+                    open = None;
+                }
                 i += 1;
+            }
+            if open.is_some() {
+                x.end();
             }
             // Elements left open (their end is missing) end with the range.
             for _ in st.blocks.drain(..) {
@@ -290,22 +334,14 @@ impl Writer<'_> {
             }
             st.open_csr(self, x, run);
             if open.is_none()
-                && let Some(r) = story.sources.iter().find(|r| r.start == pos)
+                && let Some(r) = story
+                    .sources
+                    .iter()
+                    .find(|r| r.start == pos && !r.paragraph)
                 && let Some(src) = self.doc.text_sources.get(&r.source)
             {
                 flush(x, &mut buf);
-                x.start("HyperlinkTextSource")
-                    .attr("Self", uref(Some(src.uid)))
-                    .attr("Name", &src.name)
-                    .attr("Hidden", src.hidden.to_string())
-                    .attr(
-                        "AppliedCharacterStyle",
-                        match src.character_style {
-                            Some(c) => self.style_ref(Some(c), false),
-                            None => "n".into(),
-                        },
-                    );
-                Self::alternative_destination(x, src.alternative.as_ref());
+                self.source_start(x, src);
                 open = Some(r.start + r.len);
             }
             match ch {
@@ -337,6 +373,30 @@ impl Writer<'_> {
         if open.is_some() {
             x.end();
         }
+    }
+
+    /// The start tag of a text source, `HyperlinkTextSource` or
+    /// `CrossReferenceSource`, with its attributes and properties.
+    fn source_start(&self, x: &mut Xml, src: &TextSource) {
+        let style = match src.character_style {
+            Some(c) => self.style_ref(Some(c), false),
+            None => "n".into(),
+        };
+        match src.format {
+            Some(f) => {
+                x.start("CrossReferenceSource")
+                    .attr("Self", uref(Some(src.uid)))
+                    .attr("AppliedFormat", uref(Some(f)));
+            }
+            None => {
+                x.start("HyperlinkTextSource")
+                    .attr("Self", uref(Some(src.uid)));
+            }
+        }
+        x.attr("Name", &src.name)
+            .attr("Hidden", src.hidden.to_string())
+            .attr("AppliedCharacterStyle", style);
+        Self::alternative_destination(x, src.alternative.as_ref());
     }
 
     /// `Properties/AlternativeDestination` of a text source, for the one
@@ -522,9 +582,102 @@ impl Writer<'_> {
     }
 }
 
+/// `runs` with each run that holds one of `cuts` strictly inside split
+/// there into two runs with the same styles.
+fn split_runs_at(runs: &[TextRun], cuts: &[usize]) -> Vec<TextRun> {
+    let mut out = Vec::with_capacity(runs.len() + cuts.len());
+    for r in runs {
+        let units: Vec<u16> = r.text.encode_utf16().collect();
+        let end = r.start + units.len();
+        let mut at: Vec<usize> = cuts
+            .iter()
+            .copied()
+            .filter(|&c| c > r.start && c < end)
+            .collect();
+        at.sort_unstable();
+        at.dedup();
+        let mut from = r.start;
+        for c in at.into_iter().chain([end]) {
+            out.push(TextRun {
+                start: from,
+                text: String::from_utf16_lossy(&units[from - r.start..c - r.start]),
+                ..r.clone()
+            });
+            from = c;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_paragraph_level_sources_around_split_ranges() {
+        use crate::model::{Attrs, TextSource};
+        let run = |start, text: &str, style| TextRun {
+            start,
+            text: text.into(),
+            paragraph_style: None,
+            character_style: style,
+            paragraph_attrs: Attrs::default(),
+            character_attrs: Attrs::default(),
+        };
+        let story = Story {
+            uid: 9,
+            runs: vec![run(0, "ab", None), run(2, "cd\r", Some(0x30))],
+            anchors: Default::default(),
+            tables: Default::default(),
+            text_variables: Default::default(),
+            sources: vec![SourceRange {
+                start: 1,
+                len: 2,
+                source: 0x40,
+                paragraph: true,
+            }],
+            xml_markers: Default::default(),
+            text_destinations: Default::default(),
+            xml_element: None,
+            orientation: None,
+            toc_style: None,
+        };
+        let src = TextSource {
+            uid: 0x40,
+            name: "s".into(),
+            hidden: false,
+            character_style: None,
+            alternative: None,
+            format: None,
+        };
+        let doc = Document {
+            text_sources: [(0x40, src)].into_iter().collect(),
+            ..Document::default()
+        };
+        let w = Writer::for_test(&doc);
+        let out: String = w.story(&story).lines().map(str::trim).collect();
+        // Tags and text only.
+        let shape: String = out
+            .split('<')
+            .skip_while(|t| !t.starts_with("ParagraphStyleRange"))
+            .map(|t| {
+                let (tag, rest) = t.split_once('>').unwrap_or((t, ""));
+                let name = tag.split(' ').next().unwrap_or("");
+                format!("<{name}>{rest}")
+            })
+            .collect();
+        assert!(
+            shape.starts_with(
+                "<ParagraphStyleRange><CharacterStyleRange><Content>a</Content>\
+                 </CharacterStyleRange><HyperlinkTextSource><CharacterStyleRange>\
+                 <Content>b</Content></CharacterStyleRange><CharacterStyleRange>\
+                 <Content>c</Content></CharacterStyleRange></HyperlinkTextSource>\
+                 <CharacterStyleRange><Content>d</Content></CharacterStyleRange>\
+                 </ParagraphStyleRange>"
+            ),
+            "{shape}"
+        );
+    }
 
     #[test]
     fn writes_text_destinations_in_place_of_their_character() {

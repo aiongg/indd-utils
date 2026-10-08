@@ -36,6 +36,8 @@ pub mod chunk {
     /// Text source: alternative destination (sources made by a table of
     /// contents).
     pub const TEXT_SOURCE_ALTERNATIVE: u32 = 0x135B7;
+    /// Text source: a cross-reference source, with its format.
+    pub const CROSS_REFERENCE: u32 = 0x135A0;
     /// Page item source: hidden and name.
     pub const PAGE_ITEM_SOURCE: u32 = 0x13505;
     /// Page item source: the page item.
@@ -93,6 +95,9 @@ pub struct TextSource {
     pub character_style: Option<u32>,
     /// Chunk 0x135B7: `AlternativeDestination`.
     pub alternative: Option<Alternative>,
+    /// Chunk 0x135A0: the source is a `CrossReferenceSource` with this
+    /// cross-reference format.
+    pub format: Option<u32>,
 }
 
 /// An alternative destination of a text source (chunk 0x135B7).
@@ -305,6 +310,17 @@ impl TextSource {
                 .chunk(chunk::TEXT_SOURCE_ALTERNATIVE)
                 .map(|d| Alternative::read(enc, d))
                 .transpose()?,
+            format: match obj.chunk(chunk::CROSS_REFERENCE) {
+                Some(d) => {
+                    // u32 1, two strings, u32 format UID.
+                    let mut c = enc.cursor(d);
+                    c.skip(4)?;
+                    c.name()?;
+                    c.name()?;
+                    Some(c.u32()?)
+                }
+                None => None,
+            },
         }))
     }
 }
@@ -417,6 +433,9 @@ pub struct SourceRange {
     pub start: usize,
     pub len: usize,
     pub source: u32,
+    /// Written as a child of the paragraph range, around character
+    /// ranges, rather than inside one character range.
+    pub paragraph: bool,
 }
 
 /// One node of a range tree.
@@ -507,6 +526,7 @@ pub fn source_ranges(
                 start: pos as usize,
                 len: n.len as usize,
                 source: n.source,
+                paragraph: false,
             });
             if n.left != 0 {
                 let l = nodes.get(&n.left).ok_or_else(bad)?;

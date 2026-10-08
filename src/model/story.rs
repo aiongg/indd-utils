@@ -381,36 +381,79 @@ impl<'a> Reader<'a> {
                 _ => runs.push(run),
             }
         }
-        // IDML writes a text source inside one character range; keep the
-        // sources that lie within one run.
+        // IDML writes a text source inside one character range, or as a
+        // child of a paragraph range around several character ranges
+        // (hyperlinks.md, extent and placement).
         sources.sort_by_key(|r| r.start);
-        let cell_runs = tables
+        let cell_lists = tables
             .values()
-            .flat_map(|t| t.cells.iter().flat_map(|c| &c.runs));
-        let spans: Vec<(usize, usize)> = runs
-            .iter()
-            .chain(cell_runs)
-            .map(|r| (r.start, r.start + r.text.encode_utf16().count()))
-            .collect();
-        sources.retain(|r| {
-            let inside = spans
-                .iter()
-                .any(|&(a, b)| r.start >= a && r.start + r.len <= b);
-            if !inside && r.len > 0 {
+            .flat_map(|t| t.cells.iter().map(|c| c.runs.as_slice()));
+        let lists: Vec<&[TextRun]> = std::iter::once(runs.as_slice()).chain(cell_lists).collect();
+        sources.retain_mut(|r| {
+            if r.len == 0 {
+                return false;
+            }
+            let end = r.start + r.len;
+            let run_end = |t: &TextRun| t.start + t.text.encode_utf16().count();
+            // The runs that hold the first and the last character.
+            let found = lists.iter().find_map(|list| {
+                let a = list.iter().position(|t| r.start >= t.start && r.start < run_end(t))?;
+                let b = list.iter().position(|t| end > t.start && end <= run_end(t))?;
+                (a <= b).then(|| &list[a..=b])
+            });
+            let Some(span) = found else {
                 self.warn(format!(
                     "story {uid}: hyperlink source {} spans several text ranges; left out",
                     r.source
                 ));
+                return false;
+            };
+            let first = &span[0];
+            let one_paragraph = span.windows(2).all(|w| run_end(&w[0]) == w[1].start)
+                && span.iter().all(|t| {
+                    (t.paragraph_style, &t.paragraph_attrs)
+                        == (first.paragraph_style, &first.paragraph_attrs)
+                });
+            if !one_paragraph {
+                self.warn(format!(
+                    "story {uid}: hyperlink source {} spans several paragraph style ranges; left out",
+                    r.source
+                ));
+                return false;
             }
-            // The IDML schema allows no page item inside a text source.
-            let anchored = anchors.range(r.start..r.start + r.len).next().is_some();
-            if inside && anchored {
+            // The schema allows no text directly in a cross-reference
+            // source: one that holds more than a text variable instance is
+            // written around a character range.
+            let cross_reference = self
+                .chunk(r.source, hyperlink::chunk::CROSS_REFERENCE)
+                .ok()
+                .flatten()
+                .is_some();
+            let variable_only = r.len == 1 && text_variables.contains_key(&r.start);
+            r.paragraph = span.len() > 1 || cross_reference && !variable_only;
+            if r.paragraph {
+                if xml_markers
+                    .range(r.start..end)
+                    .any(|(_, m)| !matches!(m, XmlMarker::Hidden))
+                {
+                    self.warn(format!(
+                        "story {uid}: hyperlink source {} holds an XML marker; left out",
+                        r.source
+                    ));
+                    return false;
+                }
+                return true;
+            }
+            // The IDML schema allows no page item inside a text source
+            // written in a character range.
+            if anchors.range(r.start..end).next().is_some() {
                 self.warn(format!(
                     "story {uid}: hyperlink source {} holds an anchored object; left out",
                     r.source
                 ));
+                return false;
             }
-            inside && r.len > 0 && !anchored
+            true
         });
         Ok(Story {
             uid,

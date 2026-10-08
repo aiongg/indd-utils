@@ -6,7 +6,7 @@ Implemented in `src/model/hyperlink.rs`.
 | Class | Object | IDML element |
 |---|---|---|
 | 0x13501 | Hyperlink | `Hyperlink` (designmap) |
-| 0x13502 | Text source | `HyperlinkTextSource` (story text) |
+| 0x13502 | Text source | `HyperlinkTextSource` or `CrossReferenceSource` (story text) |
 | 0x13503 | Page item source | `HyperlinkPageItemSource` (designmap) |
 | 0x13504 | Text or paragraph destination | `HyperlinkTextDestination`, `ParagraphDestination` (story text) |
 | 0x13505 | Page destination | `HyperlinkPageDestination` (designmap) |
@@ -103,6 +103,27 @@ the text `<?AID 00xx?>` with the code in lowercase hexadecimal (U+0008,
 before the page number, in all samples). In the trustworthy pairs the
 converter writes 1,048 of 1,048 of them right.
 
+**Chunk 0x135A0: cross-reference source.** All 191 class 0x13502
+objects with this chunk are `CrossReferenceSource` elements; the 10,489
+without it are `HyperlinkTextSource`. Layout: u32 1, flag byte and string
+(the page-number text, such as `21`, or empty), flag byte and string
+(empty in every sample), u32 cross-reference format UID
+(`AppliedFormat`, the `CrossReferenceFormat` `Self`; 191 of 191), then six
+u32 not identified. `Name`, `Hidden` (chunk 0x13504) and
+`AppliedCharacterStyle` (chunk 0x1352E, `n` in all 191) are read as for
+text sources (191 of 191). The attribute order is `Self AppliedFormat Name
+Hidden AppliedCharacterStyle`. Their hyperlinks point at
+`ParagraphDestination`s (kind 2003).
+
+The schema allows no `Content` in `CrossReferenceSource`, but InDesign
+writes `Content` directly in 66 of them; the other 125 hold a
+`TextVariableInstance` (92) or `CharacterStyleRange` elements (33). The
+converter writes a cross-reference source that holds only a text variable
+instance inside the character range, as InDesign does, and any other one
+at paragraph level, around a `CharacterStyleRange`, so that the output
+stays valid. That differs from the reference structure in 66 sources
+(15 in one trustworthy pair), whose inner ranges count as extra values.
+
 ### Position in the text
 
 IDML writes the source as a `HyperlinkTextSource` element around its text
@@ -129,11 +150,62 @@ instruction). In the 251
 little-endian files there are 59,532 nodes in 90 files; all are class
 0xCA1E and name a class 0x13502 object.
 
-In the pairs every source lies within one character style range. In 16
-files without IDML, all versions of one template, 2,608 sources cross the
-boundary of a style range; how IDML writes those is not shown. The
-converter leaves them out with a warning, and a hyperlink whose source is
-left out is left out too.
+### Placement
+
+The story text at a source's start and length equals the text of the
+IDML source element for 10,642 of 10,680 text and cross-reference
+sources over all pairs (1,823 of 1,846 paragraph-level ones in
+trustworthy pairs); the 38 others hold tracked changes or a footnote
+reference, whose text IDML writes inside the source. No two ranges
+overlap, none is empty, and 525 end where the next begins.
+
+IDML places the source element at the lowest level that holds its whole
+extent (all pairs):
+
+| Extent | Parent | Children | Sources |
+|---|---|---|---:|
+| Within one character style range | `CharacterStyleRange` | `Content`, `Br`, … | 6,546 |
+| Several character style ranges of one paragraph style range | `ParagraphStyleRange` | `CharacterStyleRange` | 3,714 |
+| Several paragraph style ranges | `Story` | `ParagraphStyleRange` | 5 |
+
+Another 154 are inside `Change` and 72 inside `XMLElement`. A range that
+continues past the source boundary is split there: the
+`CharacterStyleRange` before a paragraph-level source has the attributes
+of the first range inside it in 3,689 of 3,714 (1,551 of them empty,
+because the source starts where the range starts), and the range after
+it continues with the same attributes when the source ends inside a range
+(562). InDesign keeps the empty range, which holds no text. In 3 sources
+whose last character is a paragraph's return, InDesign also writes the
+next paragraph's empty `ParagraphStyleRange` inside the source.
+
+The converter writes:
+
+- a source within one character style range inside it, as before;
+- a source over several character style ranges of one paragraph style
+  range as a child of the `ParagraphStyleRange`: the ranges at its ends
+  are split at the source's start and end, and the parts inside are
+  written as `CharacterStyleRange` children of the source. The empty
+  ranges InDesign keeps are not written, as they hold no text;
+- a source that spans paragraph style ranges, or that is not inside one
+  list of text runs (the story's or one table cell's), is left out with a
+  warning. The schema allows `HyperlinkTextSource` in
+  `CharacterStyleRange` and `ParagraphStyleRange`, not in `Story` or
+  `Cell`, so the 5 story-level sources (all in one pair) cannot be
+  written validly.
+
+A paragraph-level source that holds an XML marker is left out with a
+warning; a character-level source ends at an XML marker. A character-level
+source that holds an anchored object is left out (below); at paragraph
+level the anchored object is inside an inner `CharacterStyleRange`,
+which the schema allows.
+
+Every text source that the converter left out as "spans several text
+ranges" in a trustworthy pair before paragraph-level sources were written
+(3,986) is, in the IDML, paragraph-level outside footnotes (2,012, 167 of
+them in table cells), story-level (5), inside a tracked change (1,723) or
+in a footnote (246). After this rule the converter writes 2,026
+paragraph-level sources in the trustworthy pairs, with their 2,052
+hyperlinks, all matching the reference.
 
 ## Page item source (class 0x13503)
 
