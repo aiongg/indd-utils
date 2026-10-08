@@ -455,10 +455,12 @@ values on those items.
 
 ## Column direction of pages
 
-All 832 `MarginPreference` elements in the 240 corpus IDML files have
-`ColumnDirection="Horizontal"`. No INDD field for it is identified, so
-the converter writes that value on every `MarginPreference`
-(`objects.md`).
+The `ColumnDirection` of pages is read from the INDD (`objects.md`,
+page settings). The `MarginPreference` and `DocumentPreference` of the
+preferences keep the observed `Horizontal` of `preference_values.xml`;
+8 of the 489 trustworthy pairs have `Vertical` there, and no field was
+found for it (chunk 0x555 does not separate them, and 4 of the 8 lack
+it).
 
 ## Font platform name
 

@@ -95,6 +95,8 @@ pub struct Columns {
     pub positions: Vec<f64>,
     pub gutter: f64,
     pub own: bool,
+    /// The last u16 of the chunk: 1 for vertical columns, 0 horizontal.
+    pub direction: Option<u16>,
 }
 
 /// Layout grid settings of a page (chunk 0xCD02): u32 font family, a flag
@@ -532,10 +534,15 @@ impl<'a> Reader<'a> {
                     return Err(Error::Corrupt(format!("page {uid}: {n} column positions")));
                 }
                 let positions = (0..n).map(|_| c.f64()).collect::<Result<Vec<_>, _>>()?;
+                let gutter = c.f64()?;
+                let own = c.u16()? == 1;
+                // A u16, then the column direction.
+                let direction = c.u16().and_then(|_| c.u16()).ok();
                 Some(Columns {
                     positions,
-                    gutter: c.f64()?,
-                    own: c.u16()? == 1,
+                    gutter,
+                    own,
+                    direction,
                 })
             }
             None => None,

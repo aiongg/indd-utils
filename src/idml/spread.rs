@@ -679,20 +679,22 @@ impl Writer<'_> {
     /// when the stored value is that one. See `docs/format/objects.md`.
     pub(super) fn page_layout(&self, x: &mut Xml, p: &Page) {
         if let (Some(m), Some(c)) = (&p.margins, &p.columns) {
-            x.empty(
-                "MarginPreference",
-                &[
-                    ("ColumnCount", (c.positions.len() / 2).to_string()),
-                    ("ColumnGutter", num(c.gutter)),
-                    ("Top", num(m.top)),
-                    ("Bottom", num(m.bottom)),
-                    ("Left", num(m.left)),
-                    ("Right", num(m.right)),
-                    // Every exported IDML has this (idml-values.md).
-                    ("ColumnDirection", "Horizontal".into()),
-                    ("ColumnsPositions", nums(&c.positions)),
-                ],
-            );
+            let mut attrs = vec![
+                ("ColumnCount", (c.positions.len() / 2).to_string()),
+                ("ColumnGutter", num(c.gutter)),
+                ("Top", num(m.top)),
+                ("Bottom", num(m.bottom)),
+                ("Left", num(m.left)),
+                ("Right", num(m.right)),
+            ];
+            // The last u16 of the columns chunk (objects.md, page settings).
+            match c.direction {
+                Some(0) => attrs.push(("ColumnDirection", "Horizontal".into())),
+                Some(1) => attrs.push(("ColumnDirection", "Vertical".into())),
+                _ => {}
+            }
+            attrs.push(("ColumnsPositions", nums(&c.positions)));
+            x.empty("MarginPreference", &attrs);
         }
         if let Some(g) = &p.grid {
             self.grid_data(x, g);

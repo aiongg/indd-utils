@@ -482,7 +482,7 @@ and `Off`, 4,117 `UseMaster`, 92 `ObjectBased`, 24 `GuideBased`, 3
 and 58 an interface colour. `LayoutRule` is in IDML from DOM 8 on (no
 page of the DOM 7 files has it).
 | 0x51A | Margins: four f64 (left, top, right, bottom), u16 own-margins flag |
-| 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, 4 bytes |
+| 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, u16, u16 column direction (1 vertical, 0 horizontal) |
 | 0xCD02 | Layout grid (`GridDataInformation`, below) |
 
 **Master spread colour.** IDML gives each `MasterSpread` a `PageColor`
@@ -515,12 +515,13 @@ page with the same UID (document and master pages):
 
 In the 250 distinct little-endian files, 2,246 pages hold 0x51A in 2,160
 (34 bytes each, flag 0 or 1) and 0x528 in 2,211 (always 18 bytes after
-the positions). The two bytes after the flag of 0x528 are 1 in 26 pages
-and 0 elsewhere; they are not identified.
-
-`ColumnDirection` has no identified field: all 832 `MarginPreference`
-elements of the 240 corpus IDML files say `Horizontal`. The converter
-writes that value (`idml-values.md`).
+the positions). The last u16 of 0x528 is the column direction: IDML
+`ColumnDirection` is `Vertical` where it is 1 and `Horizontal` where it
+is 0, taking it from the master page with the columns (above). Evidence:
+9,274 of 9,274 pages of the trustworthy pairs (14 vertical, in 3
+documents), 12,224 of 12,224 over all pairs. A page whose flag is 0
+takes the direction from its master page: 44 such pages store 1 but have
+horizontal columns in IDML, like their master pages.
 
 **Layout grid (chunk 0xCD02).** u32 font family UID, a flag byte, the
 font style as an in-object string, five f64, four u32. IDML writes
