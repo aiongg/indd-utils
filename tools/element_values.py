@@ -60,7 +60,7 @@ EXCLUDE = ("own/",)
 
 # Element paths whose observed values the converter writes.
 ELEMENTS = [
-    "TextFrame", "Rectangle", "Oval", "Polygon", "GraphicLine", "Group",
+    "TextFrame", "Rectangle", "Oval", "Polygon", "GraphicLine", "Group", "EPSText",
     "TextFrame/ObjectExportOption", "Rectangle/ObjectExportOption",
     "Oval/ObjectExportOption", "Polygon/ObjectExportOption",
     "GraphicLine/ObjectExportOption", "Group/ObjectExportOption",

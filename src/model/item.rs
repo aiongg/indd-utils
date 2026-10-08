@@ -74,6 +74,21 @@ pub enum ItemKind {
     },
     Shape(Shape),
     Group,
+    /// Text kept from a placed EPS or PDF graphic (class 0x660B).
+    EpsText(EpsText),
+}
+
+/// The settings of EPS text (`docs/format/objects.md`, EPS text).
+#[derive(Debug, Clone, PartialEq)]
+pub struct EpsText {
+    /// Chunk 0x6611 as IDML writes it (`EPSTextData`): big-endian, with
+    /// two fields left out.
+    pub data: Vec<u8>,
+    /// Chunk 0x154: left, top, right, bottom (`PathBoundingBox`).
+    pub path_bounds: [f64; 4],
+    /// The first four f64 of chunk 0x6612, in the same order
+    /// (`EPSTextAttributeBounds`).
+    pub attr_bounds: [f64; 4],
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -662,7 +677,10 @@ impl<'a> Reader<'a> {
         layer: Option<u32>,
     ) -> Result<Option<PageItem>, Error> {
         let cls = self.class(uid);
-        if cls != Some(class::SPLINE_ITEM) && cls != Some(class::GROUP) {
+        if cls != Some(class::SPLINE_ITEM)
+            && cls != Some(class::GROUP)
+            && cls != Some(class::EPS_TEXT)
+        {
             return Ok(None);
         }
         {
@@ -742,6 +760,8 @@ impl<'a> Reader<'a> {
         };
         let kind = if cls == Some(class::GROUP) {
             ItemKind::Group
+        } else if cls == Some(class::EPS_TEXT) {
+            ItemKind::EpsText(self.eps_text(uid)?)
         } else if let Some(column) = text_column {
             let mut kind = self.text_frame_links(column)?;
             if let ItemKind::TextFrame {
@@ -787,6 +807,26 @@ impl<'a> Reader<'a> {
                 None
             }),
         }))
+    }
+
+    /// The settings of EPS text (class 0x660B). See
+    /// `docs/format/objects.md`, EPS text.
+    fn eps_text(&self, uid: u32) -> Result<EpsText, Error> {
+        let four = |id: u32| -> Result<[f64; 4], Error> {
+            let d = self
+                .chunk(uid, id)?
+                .ok_or_else(|| Error::Corrupt(format!("EPS text {uid}: no chunk {id:#x}")))?;
+            let mut c = self.cursor(&d);
+            Ok([c.f64()?, c.f64()?, c.f64()?, c.f64()?])
+        };
+        let data = self
+            .chunk(uid, chunk::EPS_TEXT_DATA)?
+            .ok_or_else(|| Error::Corrupt(format!("EPS text {uid}: no text record")))?;
+        Ok(EpsText {
+            data: eps_text_data(self.enc(), &data)?,
+            path_bounds: four(chunk::OLD_PAGE_BOUNDS)?,
+            attr_bounds: four(chunk::EPS_TEXT_ATTR_BOUNDS)?,
+        })
     }
 
     pub(super) fn graphic(&self, uid: u32) -> Result<Option<Graphic>, Error> {
@@ -1119,5 +1159,108 @@ impl<'a> Reader<'a> {
             next: pos.and_then(|i| frames.get(i + 1).copied()),
             preferences: None,
         })
+    }
+}
+
+/// The text record of EPS text (chunk 0x6611) as IDML `EPSTextData`
+/// writes it: in big-endian byte order, with the u32 at 72 and at 78 of
+/// the 210-byte tail left out. Layout: u32 version, flagged in-object
+/// string (font name), nine f64, flagged in-object string (text), tail.
+/// See `docs/format/objects.md`, EPS text.
+pub(super) fn eps_text_data(enc: Encoding, d: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut c = enc.cursor(d);
+    let mut out = c.u32()?.to_be_bytes().to_vec();
+    let string = |c: &mut crate::object::Cursor, out: &mut Vec<u8>| -> Result<(), Error> {
+        let (flag, tag) = if enc.big_endian() {
+            let tag = c.u8()?;
+            (c.u8()?, tag)
+        } else {
+            let flag = c.u8()?;
+            (flag, c.u8()?)
+        };
+        if tag != enc.string_tag() {
+            return Err(Error::Corrupt(format!("EPS text: string tag {tag}")));
+        }
+        let script = c.u8()?;
+        let n = c.u16()? as usize;
+        out.extend([tag, flag, script]);
+        out.extend((n as u16).to_be_bytes());
+        let mut left = n;
+        while left > 0 {
+            let header = c.u16()?;
+            let count = (header & 0x3FFF) as usize;
+            if count == 0 || count > left {
+                return Err(Error::Corrupt("EPS text: bad text segment".into()));
+            }
+            out.extend(header.to_be_bytes());
+            match header & 0xC000 {
+                0x4000 => out.extend(c.bytes(count)?),
+                0x8000 => {
+                    for _ in 0..count {
+                        out.extend(c.u16()?.to_be_bytes());
+                    }
+                }
+                _ => return Err(Error::Corrupt("EPS text: bad text segment".into())),
+            }
+            left -= count;
+        }
+        Ok(())
+    };
+    string(&mut c, &mut out)?;
+    for _ in 0..9 {
+        out.extend(c.f64()?.to_be_bytes());
+    }
+    string(&mut c, &mut out)?;
+    if c.remaining() != 210 {
+        return Err(Error::Corrupt(format!(
+            "EPS text: tail of {} bytes, expected 210",
+            c.remaining()
+        )));
+    }
+    let tail = c.bytes(210)?;
+    let mut t = enc.cursor(tail);
+    out.extend(t.u32()?.to_be_bytes());
+    out.extend(&tail[4..72]);
+    t.skip(72)?;
+    out.extend(t.u16()?.to_be_bytes());
+    out.extend(&tail[82..]);
+    Ok(out)
+}
+
+#[cfg(test)]
+mod eps_text_tests {
+    use super::*;
+    use crate::database::synthetic::flagged_string;
+
+    #[test]
+    fn writes_the_eps_text_record_big_endian() {
+        let enc = Encoding::default();
+        let mut d = 0x0001_0002u32.to_le_bytes().to_vec();
+        d.extend(flagged_string(enc, 1, "Helv"));
+        for i in 0..9 {
+            d.extend((i as f64).to_le_bytes());
+        }
+        d.extend(flagged_string(enc, 1, "Hi"));
+        let mut tail = vec![0u8; 210];
+        tail[0] = 16;
+        tail[72] = 0xAA; // left out
+        tail[76] = 1;
+        tail[78] = 14; // left out
+        tail[100] = 0x55;
+        d.extend(&tail);
+        let out = eps_text_data(enc, &d).unwrap();
+        assert_eq!(out.len(), d.len() - 8);
+        assert_eq!(&out[..4], &[0, 1, 0, 2]);
+        assert_eq!(
+            &out[4..15],
+            &[2, 1, 0, 0, 4, 0x40, 4, b'H', b'e', b'l', b'v']
+        );
+        assert_eq!(&out[15..23], &0f64.to_be_bytes());
+        assert_eq!(&out[23..31], &1f64.to_be_bytes());
+        let t = &out[out.len() - 202..];
+        assert_eq!(&t[..4], &[0, 0, 0, 16]);
+        assert_eq!(&t[72..74], &[0, 1]);
+        assert_eq!(t[74 + 100 - 82], 0x55);
+        assert!(eps_text_data(enc, &d[..d.len() - 1]).is_err());
     }
 }

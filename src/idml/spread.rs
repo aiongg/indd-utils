@@ -105,6 +105,36 @@ pub(super) const SIZING: [&str; 5] = [
 ];
 
 impl Writer<'_> {
+    /// The `Properties` of EPS text: `PathBoundingBox`, `EPSTextData` and
+    /// `EPSTextAttributeBounds` (`docs/format/objects.md`, EPS text).
+    fn eps_text_properties(x: &mut Xml, e: &crate::model::EpsText) {
+        let [left, top, right, bottom] = e.path_bounds;
+        x.start("Properties");
+        x.empty(
+            "PathBoundingBox",
+            &[
+                ("Left", num(left)),
+                ("Top", num(top)),
+                ("Right", num(right)),
+                ("Bottom", num(bottom)),
+            ],
+        );
+        x.start("EPSTextData")
+            .cdata(&base64_lines(&e.data), CDATA_SECTION)
+            .end();
+        let [left, top, right, bottom] = e.attr_bounds;
+        x.empty(
+            "EPSTextAttributeBounds",
+            &[
+                ("Top", num(top)),
+                ("Left", num(left)),
+                ("Bottom", num(bottom)),
+                ("Right", num(right)),
+            ],
+        );
+        x.end();
+    }
+
     pub(super) fn path_geometry(x: &mut Xml, paths: &[Path]) {
         if paths.is_empty() {
             return;
@@ -382,6 +412,7 @@ impl Writer<'_> {
             ItemKind::Shape(Shape::Oval) => "Oval",
             ItemKind::Shape(Shape::Polygon) => "Polygon",
             ItemKind::Shape(Shape::GraphicLine) => "GraphicLine",
+            ItemKind::EpsText(_) => "EPSText",
         };
         x.start(tag).attr("Self", uref(Some(item.uid)));
         if let ItemKind::TextFrame {
@@ -446,6 +477,9 @@ impl Writer<'_> {
         };
         x.attrs_missing(self.observed(observed).iter());
         Self::path_geometry(x, &item.paths);
+        if let ItemKind::EpsText(e) = &item.kind {
+            Self::eps_text_properties(x, e);
+        }
         if let ItemKind::TextFrame {
             preferences: Some(p),
             ..
@@ -460,7 +494,10 @@ impl Writer<'_> {
         if frame {
             self.frame_fitting(x, item);
         }
-        if let Some(n) = export::object_export_option(self.doc.version, item.export.as_ref(), false)
+        // EPS text has no export options (objects.md, EPS text).
+        if !matches!(item.kind, ItemKind::EpsText(_))
+            && let Some(n) =
+                export::object_export_option(self.doc.version, item.export.as_ref(), false)
         {
             n.write(x);
         }

@@ -1223,6 +1223,49 @@ with a warning.
 `LayerCompOption AppliedLayerComp`: chunk 0x9209 of the image, i32 at
 offset 4 (−1, −2 or a comp number). 11 of 11.
 
+## EPS text (class 0x660B)
+
+Text kept from a placed EPS or PDF graphic as text that cannot be
+edited. IDML writes it as an `EPSText` page item. It is listed in the
+0x15B child list of a spread layer or a group (483 of 634 are in
+groups), and has the usual page item chunks (0x151 transform, 0x6E03
+attributes, 0x1B916 object style, 0x3703 text wrap, 0x2C10 name, …) but
+no path.
+
+| Chunk | Contents | IDML |
+|---|---|---|
+| 0x151 | Matrix | `ItemTransform` |
+| 0x154 | Four f64: left, top, right, bottom | `Properties/PathBoundingBox` `Left`, `Top`, `Right`, `Bottom` |
+| 0x6612 | 60 bytes: four f64 in the same order, then f64 72 and zeros (not identified) | `Properties/EPSTextAttributeBounds` `Top`, `Left`, `Bottom`, `Right`, from the four f64 |
+| 0x6611 | Text record (below) | `Properties/EPSTextData` |
+
+**Text record (chunk 0x6611).** u32 version (0x00010002 in all 634), a
+flagged in-object string (the font name), nine f64 (a matrix of font
+size, 0, 0, font size, x, y, then three numbers), a flagged in-object
+string (the text) and a tail of 210 bytes: u32 at 0 (16 in all), zeros
+to 72, u32 at 72 (varies), u16 at 76 (0 or 1), u32 at 78 (14 in all),
+zeros to 210.
+
+IDML `EPSTextData` is this record in big-endian byte order, without the
+u32 at 72 and at 78 of the tail, in base64 in lines of 76 characters:
+each number big-endian, each string as in big-endian data (tag 2, flag,
+the byte after the tag, u16 length, each segment header big-endian,
+byte segments copied and UTF-16 code units big-endian), and the zero
+areas copied. So `EPSTextData` is 8 bytes shorter than the chunk.
+
+IDML writes `Properties` (`PathBoundingBox`, `EPSTextData`,
+`EPSTextAttributeBounds`) and then `TextWrapPreference`; `EPSText` has
+no `ContentType`, no path and no export options. Its other attributes
+are those of other page items (page item settings, above); the values
+that every `EPSText` has come from `element_values.xml`.
+
+Evidence: 634 `EPSText` elements in 14 pairs (633 in 13 trustworthy
+pairs), versions 8.1 to 20.5. The transform, both bounds, the text data
+and the text wrap equal the IDML in 634 of 634. `StrokeType` (634),
+`OverprintFill` (33) and `StrokeDashAndGap` (7) are not reproduced yet:
+IDML writes `StrokeType="StrokeStyle/$ID/Solid"` on 627 items whose
+attribute list has no stroke type.
+
 ## Graphics pasted without a link
 
 A graphic with no link (its chunk 0x8CBC names no link) can hold its file

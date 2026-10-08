@@ -23,6 +23,8 @@ pub mod class {
     pub const PDF: u32 = 0x2501;
     pub const EPS: u32 = 0x6601;
     pub const SVG: u32 = 0x6639;
+    /// Text kept from a placed EPS or PDF graphic (IDML `EPSText`).
+    pub const EPS_TEXT: u32 = 0x660B;
     /// A plain byte stream, such as the file of an embedded graphic.
     pub const RAW_DATA: u32 = 0x129;
     pub const FONT_FAMILY: u32 = 0x3E03;
@@ -128,6 +130,11 @@ pub mod chunk {
     pub const PAGE_COLUMNS: u32 = 0x528;
     pub const PAGE_GRID: u32 = 0xCD02;
     pub const ITEM_TRANSFORM: u32 = 0x151;
+    /// EPS text: its text record (IDML `EPSTextData`).
+    pub const EPS_TEXT_DATA: u32 = 0x6611;
+    /// EPS text: four f64 (IDML `EPSTextAttributeBounds`), then other
+    /// fields.
+    pub const EPS_TEXT_ATTR_BOUNDS: u32 = 0x6612;
     /// A group's transform when it has no chunk 0x151.
     pub const GROUP_TRANSFORM: u32 = 0x40D;
     /// u16 1 for a frame meant for a graphic.
