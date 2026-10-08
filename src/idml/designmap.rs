@@ -287,7 +287,7 @@ impl Writer<'_> {
             let font = match b.font {
                 0 => "$ID/".to_string(),
                 f => match doc.fonts.get(&f) {
-                    Some(f) => f.name.clone(),
+                    Some(f) => self.family_names(f).0,
                     None => continue,
                 },
             };

@@ -173,6 +173,25 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
+    /// The script byte of the last document user's name: the second byte
+    /// of its in-object string (`objects.md`, document users). Only read
+    /// in little-endian files.
+    pub(super) fn users_script(&self, doc: u32) -> Option<u8> {
+        if self.enc().big_endian() {
+            return None;
+        }
+        let d = self.chunk(doc, chunk::DOC_USERS).ok()??;
+        let mut c = self.cursor(&d);
+        let mut last = None;
+        for _ in 0..c.u32().ok()? {
+            c.flag().ok()?;
+            last = d.get(c.pos() + 1).copied();
+            c.string().ok()?;
+            c.u32().ok()?;
+        }
+        last
+    }
+
     /// The index sort groups of the preferences object, chunk 0x1307E:
     /// name, include flag and header variant of each group, in stored
     /// order. Empty when the chunk does not parse to its end. See

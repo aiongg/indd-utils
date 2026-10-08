@@ -184,14 +184,14 @@ impl Writer<'_> {
             Kind::Font => v
                 .as_u32()
                 .and_then(|u| self.doc.fonts.get(&u))
-                .map(|f| text("string", f.name.clone())),
+                .map(|f| text("string", self.family_names(f).0)),
             Kind::FontOrNone => match v.as_u32()? {
                 0 => Some(text("string", "$ID/".into())),
                 u => self
                     .doc
                     .fonts
                     .get(&u)
-                    .map(|f| text("string", f.name.clone())),
+                    .map(|f| text("string", self.family_names(f).0)),
             },
             Kind::String => v.as_string().map(|s| text("string", s)),
             Kind::StringOrNothing => v.as_string().map(|s| {

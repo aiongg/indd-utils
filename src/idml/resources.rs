@@ -264,24 +264,32 @@ impl Writer<'_> {
         self.package_root(&mut x, "Fonts");
         for f in self.doc.fonts.values() {
             let id = format!("di{:x}", f.uid);
+            let (family, base) = self.family_names(f);
             x.start("FontFamily")
                 .attr("Self", &id)
-                .attr("Name", &f.name);
+                .attr("Name", &family);
             for font in &f.fonts {
                 // A font with an empty style name is named `Regular`, and
                 // its `Self` has the family name alone (fonts.md).
                 let (name, key) = if font.style.is_empty() {
-                    (format!("{} Regular", f.name), f.name.clone())
+                    (format!("{family} Regular"), base.clone())
                 } else {
-                    let name = format!("{} {}", f.name, font.style);
-                    (name.clone(), name)
+                    (
+                        format!("{family} {}", font.style),
+                        format!("{base} {}", font.style),
+                    )
+                };
+                let style = if font.style_builtin {
+                    builtin_key(&font.style)
+                } else {
+                    font.style.clone()
                 };
                 x.start("Font")
                     .attr("Self", format!("{id}Fontn{key}"))
-                    .attr("FontFamily", &f.name)
+                    .attr("FontFamily", &base)
                     .attr("Name", &name)
                     .attr("PostScriptName", &font.postscript_name)
-                    .attr("FontStyleName", &font.style);
+                    .attr("FontStyleName", &style);
                 if let Some(t) = font.type_name() {
                     x.attr("FontType", t);
                 }
@@ -292,11 +300,16 @@ impl Writer<'_> {
                 x.attr("FullName", &font.full_name)
                     .attr("FullNameNative", &font.full_name_native)
                     .attr("FontStyleNameNative", &font.style_native)
-                    // `$ID/` in every Font of the corpus IDML files.
-                    .attr("PlatformName", "$ID/")
+                    // `$ID/` in every Font of the corpus IDML files but
+                    // those of missing fonts (idml-values.md).
+                    .attr(
+                        "PlatformName",
+                        font.platform_name.as_deref().unwrap_or("$ID/"),
+                    )
                     .attr("Version", &font.version);
-                // IDML from InDesign 7 has no TypekitID.
-                if self.doc.version.major >= 12 {
+                // IDML from InDesign before 9.2 has no TypekitID (fonts.md).
+                let v = &self.doc.version;
+                if (v.major, v.minor) >= (9, 2) {
                     x.attr("TypekitID", font.typekit_id.idml());
                 }
                 x.end();
@@ -345,7 +358,10 @@ impl Writer<'_> {
                     x.attr("BaselineShift", "0");
                 }
                 if let Some(f) = self.doc.fonts.get(&e.font_family) {
-                    Self::properties(&mut x, &[("AppliedFont", "string", f.name.clone().into())]);
+                    Self::properties(
+                        &mut x,
+                        &[("AppliedFont", "string", self.family_names(f).0.into())],
+                    );
                 }
                 x.end();
             }

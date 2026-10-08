@@ -718,7 +718,10 @@ impl Writer<'_> {
                 .attr("CharacterAlignment", "AlignEmCenter");
         }
         if let Some(f) = self.doc.fonts.get(&g.font) {
-            Self::properties(x, &[("AppliedFont", "string", f.name.clone().into())]);
+            Self::properties(
+                x,
+                &[("AppliedFont", "string", self.family_names(f).0.into())],
+            );
         }
         x.end();
     }

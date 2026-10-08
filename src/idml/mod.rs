@@ -117,6 +117,26 @@ impl Writer<'_> {
         }
     }
 
+    /// The name IDML gives a font family, and the name its fonts' names
+    /// are made from: the native name when the family's writing script is
+    /// the script of the document users, and `$ID/` first for a built-in
+    /// name (`docs/format/fonts.md`, family names).
+    fn family_names(&self, f: &crate::model::font::FontFamily) -> (String, String) {
+        let native = self
+            .doc
+            .users_script
+            .is_some_and(|s| s != 0 && u32::from(s) == f.writing_script)
+            && !f.native_name.is_empty()
+            && f.native_name != f.name;
+        let base = if native { &f.native_name } else { &f.name };
+        let idml = if f.builtin {
+            builtin_key(base)
+        } else {
+            base.clone()
+        };
+        (idml, base.clone())
+    }
+
     fn style_ref(&self, uid: Option<u32>, paragraph: bool) -> String {
         let prefix = if paragraph {
             "ParagraphStyle"

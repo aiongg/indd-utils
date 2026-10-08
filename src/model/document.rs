@@ -20,6 +20,8 @@ pub struct Document {
     pub active_layer: Option<u32>,
     /// Document users (chunk 0xA443): flag byte and name.
     pub users: Vec<(u8, String)>,
+    /// The script byte of the last document user's name.
+    pub users_script: Option<u8>,
     /// Index sort groups (preferences chunk 0x1307E), in order: name,
     /// include flag and header variant.
     pub index_groups: Vec<(String, bool, u16)>,
@@ -179,6 +181,7 @@ impl<'a> Reader<'a> {
         });
         let constant_shade = self.constant_shade();
         let assignments = self.assignments();
+        let users_script = self.users_script(DOC);
         let users = self.users(DOC).unwrap_or_else(|e| {
             self.warn(format!("document users left out: {e}"));
             Vec::new()
@@ -236,6 +239,7 @@ impl<'a> Reader<'a> {
             cell_styles: objects.cell_styles,
             table_styles: objects.table_styles,
             users,
+            users_script,
             sections,
             text_variables: objects.text_variables,
             hyperlinks: objects.hyperlinks,
@@ -531,6 +535,8 @@ impl<'a> Reader<'a> {
                     Some(d) => Some(FontFamily {
                         uid,
                         name: find_string(self.enc(), &d, 0)?,
+                        builtin: false,
+                        native_name: String::new(),
                         fonts: Vec::new(),
                         writing_script: 0,
                     }),

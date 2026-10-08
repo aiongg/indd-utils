@@ -1,7 +1,7 @@
 //! Font families (class 0x3E03). See `docs/format/fonts.md`.
 
 use crate::Error;
-use crate::object::{Encoding, Name, Object};
+use crate::object::{Encoding, Name, Object, builtin_key};
 
 pub mod chunk {
     /// Family name and font records.
@@ -15,6 +15,10 @@ pub mod chunk {
 pub struct FontFamily {
     pub uid: u32,
     pub name: String,
+    /// The name is a built-in key (written with `$ID/`).
+    pub builtin: bool,
+    /// The family name in the font's own script.
+    pub native_name: String,
     pub fonts: Vec<Font>,
     /// IDML `WritingScript` of every font in the family.
     pub writing_script: u32,
@@ -23,8 +27,11 @@ pub struct FontFamily {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Font {
     pub style: String,
+    /// The style is a built-in key (a missing font's `FontStyleName`).
+    pub style_builtin: bool,
     pub postscript_name: String,
     pub full_name: String,
+    /// `FontStyleNameNative` as IDML writes it.
     pub style_native: String,
     pub full_name_native: String,
     /// Font type code (see [`Font::type_name`]).
@@ -32,16 +39,21 @@ pub struct Font {
     pub version: String,
     /// IDML `TypekitID`; the empty built-in key when the font has none.
     pub typekit_id: Name,
+    /// IDML `PlatformName` of a font in a missing-font record.
+    pub platform_name: Option<String>,
 }
 
 impl Font {
     /// IDML `FontType` for the type code, if known.
     pub fn type_name(&self) -> Option<&'static str> {
         match self.font_type {
+            0 => Some("Type1"),
             1 => Some("TrueType"),
+            3 => Some("ATC"),
             6 => Some("OpenTypeCFF"),
             7 => Some("OpenTypeCID"),
             8 => Some("OpenTypeTT"),
+            0xFFFF_FFFF => Some("Unknown"),
             _ => None,
         }
     }
@@ -79,14 +91,31 @@ enum Record {
     Version3,
 }
 
-/// Chunk 0x3E05: u8, u16, name, u8, native name, 6 bytes, u16 font count,
-/// font records, u32 writing script.
+/// Record kind (byte 0 of chunk 0x3E05) of a family whose fonts are
+/// missing.
+const MISSING: u8 = 3;
+
+/// Chunk 0x3E05: u8 record kind, u8, flagged name, flagged native name, 6
+/// bytes, u16 font count, font records, u32 writing script. A missing-font
+/// record has other font records (`missing_fonts`).
 fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFamily, Error> {
     let mut c = enc.cursor(data);
-    c.skip(3)?;
+    let kind = c.u8()?;
+    c.u8()?;
+    let builtin = c.flag()? == 1;
     let name = c.string()?;
-    c.skip(1)?;
-    c.string()?; // native family name; IDML does not write it
+    c.flag()?;
+    let native_name = c.string()?;
+    if kind == MISSING && record == Record::Current {
+        return Ok(FontFamily {
+            uid,
+            name,
+            builtin,
+            native_name,
+            fonts: missing_fonts(&mut c)?,
+            writing_script: 0,
+        });
+    }
     c.skip(6)?;
     let count = c.u16()?;
     let mut fonts = Vec::with_capacity(count as usize);
@@ -102,8 +131,13 @@ fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFam
         };
         c.skip(1)?;
         let full_name = c.string()?;
-        c.skip(1)?;
+        let native_builtin = c.flag()? == 1;
         let style_native = c.string()?;
+        let style_native = if native_builtin {
+            builtin_key(&style_native)
+        } else {
+            style_native
+        };
         c.skip(1)?;
         let full_name_native = c.string()?;
         let font_type = c.u32()?;
@@ -118,6 +152,7 @@ fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFam
         };
         fonts.push(Font {
             style,
+            style_builtin: false,
             postscript_name,
             full_name,
             style_native,
@@ -128,6 +163,7 @@ fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFam
                 builtin: true,
                 name: String::new(),
             },
+            platform_name: None,
         });
     }
     let writing_script = c.u32()?;
@@ -137,9 +173,50 @@ fn parse(enc: Encoding, uid: u32, data: &[u8], record: Record) -> Result<FontFam
     Ok(FontFamily {
         uid,
         name,
+        builtin,
+        native_name,
         fonts,
         writing_script,
     })
+}
+
+/// The fonts of a missing-font record, after the native name: 6 zero
+/// bytes and no fonts, or 4 bytes, u16 count and per font three flagged
+/// strings (style, platform name, style) and 10 bytes. The record must
+/// end there. See `docs/format/fonts.md`, missing fonts.
+fn missing_fonts(c: &mut crate::object::Cursor) -> Result<Vec<Font>, Error> {
+    if c.remaining() == 6 {
+        c.skip(6)?;
+        return Ok(Vec::new());
+    }
+    c.skip(4)?;
+    let count = c.u16()?;
+    let mut fonts = Vec::new();
+    for _ in 0..count {
+        let style = c.name()?;
+        let platform = c.name()?;
+        c.name()?;
+        c.skip(10)?;
+        fonts.push(Font {
+            style: style.name,
+            style_builtin: style.builtin,
+            postscript_name: String::new(),
+            full_name: String::new(),
+            style_native: platform.idml(),
+            full_name_native: String::new(),
+            font_type: 0xFFFF_FFFF,
+            version: String::new(),
+            typekit_id: Name {
+                builtin: true,
+                name: String::new(),
+            },
+            platform_name: Some(platform.idml()),
+        });
+    }
+    if c.remaining() != 0 {
+        return Err(Error::Corrupt("missing-font record: bytes left".into()));
+    }
+    Ok(fonts)
 }
 
 /// Chunk 0x3EEB: u32 count, then per font a flag byte (1 = `$ID/` key)
@@ -216,5 +293,35 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["$ID/", "TkD-1-ab"]
         );
+    }
+
+    #[test]
+    fn parses_a_missing_font_record() {
+        let mut d = vec![3, 0, 1];
+        d.extend(string("Aptos"));
+        d.push(1);
+        d.extend(string("Aptos"));
+        d.extend([0; 4]);
+        d.extend(1u16.to_le_bytes());
+        for s in ["Regular", "Aptos", "Regular"] {
+            d.push(1);
+            d.extend(string(s));
+        }
+        d.extend([0; 8]);
+        d.extend(2u16.to_le_bytes());
+        let f = parse(Encoding::default(), 0x9E, &d, Record::Current).unwrap();
+        assert!(f.builtin);
+        let font = &f.fonts[0];
+        assert_eq!((font.style.as_str(), font.style_builtin), ("Regular", true));
+        assert_eq!(font.platform_name.as_deref(), Some("$ID/Aptos"));
+        assert_eq!(font.type_name(), Some("Unknown"));
+        // Without fonts: 6 zero bytes end the record.
+        let mut d = vec![3, 0, 0];
+        d.extend(string("Gone"));
+        d.push(0);
+        d.extend(string(""));
+        d.extend([0; 6]);
+        let f = parse(Encoding::default(), 0x9E, &d, Record::Current).unwrap();
+        assert!(f.fonts.is_empty());
     }
 }

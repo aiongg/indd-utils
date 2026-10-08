@@ -16,10 +16,12 @@ the 251 distinct little-endian files.
 
 | Field | Contents | IDML |
 |---|---|---|
-| u8, u16 | Not identified | |
+| u8 | Record kind: 1 or 4 for the layout here, 3 for missing fonts (below), 2 for an 8-byte record without fonts | |
+| u8 | 0 | |
+| u8 | Key flag of the family name: 1 for a built-in key | `$ID/` before the name (below) |
 | string | Family name | `FontFamily/@Name`, `Font/@FontFamily` |
-| u8 | Not identified | |
-| string | Family name in the font's own script | not written |
+| u8 | Key flag of the native name | |
+| string | Family name in the font's own script ("native name") | used in place of the name in some documents (below) |
 | 6 bytes | Not identified | |
 | u16 | Font count | |
 | font records | See below | one `Font` each, in the same order |
@@ -35,9 +37,9 @@ Strings are in-object strings (`objects.md`).
 | string | Style name | `FontStyleName` |
 | u16 *n*, *n* bytes | PostScript name, one byte per character | `PostScriptName` |
 | u8, string | Full name | `FullName` |
-| u8, string | Style name in the font's own script | `FontStyleNameNative` |
+| u8 key flag, string | Style name in the font's own script | `FontStyleNameNative`, with `$ID/` first when the flag is 1 |
 | u8, string | Full name in the font's own script | `FullNameNative` |
-| u32 | Font type: 1 `TrueType`, 6 `OpenTypeCFF`, 7 `OpenTypeCID`, 8 `OpenTypeTT` | `FontType` |
+| u32 | Font type: 0 `Type1`, 1 `TrueType`, 3 `ATC`, 6 `OpenTypeCFF`, 7 `OpenTypeCID`, 8 `OpenTypeTT`, 0xFFFFFFFF `Unknown` | `FontType` |
 | u32 *n*, segments | Version: *n* UTF-16 code units as text segments | `Version` |
 
 In files from InDesign 3.0 and 4.0 the PostScript name is a byte and an
@@ -55,9 +57,14 @@ in-object string, and InDesign 3.0 has no version (`big-endian.md`).
   and `Version`. In the other two, matched by name, 6 fonts of each have
   another `Version` in IDML. That document's IDML gives its other font
   families other UIDs, so it was probably exported from another save.
-- `FontType`: 4,464 of 4,464 (code 6: 3,043, 1: 905, 7: 341, 8: 175).
-  Codes 0 (54 fonts) and 3 (1 font) occur in files without an IDML; the
-  converter leaves out `FontType` for them.
+- `FontType`: over the 31,969 fonts of all pairs whose INDD family has
+  as many fonts as the IDML family: code 0 `Type1` 799, 1 `TrueType`
+  3,338, 3 `ATC` 21, 6 `OpenTypeCFF` 22,325, 7 `OpenTypeCID` 2,559, 8
+  `OpenTypeTT` 2,893, 0xFFFFFFFF `Unknown` 34. The converted `FontType`
+  equals the IDML for all 32,002 matched fonts of all pairs.
+- Key flag of the native style: 1 gives `$ID/` and the string in 1,364
+  of 1,364 fonts, 0 the plain string in 30,591 of 30,605 (the other 14
+  are in stale pairs whose fonts differ).
 - A font with an empty style name: in all 21 such IDML fonts over all
   pairs (12 in the trustworthy pairs), `Name` is the family name and
   ` Regular`, and `Self` is the family's `Self`, `Fontn` and the family
@@ -109,6 +116,50 @@ was exported, as `Status` does (below).
 Text formatting refers to a family by UID (`AppliedFont`, `BulletsFont`;
 see `attributes.md`) and IDML writes the family name there.
 
+**Built-in family names.** The family-name key flag is 1 in 9 families
+of 8 pairs. IDML then writes `$ID/` and the name in `FontFamily/@Name`,
+in `Font/@Name` (`$ID/`, name, space, style) and in every `AppliedFont`
+that names the family; `Font/@FontFamily` and `Font/@Self` have the
+plain name. No family with flag 0 gets `$ID/`.
+
+**Native family names.** IDML writes the native name in place of the
+family name when the family's writing script equals the script byte of
+the document users (`objects.md`, document users), the byte is not 0,
+and the native name is not empty and differs from the name. It is then
+used wherever the name would be: `FontFamily/@Name`, `Font/@FontFamily`,
+`Font/@Name`, `Font/@Self` and every `AppliedFont`.
+
+| Users' script byte | Family writing script | Native name in IDML | Families (documents), all pairs |
+|---|---|---|---|
+| 1 | 1 | yes | 43 of 46 (9 of 10) |
+| 25 | 25 | yes | 2 of 2 (1 of 1) |
+| 1 | 2, 3 or 25 | no | 5 of 5 |
+| 0, 7, 29 | any | no | 604 of 604 |
+
+The 3 misses are in one trustworthy DOM 16 pair whose IDML has a third
+document user that the INDD lacks, so it was exported on another
+computer.
+
+**Missing fonts (record kind 3).** After the native name come either 6
+zero bytes and the end of the chunk (no fonts; IDML writes a
+`FontFamily` without `Font`), or 4 bytes, a u16 font count and short
+font records:
+
+| Field | IDML |
+|---|---|
+| u8 key flag, string | `FontStyleName` (`$ID/Regular` for flag 1); the plain style in `Name` and `Self` |
+| u8 key flag, string (the family name) | `FontStyleNameNative` and `PlatformName` (`$ID/` and the name for flag 1) |
+| u8 key flag, string | the style again; not mapped |
+| u32 style index, u32 0, u16 2 | not mapped |
+
+The other attributes are `PostScriptName=""`, `FontType="Unknown"`,
+`WritingScript="0"`, `FullName=""`, `FullNameNative=""`, `Version=""`,
+`TypekitID="$ID/"`. Evidence: 3 families with fonts in 2 trustworthy
+pairs (5 fonts), every attribute equal; 3 families without fonts in 3
+trustworthy pairs. Over the corpus, 14 records without fonts and 49
+with fonts parse to their end. Kind 2 records (7 in 5 files) do not
+parse; their family keeps its name only.
+
 ## Typekit IDs (chunk 0x3EEB)
 
 u32 count *n*, then *n* entries: u8 1 if the string is a built-in key
@@ -118,9 +169,10 @@ u32 count *n*, then *n* entries: u8 1 if the string is a built-in key
 - 945 of 945 fonts in families where *n* equals the font count.
 - In the 38 families where *n* is smaller, the entries match the first
   *n* fonts and all other fonts have `$ID/` (38 of 38).
-- Families with *n* = 0 or without the chunk: all 3,020 fonts in IDML
-  from DOM 12 on have `$ID/`. The one DOM 7 IDML (32 fonts) has no
-  `TypekitID`; the converter writes it for InDesign 12 and later.
+- Families with *n* = 0 or without the chunk: every font has `$ID/`.
+- IDML from INDD files of version 9.0 (231 fonts) and 9.1 (29) and
+  earlier has no `TypekitID`; from 9.2 (169 fonts) on, every font has
+  it. The converter writes it from version 9.2.
 
 ## Not converted
 

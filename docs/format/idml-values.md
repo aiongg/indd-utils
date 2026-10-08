@@ -453,8 +453,10 @@ the converter writes that value on every `MarginPreference`
 
 ## Font platform name
 
-`PlatformName` is `$ID/` in all 4,464 `Font` elements of the corpus IDML
-files (`fonts.md`). The converter writes that value on every font.
+`PlatformName` is `$ID/` in every `Font` element of the corpus IDML
+files except the fonts of missing-font records, where it is read from
+the record (`fonts.md`, missing fonts). The converter writes `$ID/` on
+every other font.
 
 ## Number format
 

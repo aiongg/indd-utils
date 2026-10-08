@@ -66,6 +66,16 @@ are in `big-endian.md`.
 | 0x4C01 | UID list: sections |
 | 0xA443 | Document users: u32 count, then per user a flag byte, the name as an in-object string, u32 colour |
 
+**Script byte of the user names.** The second byte of each user name's
+in-object string (the byte after the string tag) is a script code: 0
+in documents in Latin script, 1 in all 9 trustworthy pairs with
+Japanese user or assignment names, 7 in a Russian, 25 in a Simplified
+Chinese and 29 in a Czech document. The same codes are font writing
+scripts (1 for Japanese fonts, 25 for Simplified Chinese fonts). All
+users of a document have the same byte, except in one pair with users
+of bytes 0 and 7. The converter uses the byte of the last user to
+choose font family names (`fonts.md`, native family names).
+
 **Document users.** IDML lists one `DocumentUser` per user in chunk
 0xA443, `Self` being `dDocumentUser` and the index in hexadecimal (491 of
 495 trustworthy pairs have as many users as the chunk; the other 4 are
