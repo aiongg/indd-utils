@@ -13,39 +13,70 @@ Implemented in `src/model/hyperlink.rs`.
 
 ## Evidence
 
-Five corpus pairs have hyperlinks, all same-version. Two of them were
-exported from another save than the INDD (their hyperlink objects have
-other UIDs and keys than the IDML elements) and are used only where
-noted. The other three have 43 hyperlinks, 43 text sources, 39 page
-destinations, 4 URL destinations and 7 bookmarks, all with an IDML
-element whose `Self` is the INDD UID (hyperlinks, sources, bookmarks) or
-whose `Name` is the INDD name (destinations).
+The first facts below came from five corpus pairs. They were checked
+again on the later corpus: 108 of its 654 same-version pairs have
+hyperlinks (75 trustworthy), with 11,166 `Hyperlink`, 10,491
+`HyperlinkTextSource`, 191 `CrossReferenceSource`, 430
+`HyperlinkPageItemSource`, 1,159 `HyperlinkPageDestination`, 27,724
+`HyperlinkURLDestination`, 643 `HyperlinkExternalPageDestination`, 1,021
+`HyperlinkTextDestination`, 169 `ParagraphDestination` and 1,074
+`Bookmark` elements. Hyperlinks, sources, external page destinations and
+bookmarks have `Self` equal to the INDD UID; the other destinations are
+found by `DestinationUniqueKey`. Counts below without a qualifier are over
+all 108 pairs.
 
 ## Hyperlink (chunk 0x13502)
 
 | Offset | Contents | IDML |
 |---|---|---|
-| 0 | u32 text source UID | `Source` |
+| 0 | u32 text source UID (0 for none) | `Source` |
 | 4 | u16 0 | |
 | 6 | u16 hidden (1 true) | `Hidden` |
 | 8 | u32 key | `DestinationUniqueKey` |
-| 12 | three u32, not identified (2001 or 2017; 2007; 0x13501) | |
+| 12 | u32 destination kind (below) | |
+| 16 | u32: 2007 in 11,121 of 11,164; 2006 (37), 2005 (4) or 2019 (2) in the others | |
+| 20 | u32 0x13501 | |
 | 24 | flag byte and string | `Name` |
 | | flag byte and string (empty) | |
 
-All four match in 43 of 43 (`Hidden` true for 7, false for 36).
+`Source`, `Hidden`, the key and `Name` match in all. 48 hyperlinks in one
+pair have source UID 0; IDML writes them without `Source`, which the
+schema requires, so the converter leaves them out.
 
-The destination is the destination object with the same key (43 of 43).
-IDML writes it as `Properties/Destination`, an object reference to the
-destination's `Self`.
+| Kind at 12 | IDML `Destination` |
+|---|---|
+| 2000 | `n` (no destination), or a list (another document) |
+| 2001 | `HyperlinkPageDestination/…` (1,151) |
+| 2002, 2017, 2018 | `HyperlinkURLDestination/…` (9,030) |
+| 2003 | `ParagraphDestination/…` (191, cross-references) |
+| 2004 | an external page destination's UID (576) |
 
-**Appearance.** `Visible="false"`, `Highlight="None"`, `Width="Thin"`,
-`BorderStyle="Solid"` and `BorderColor` `Black` are the same for all 43,
-so their fields cannot be located. Chunk 0x13553 (18 bytes) has two
-values among them (byte 6 is 0x21 or 0x1B), and the u32 at offset 12 two
-(2001, 2017). The converter writes these attributes only for hyperlinks
-whose chunk 0x13553 and three u32 at offset 12 hold values seen in the
-pairs.
+**Destination.** IDML writes it as `Properties/Destination`. A hyperlink
+whose object has chunk 0x1359F (u32 0x13501, u32 1, u32 link UID) points
+into another document: IDML writes a list destination (file name, volume
+name and three numbers) for 155 of 156 such hyperlinks. The volume and
+the numbers are not located, so the converter leaves `Destination` out
+for them (the schema allows that). For all other hyperlinks the
+destination is the destination object with the same key (10,946 of
+10,947; each key names one object), or, with kind 2000 and no such
+object, the value `n` (61). In the trustworthy pairs, after this rule,
+the converter's `Destination` is right for 2,850 of 2,878 hyperlinks it
+writes and left out for the other 28 (list destinations).
+
+**Appearance (chunk 0x13553, 18 bytes).** Over all 11,164 hyperlinks the
+chunk is `00 00 01 00 00 00 b6 00 00 00 b10 00 00 00 00 00 00 00`. Byte 6
+takes the values 0x1A, 0x1B, 0x1D, 0x20, 0x21 and does not follow any
+IDML attribute. Byte 10 is `Highlight`: 0 `None` (11,156), 1 `Invert`
+(8). `Visible="false"`, `Width="Thin"` and `BorderStyle="Solid"` are the
+same in all 11,164, so their fields cannot be located; the converter
+writes them for hyperlinks whose chunk has this pattern. `BorderColor` is
+`Black` for all 10,588 hyperlinks of kinds other than 2004; the 576 of
+kind 2004 (two pairs) have `Black` (255), `Violet` (280) or `Green` (41),
+and no chunk of the hyperlink object differs between the colours, so the
+converter writes `Black` only for the other kinds. The attribute order is
+`Self Name Source Visible Highlight Width BorderStyle Hidden
+DestinationUniqueKey`, then `Properties` with `BorderColor` and
+`Destination`.
 
 ## Text source (class 0x13502)
 
@@ -119,8 +150,15 @@ Over 41 destinations (39, plus 2 in a pair from another save):
 - One file without an IDML has three destinations with view setting 0
   and zoom 0. The schema allows `ViewPercentage` from 5 to 4000, so the
   converter leaves it out (with a warning) for a zoom outside 0.05–40.
-- `NameManually="true"` in all 41 has no located field and is left out,
-  as is the `ViewBounds` property.
+- After the view setting, chunk 0x13527 has four f64: `ViewBounds`
+  `Left`, `Top`, `Right` and `Bottom`, in that order (1,157 of 1,159 in
+  the later corpus). 590 have 1e+256 in all four, which IDML writes as
+  `1e+256`. IDML writes them as `Properties/ViewBounds` with the
+  attributes `Top Left Bottom Right`.
+- `NameManually="true"` is in all 1,159 page destinations of the later
+  corpus. The flag byte before the name is 0 (4) or 2 (1,155), so it
+  does not hold this value; no field was located. The converter writes
+  `true`, the corpus value, after `Name`.
 
 `Self` is `HyperlinkPageDestination/` and the name.
 

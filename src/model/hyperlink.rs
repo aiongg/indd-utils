@@ -22,8 +22,10 @@ pub mod chunk {
     /// Document: lists of text sources, hyperlinks and bookmarks.
     pub const DOCUMENT_LISTS: u32 = 0x13501;
     pub const HYPERLINK: u32 = 0x13502;
-    /// Hyperlink: appearance, not identified.
+    /// Hyperlink: appearance.
     pub const HYPERLINK_APPEARANCE: u32 = 0x13553;
+    /// Hyperlink: a destination in another document.
+    pub const OTHER_DOCUMENT: u32 = 0x1359F;
     pub const TEXT_SOURCE: u32 = 0x13504;
     pub const TEXT_SOURCE_RANGE: u32 = 0x1352E;
     /// Text source: alternative destination (sources made by a table of
@@ -49,9 +51,23 @@ pub struct Hyperlink {
     pub hidden: bool,
     /// `DestinationUniqueKey`, shared with the destination.
     pub key: u32,
-    /// The fields not identified hold values seen in the corpus pairs, so
-    /// the appearance attributes are those of the samples.
-    pub as_in_samples: bool,
+    /// Destination kind (u32 at offset 12 of chunk 0x13502).
+    pub kind: u32,
+    /// Chunk 0x13553 has the pattern of every corpus hyperlink, whose
+    /// `Visible`, `Width`, `BorderStyle` and `BorderColor` are one value.
+    pub appearance_known: bool,
+    /// Byte 10 of chunk 0x13553 (`Highlight`), when the pattern holds.
+    pub highlight: Option<u8>,
+    /// Chunk 0x1359F: the destination is in another document.
+    pub other_document: bool,
+}
+
+/// Destination kinds of a hyperlink (u32 at offset 12 of chunk 0x13502).
+pub mod kind {
+    /// No destination in this document.
+    pub const NONE: u32 = 2000;
+    /// A page in another document.
+    pub const EXTERNAL_PAGE: u32 = 2004;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +95,8 @@ pub enum DestinationKind {
         zoom: Option<f64>,
         /// View setting code.
         view: u32,
+        /// `ViewBounds`: left, top, right, bottom.
+        bounds: Option<[f64; 4]>,
     },
     Url {
         url: String,
@@ -119,14 +137,32 @@ pub struct Bookmark {
     pub destination: u32,
 }
 
-/// Values of the unidentified hyperlink fields in the corpus pairs:
-/// chunk 0x13553, and the three u32 at offset 12 of chunk 0x13502.
-const SAMPLE_APPEARANCE: &[[u8; 18]] = &[
-    [0, 0, 1, 0, 0, 0, 0x21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 0, 0x1B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-];
+/// Chunk 0x13553 of every corpus hyperlink, apart from byte 6 (not
+/// identified) and byte 10 (`Highlight`).
+const APPEARANCE: [u8; 18] = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+/// Whether chunk 0x13553 has the corpus pattern; its `Highlight` byte if so.
+fn appearance(data: Option<&[u8]>) -> Option<u8> {
+    let d = data?;
+    let known = d.len() == APPEARANCE.len()
+        && d.iter()
+            .zip(APPEARANCE)
+            .enumerate()
+            .all(|(i, (&b, a))| i == 6 || i == 10 || b == a);
+    known.then_some(d[10])
+}
 
 impl Hyperlink {
+    /// The kind says the hyperlink has no destination in this document.
+    pub fn kind_is_none(&self) -> bool {
+        self.kind == kind::NONE
+    }
+
+    /// The hyperlink points at a page of another document.
+    pub fn to_external_page(&self) -> bool {
+        self.kind == kind::EXTERNAL_PAGE
+    }
+
     pub fn read(uid: u32, obj: &Object) -> Result<Option<Hyperlink>, Error> {
         let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::HYPERLINK) else {
@@ -137,20 +173,20 @@ impl Hyperlink {
         c.skip(2)?;
         let hidden = c.u16()? != 0;
         let key = c.u32()?;
-        let (a, b, k) = (c.u32()?, c.u32()?, c.u32()?);
+        let kind = c.u32()?;
+        c.skip(8)?;
         let name = c.name()?.name;
-        let appearance = obj.chunk(chunk::HYPERLINK_APPEARANCE);
-        let as_in_samples = matches!(a, 2001 | 2017)
-            && b == 2007
-            && k == 0x13501
-            && appearance.is_some_and(|ap| SAMPLE_APPEARANCE.iter().any(|s| s[..] == *ap));
+        let highlight = appearance(obj.chunk(chunk::HYPERLINK_APPEARANCE));
         Ok(Some(Hyperlink {
             uid,
             name,
             source,
             hidden,
             key,
-            as_in_samples,
+            kind,
+            appearance_known: highlight.is_some(),
+            highlight,
+            other_document: obj.chunk(chunk::OTHER_DOCUMENT).is_some(),
         }))
     }
 }
@@ -207,7 +243,17 @@ impl Destination {
             let page = c.u32()?;
             let zoom = Some(c.f64()?).filter(|z| (0.05..=40.0).contains(z));
             let view = c.u32()?;
-            DestinationKind::Page { page, zoom, view }
+            let bounds = if c.remaining() >= 32 {
+                Some([c.f64()?, c.f64()?, c.f64()?, c.f64()?])
+            } else {
+                None
+            };
+            DestinationKind::Page {
+                page,
+                zoom,
+                view,
+                bounds,
+            }
         } else {
             let url = match obj.chunk(chunk::URL) {
                 Some(u) => enc.cursor(u).name()?.name,
@@ -401,6 +447,18 @@ mod tests {
             v.extend(x.to_le_bytes());
         }
         v
+    }
+
+    #[test]
+    fn appearance_pattern_gives_the_highlight() {
+        let mut d = APPEARANCE;
+        d[6] = 0x1D;
+        d[10] = 1;
+        assert_eq!(appearance(Some(&d)), Some(1));
+        d[3] = 1;
+        assert_eq!(appearance(Some(&d)), None);
+        assert_eq!(appearance(Some(&d[..17])), None);
+        assert_eq!(appearance(None), None);
     }
 
     #[test]

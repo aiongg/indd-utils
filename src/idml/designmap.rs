@@ -498,10 +498,15 @@ impl Writer<'_> {
         dests.sort_by_key(|d| (matches!(d.kind, DestinationKind::Url { .. }), d.key));
         for d in &dests {
             match &d.kind {
-                DestinationKind::Page { page, zoom, view } => {
+                DestinationKind::Page {
+                    page, zoom, view, ..
+                } => {
+                    // NameManually is true on every corpus page
+                    // destination (hyperlinks.md).
                     x.start("HyperlinkPageDestination")
                         .attr("Self", d.reference())
                         .attr("Name", &d.name)
+                        .attr("NameManually", "true")
                         .attr("DestinationPage", uref(Some(*page)));
                     match view {
                         0 => {
@@ -524,43 +529,76 @@ impl Writer<'_> {
                 }
             }
             x.attr("Hidden", d.hidden.to_string())
-                .attr("DestinationUniqueKey", d.key.to_string())
-                .end();
+                .attr("DestinationUniqueKey", d.key.to_string());
+            if let DestinationKind::Page {
+                bounds: Some([left, top, right, bottom]),
+                ..
+            } = d.kind
+            {
+                // IDML writes the unset bounds (1e256) in exponent form.
+                let n = |v: f64| if v == 1e256 { "1e+256".into() } else { num(v) };
+                x.start("Properties")
+                    .start("ViewBounds")
+                    .attr("Top", n(top))
+                    .attr("Left", n(left))
+                    .attr("Bottom", n(bottom))
+                    .attr("Right", n(right))
+                    .end()
+                    .end();
+            }
+            x.end();
         }
         let sources = self.written_sources();
         let mut links: Vec<_> = doc.hyperlinks.iter().collect();
         links.sort_by_key(|h| h.uid);
         for h in links {
-            let Some(dest) = dests.iter().find(|d| d.key == h.key) else {
+            // A hyperlink into another document has a destination that is
+            // not converted: IDML writes it as a list, which is left out.
+            // Otherwise the destination with the same key; `n` for a
+            // hyperlink without one (hyperlinks.md).
+            let dest = if h.other_document {
+                None
+            } else if let Some(d) = dests.iter().find(|d| d.key == h.key) {
+                Some(d.reference())
+            } else if h.kind_is_none() {
+                Some("n".to_string())
+            } else {
                 continue;
             };
-            if !sources.contains(&h.source) {
+            if h.source == 0 || !sources.contains(&h.source) {
                 continue;
             }
             x.start("Hyperlink")
                 .attr("Self", uref(Some(h.uid)))
                 .attr("Name", &h.name)
                 .attr("Source", uref(Some(h.source)));
-            // One value in every corpus pair; see the format notes.
-            if h.as_in_samples {
-                x.attr("Visible", "false")
-                    .attr("Highlight", "None")
-                    .attr("Width", "Thin")
-                    .attr("BorderStyle", "Solid");
+            if h.appearance_known {
+                x.attr("Visible", "false");
+                match h.highlight {
+                    Some(0) => {
+                        x.attr("Highlight", "None");
+                    }
+                    Some(1) => {
+                        x.attr("Highlight", "Invert");
+                    }
+                    _ => {}
+                }
+                x.attr("Width", "Thin").attr("BorderStyle", "Solid");
             }
             x.attr("Hidden", h.hidden.to_string())
                 .attr("DestinationUniqueKey", h.key.to_string());
             x.start("Properties");
-            if h.as_in_samples {
+            // Black on every corpus hyperlink with the known appearance,
+            // apart from those to a page of another document.
+            if h.appearance_known && !h.to_external_page() {
                 x.start("BorderColor")
                     .attr("type", "enumeration")
                     .text("Black")
                     .end();
             }
-            x.start("Destination")
-                .attr("type", "object")
-                .text(&dest.reference())
-                .end();
+            if let Some(d) = dest {
+                x.start("Destination").attr("type", "object").text(&d).end();
+            }
             x.end().end();
         }
         let top = doc
