@@ -490,6 +490,29 @@ impl Writer<'_> {
             .collect()
     }
 
+    /// UIDs of the page items written: on spreads and master spreads, in
+    /// groups and anchored in stories.
+    pub(super) fn written_items(&self) -> std::collections::HashSet<u32> {
+        let doc = self.doc;
+        let mut out = std::collections::HashSet::new();
+        let mut stack: Vec<&PageItem> = doc
+            .spreads
+            .iter()
+            .chain(&doc.master_spreads)
+            .flat_map(|s| &s.items)
+            .chain(
+                doc.stories
+                    .iter()
+                    .flat_map(|s| s.anchors.values().flatten()),
+            )
+            .collect();
+        while let Some(item) = stack.pop() {
+            out.insert(item.uid);
+            stack.extend(&item.children);
+        }
+        out
+    }
+
     /// Destinations, hyperlinks and bookmarks, in schema order. See
     /// docs/format/hyperlinks.md.
     pub(super) fn hyperlinks(&self, x: &mut Xml) {
@@ -548,7 +571,20 @@ impl Writer<'_> {
             }
             x.end();
         }
-        let sources = self.written_sources();
+        let items = self.written_items();
+        let mut sources = self.written_sources();
+        for s in &doc.page_item_sources {
+            if !items.contains(&s.item) {
+                continue;
+            }
+            x.start("HyperlinkPageItemSource")
+                .attr("Self", uref(Some(s.uid)))
+                .attr("Name", &s.name)
+                .attr("SourcePageItem", uref(Some(s.item)))
+                .attr("Hidden", s.hidden.to_string())
+                .end();
+            sources.insert(s.uid);
+        }
         let mut links: Vec<_> = doc.hyperlinks.iter().collect();
         links.sort_by_key(|h| h.uid);
         for h in links {

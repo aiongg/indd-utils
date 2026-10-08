@@ -7,6 +7,7 @@ Implemented in `src/model/hyperlink.rs`.
 |---|---|---|
 | 0x13501 | Hyperlink | `Hyperlink` (designmap) |
 | 0x13502 | Text source | `HyperlinkTextSource` (story text) |
+| 0x13503 | Page item source | `HyperlinkPageItemSource` (designmap) |
 | 0x13505 | Page destination | `HyperlinkPageDestination` (designmap) |
 | 0x13506 | URL destination | `HyperlinkURLDestination` (designmap) |
 | 0x1354C | Bookmark | `Bookmark` (designmap) |
@@ -88,13 +89,18 @@ u32 character style UID. A style UID of 0 is written as
 `AppliedCharacterStyle="n"` (39 of 39); other values are the style
 (4 of 4, `CharacterStyle/$ID/Hyperlink`).
 
-**Chunk 0x135B7** (21 bytes) is present on 39 sources in the pairs, and on
-no other source in the 251 little-endian files. It
-has the same bytes in all 39, and IDML writes the same
-`Properties/AlternativeDestination` for all of them (`Type="TocTextAnchor"`,
-`IndexMarkerId="0"`, `TextAnchorName=""`, `TocEntryPageNumberString=""`,
-`TocEntryLevel="0"`). The converter writes that element for sources with
-exactly these bytes.
+**Chunk 0x135B7: alternative destination.** u32 type (2 =
+`TocTextAnchor`, the only type seen), flag byte and string
+(`TextAnchorName`), u32 (`IndexMarkerId`), u32 length *n* and *n* UTF-16
+code units of text segments (`TocEntryPageNumberString`), u32
+(`TocEntryLevel`). IDML writes it as `Properties/AlternativeDestination`
+with the attributes `Type IndexMarkerId TextAnchorName
+TocEntryPageNumberString TocEntryLevel`. 1,163 of 1,163 sources with the
+chunk match on all five attributes, and the chunk ends after the last
+field. In the page number string, a character below U+0020 is written as
+the text `<?AID 00xx?>` with the code in lowercase hexadecimal (U+0008,
+before the page number, in all samples). In the trustworthy pairs the
+converter writes 1,048 of 1,048 of them right.
 
 ### Position in the text
 
@@ -127,6 +133,19 @@ files without IDML, all versions of one template, 2,608 sources cross the
 boundary of a style range; how IDML writes those is not shown. The
 converter leaves them out with a warning, and a hyperlink whose source is
 left out is left out too.
+
+## Page item source (class 0x13503)
+
+**Chunk 0x13505:** u8 hidden (1 true), u8, u32 hyperlink UID, flag byte
+and string (`Name`), u32. **Chunk 0x13525:** u32 page item UID
+(`SourcePageItem`). The page item's chunk 0x1351D names the source back.
+IDML writes `HyperlinkPageItemSource` in `designmap.xml` with `Self`,
+`Name`, `SourcePageItem`, `Hidden`, in that order, after the destinations
+and before the hyperlinks. 430 of 430 match on `Hidden` and
+`SourcePageItem` (rectangles and groups, classes 0x6201 and 0x401), and
+the converter writes 136 of 136 in the trustworthy pairs with all values
+right. A source whose page item is not written is left out, with its
+hyperlink.
 
 ## Page destination (class 0x13505)
 
@@ -222,9 +241,8 @@ hyperlinks by UID.
 
 ## Not converted
 
-The pairs have no text destinations (`HyperlinkTextDestination`),
-cross-reference sources, page item sources or QR code hyperlinks with an
-INDD object of the classes above. One pair has a `HyperlinkQRCode`; it
+The pairs have no QR code hyperlinks with an INDD object of the classes
+above. One pair has a `HyperlinkQRCode`; it
 is not converted.
 
 A text source whose range holds an anchored object is left out with its

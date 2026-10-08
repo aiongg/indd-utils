@@ -36,8 +36,8 @@ use std::collections::BTreeMap;
 
 use crate::model::prefs::PrefProp;
 use crate::model::{
-    Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, ItemProps, Link, Matrix, Orientation,
-    Page, PageItem, Path, Section, Shape, Spread, Story, Style, StyleGroup, Table,
+    Alternative, Attrs, Document, Graphic, GraphicKind, Guide, ItemKind, ItemProps, Link, Matrix,
+    Orientation, Page, PageItem, Path, Section, Shape, Spread, Story, Style, StyleGroup, Table,
     TextFramePreferences, TextRun, TextVariable, TextWrap, UiColorRef, Value, XmlElement,
     XmlMarker,
     hyperlink::DestinationKind,

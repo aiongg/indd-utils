@@ -60,6 +60,7 @@ pub struct Document {
     pub text_variables: Vec<TextVariable>,
     pub hyperlinks: Vec<Hyperlink>,
     pub text_sources: BTreeMap<u32, TextSource>,
+    pub page_item_sources: Vec<PageItemSource>,
     pub destinations: Vec<Destination>,
     pub bookmarks: BTreeMap<u32, Bookmark>,
     /// All bookmarks in document order (document chunk 0x13501).
@@ -110,6 +111,7 @@ struct ClassObjects {
     text_variables: Vec<TextVariable>,
     hyperlinks: Vec<Hyperlink>,
     text_sources: BTreeMap<u32, TextSource>,
+    page_item_sources: Vec<PageItemSource>,
     destinations: Vec<Destination>,
     bookmarks: BTreeMap<u32, Bookmark>,
     cross_reference_formats: BTreeMap<u32, CrossReferenceFormat>,
@@ -230,6 +232,7 @@ impl<'a> Reader<'a> {
             text_variables: objects.text_variables,
             hyperlinks: objects.hyperlinks,
             text_sources: objects.text_sources,
+            page_item_sources: objects.page_item_sources,
             destinations: objects.destinations,
             bookmarks: objects.bookmarks,
             bookmark_order,
@@ -400,6 +403,11 @@ impl<'a> Reader<'a> {
             hyperlink::class::TEXT_SOURCE => {
                 if let Some(s) = TextSource::read(uid, &*self.object(uid)?)? {
                     out.text_sources.insert(uid, s);
+                }
+            }
+            hyperlink::class::PAGE_ITEM_SOURCE => {
+                if let Some(s) = PageItemSource::read(uid, &*self.object(uid)?)? {
+                    out.page_item_sources.push(s);
                 }
             }
             hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {

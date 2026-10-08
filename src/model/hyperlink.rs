@@ -9,6 +9,7 @@ use crate::object::{Encoding, Object};
 pub mod class {
     pub const HYPERLINK: u32 = 0x13501;
     pub const TEXT_SOURCE: u32 = 0x13502;
+    pub const PAGE_ITEM_SOURCE: u32 = 0x13503;
     pub const PAGE_DESTINATION: u32 = 0x13505;
     pub const URL_DESTINATION: u32 = 0x13506;
     pub const BOOKMARK: u32 = 0x1354C;
@@ -31,6 +32,10 @@ pub mod chunk {
     /// Text source: alternative destination (sources made by a table of
     /// contents).
     pub const TEXT_SOURCE_ALTERNATIVE: u32 = 0x135B7;
+    /// Page item source: hidden and name.
+    pub const PAGE_ITEM_SOURCE: u32 = 0x13505;
+    /// Page item source: the page item.
+    pub const PAGE_ITEM_SOURCE_ITEM: u32 = 0x13525;
     pub const PAGE_DESTINATION: u32 = 0x13507;
     pub const PAGE_DESTINATION_VIEW: u32 = 0x13527;
     pub const URL_DESTINATION: u32 = 0x13509;
@@ -76,15 +81,80 @@ pub struct TextSource {
     pub name: String,
     pub hidden: bool,
     pub character_style: Option<u32>,
-    /// Chunk 0x135B7 holds the one value seen in the corpus, which IDML
-    /// writes as a table of contents `AlternativeDestination`.
-    pub toc_anchor: bool,
+    /// Chunk 0x135B7: `AlternativeDestination`.
+    pub alternative: Option<Alternative>,
 }
 
-/// The only value of chunk 0x135B7 in the corpus.
-const TOC_ANCHOR: [u8; 21] = [
-    2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-];
+/// An alternative destination of a text source (chunk 0x135B7).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Alternative {
+    /// Type code; 2 is a table of contents anchor, the only one seen.
+    pub kind: u32,
+    pub anchor_name: String,
+    pub index_marker: u32,
+    pub page_number: String,
+    pub level: u32,
+}
+
+impl Alternative {
+    /// The type code of a table of contents anchor (`TocTextAnchor`).
+    const TOC_ANCHOR: u32 = 2;
+
+    pub fn is_toc_anchor(&self) -> bool {
+        self.kind == Self::TOC_ANCHOR
+    }
+
+    fn read(enc: Encoding, d: &[u8]) -> Result<Alternative, Error> {
+        let mut c = enc.cursor(d);
+        let kind = c.u32()?;
+        let anchor_name = c.name()?.name;
+        let index_marker = c.u32()?;
+        let n = c.u32()? as usize;
+        let page_number = if n == 0 {
+            String::new()
+        } else {
+            c.segments(n)?
+        };
+        Ok(Alternative {
+            kind,
+            anchor_name,
+            index_marker,
+            page_number,
+            level: c.u32()?,
+        })
+    }
+}
+
+/// A page item that is a hyperlink source (class 0x13503).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PageItemSource {
+    pub uid: u32,
+    pub name: String,
+    pub hidden: bool,
+    pub item: u32,
+}
+
+impl PageItemSource {
+    pub fn read(uid: u32, obj: &Object) -> Result<Option<PageItemSource>, Error> {
+        let enc = obj.encoding;
+        let (Some(d), Some(i)) = (
+            obj.chunk(chunk::PAGE_ITEM_SOURCE),
+            obj.chunk(chunk::PAGE_ITEM_SOURCE_ITEM),
+        ) else {
+            return Ok(None);
+        };
+        let mut c = enc.cursor(d);
+        let hidden = c.u8()? != 0;
+        c.skip(5)?;
+        let name = c.name()?.name;
+        Ok(Some(PageItemSource {
+            uid,
+            name,
+            hidden,
+            item: enc.cursor(i).u32()?,
+        }))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DestinationKind {
@@ -214,7 +284,10 @@ impl TextSource {
             name,
             hidden,
             character_style,
-            toc_anchor: obj.chunk(chunk::TEXT_SOURCE_ALTERNATIVE) == Some(&TOC_ANCHOR[..]),
+            alternative: obj
+                .chunk(chunk::TEXT_SOURCE_ALTERNATIVE)
+                .map(|d| Alternative::read(enc, d))
+                .transpose()?,
         }))
     }
 }
@@ -447,6 +520,23 @@ mod tests {
             v.extend(x.to_le_bytes());
         }
         v
+    }
+
+    #[test]
+    fn reads_alternative_destination() {
+        let enc = Encoding::default();
+        let mut d = 2u32.to_le_bytes().to_vec();
+        d.extend(crate::database::synthetic::flagged_string(enc, 2, "a1"));
+        d.extend(0u32.to_le_bytes());
+        d.extend(2u32.to_le_bytes());
+        d.extend([0x02, 0x40, 0x08, b'7']);
+        d.extend(3u32.to_le_bytes());
+        let a = Alternative::read(enc, &d).unwrap();
+        assert!(a.is_toc_anchor());
+        assert_eq!(
+            (a.anchor_name.as_str(), a.page_number.as_str(), a.level),
+            ("a1", "\u{8}7", 3)
+        );
     }
 
     #[test]

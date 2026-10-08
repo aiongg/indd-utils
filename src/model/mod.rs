@@ -45,7 +45,10 @@ pub use attrs::{Attrs, Value};
 pub use cjk::{CjkTable, CompositeFont, CompositeFontEntry};
 pub use color::{Color, ColorGroup, Gradient, Ink, Tint};
 pub use font::{Font, FontFamily};
-pub use hyperlink::{Bookmark, Destination, DestinationKind, Hyperlink, SourceRange, TextSource};
+pub use hyperlink::{
+    Alternative, Bookmark, Destination, DestinationKind, Hyperlink, PageItemSource, SourceRange,
+    TextSource,
+};
 pub use table::{Cell, CellFormat, Table, TableStyle};
 pub use variable::TextVariable;
 pub use xref::CrossReferenceFormat;

@@ -283,17 +283,7 @@ impl Writer<'_> {
                             None => "n".into(),
                         },
                     );
-                if src.toc_anchor {
-                    x.start("Properties")
-                        .start("AlternativeDestination")
-                        .attr("Type", "TocTextAnchor")
-                        .attr("IndexMarkerId", "0")
-                        .attr("TextAnchorName", "")
-                        .attr("TocEntryPageNumberString", "")
-                        .attr("TocEntryLevel", "0")
-                        .end()
-                        .end();
-                }
+                Self::alternative_destination(x, src.alternative.as_ref());
                 open = Some(r.start + r.len);
             }
             match ch {
@@ -325,6 +315,33 @@ impl Writer<'_> {
         if open.is_some() {
             x.end();
         }
+    }
+
+    /// `Properties/AlternativeDestination` of a text source, for the one
+    /// type seen (hyperlinks.md, text sources).
+    pub(super) fn alternative_destination(x: &mut Xml, a: Option<&Alternative>) {
+        let Some(a) = a.filter(|a| a.is_toc_anchor()) else {
+            return;
+        };
+        // A control character in the page number is written as a
+        // processing instruction in the text of the attribute.
+        let mut page = String::new();
+        for c in a.page_number.chars() {
+            if (c as u32) < 0x20 {
+                page.push_str(&format!("<?AID {:04x}?>", c as u32));
+            } else {
+                page.push(c);
+            }
+        }
+        x.start("Properties")
+            .start("AlternativeDestination")
+            .attr("Type", "TocTextAnchor")
+            .attr("IndexMarkerId", a.index_marker.to_string())
+            .attr("TextAnchorName", &a.anchor_name)
+            .attr("TocEntryPageNumberString", page)
+            .attr("TocEntryLevel", a.level.to_string())
+            .end()
+            .end();
     }
 
     /// The text cell values IDML writes on every table, row, column and
