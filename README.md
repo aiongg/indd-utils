@@ -148,6 +148,7 @@ version. In 489 of these pairs the IDML shows the same save as the INDD
 
 ## Current numbers
 
+<!-- numbers:start -->
 From `tools/compare.py --all` with schema validation, without the
 privately held samples:
 
@@ -158,6 +159,8 @@ privately held samples:
 | Value coverage, trustworthy pairs | 88.72 % (9,885,604 of 11,142,835 values) |
 | Value coverage, all pairs | 86.81 % |
 | Story text, trustworthy pairs | 18,509 of 18,610 stories exact, 100 differ, 1 missing |
+<!-- numbers:end -->
+
 
 The biggest remaining gaps are elements the converter does not write
 yet (hyperlinks in some documents, page references, footnote options of
@@ -179,6 +182,9 @@ in nearly every sample, so that their INDD fields cannot be located.
   are not part of the repository; see `tools/validate.sh`.
 - `python3 -I tools/diff_outputs.py [OLD [NEW]]` compares the output of
   two revisions over the corpus; a refactoring must change none.
+- `python3 -I tools/readme_numbers.py --schemas DIR --jing DIR` runs the
+  full measurement and updates [Current numbers](#current-numbers).
+
 - `python3 -I tools/inventory.py corpus/` lists each sample's InDesign
   version and whether it has a matching IDML file.
 

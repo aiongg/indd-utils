@@ -37,7 +37,9 @@ extra values (values the output has and the reference does not); and the
 biggest gaps (--gaps N). pairs.tsv, gaps.tsv and gaps-all.tsv go to --out
 (default target/compare), with values.tsv and values-all.tsv, which list
 every key with its values and how many are reproduced, and extras.tsv and
-extras-all.tsv, which list the extra values by key.
+extras-all.tsv, which list the extra values by key. summary.json holds the
+numbers of the README's "Current numbers" section, which
+tools/readme_numbers.py writes into the README.
 
 --shortfalls N lists the N element types and attributes that fall short
 (missing elements; wrong or missing attribute values; differing story
@@ -51,6 +53,7 @@ import argparse
 import fnmatch
 import functools
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -935,9 +938,45 @@ def main():
     for ex in examples[("Story", "text")]:
         print("  story mismatch:", ex)
     headline(args, every, trusted, pair_rows)
+    write_summary(Path(args.out) / "summary.json", args, check,
+                  (todo, failures, invalid), (others, other_failures, other_invalid),
+                  every, trusted)
+
+
+def write_summary(path, args, check, paired, unpaired_files, every, trusted):
+    """Write the numbers of the README's "Current numbers" section, and the
+    options they were measured with, as JSON (tools/readme_numbers.py).
+    `paired` and `unpaired_files` are (files, failures, invalid)."""
+    def error(stderr):
+        lines = [x for x in stderr.splitlines() if not x.startswith("warning: ")]
+        return lines[-1] if lines else ""
+
+    def files(group, converted):
+        todo, failures, invalid = group
+        if not converted:
+            return None
+        return {"files": len(todo),
+                "failures": [error(err) for _, err in failures],
+                "invalid": len(invalid) if check else None}
+
+    def pairs(st):
+        return {"pairs": st.docs, "values": st.values, "reproduced": st.reproduced,
+                "stories": {"exact": st.story_ok["ok"], "differ": st.story_ok["wrong"],
+                            "missing": st.story_ok["missing"]}}
+
+    summary = {
+        "options": {"all": args.all, "validated": check, "exclude": args.exclude,
+                    "limit": args.limit, "file": args.file},
+        "paired": files(paired, True),
+        "others": files(unpaired_files, args.all),
+        "trustworthy": pairs(trusted),
+        "all_pairs": pairs(every),
+    }
+    path.write_text(json.dumps(summary, indent=1) + "\n")
 
 
 def gap_name(key):
+
     tag, k = key
     return f"{tag} {k}"
 

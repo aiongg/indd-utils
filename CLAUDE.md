@@ -87,8 +87,16 @@ separately (rule and evidence: `docs/measurement.md`).
 - Headline numbers (value coverage, extra values, document scores, ranked
   gaps; defined in `docs/measurement.md`): `cargo build --release &&
   python3 -I tools/compare.py --exclude own/`. It prints them last and
-  writes `pairs.tsv`, `gaps*.tsv`, `values*.tsv` and `extras*.tsv` to
-  `target/compare/`.
+  writes `pairs.tsv`, `gaps*.tsv`, `values*.tsv`, `extras*.tsv` and
+  `summary.json` to `target/compare/`.
+- README numbers: `python3 -I tools/readme_numbers.py --schemas <dir>
+  --jing <dir>` builds the converter, runs `compare.py --all --exclude
+  own/` with schema validation and rewrites the README's "Current
+  numbers" table (between `<!-- numbers:start -->` and `<!--
+  numbers:end -->`) from `target/compare/summary.json`. Without
+  `--schemas`/`--jing` it uses the last run's summary, which must be from
+  such a full run; `--check` only reports whether the README is current.
+
 - `python3 -I tools/diff_outputs.py [OLD [NEW]]`: build two revisions
   (default `HEAD` and the working tree `.`) under `~/.cache/indd-diff/`,
   convert every corpus file with both and report which outputs differ
