@@ -49,6 +49,9 @@ pub mod audit;
 pub mod container;
 pub mod database;
 pub mod header;
+#[cfg(test)]
+mod hostile;
+
 pub mod idml;
 pub mod model;
 pub mod object;

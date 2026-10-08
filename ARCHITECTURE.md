@@ -173,6 +173,8 @@ Each cites `idml-values.md`.
 | Unit tests (`cargo test`) | decoders on synthetic bytes (`database::synthetic` builds objects and databases), writer functions on small models |
 | `tests/fixtures.rs` | conversion of open-licensed fixtures (`tools/fetch_fixtures.py`), both byte orders, thread independence, audit consistency |
 | `tests/corpus.rs` | every corpus file parses and converts; skipped without `corpus/` |
+| `src/hostile.rs` | truncated and byte-flipped synthetic documents and fixtures convert or fail without a panic or a hang (`INDD_HOSTILE_SCALE`, `INDD_HOSTILE_SEED` for larger sweeps) |
+
 | `tools/compare.py` | fidelity against the reference IDML files, schema validation |
 | `tools/diff_outputs.py` | byte-for-byte output of two revisions over the corpus |
 | `indd audit`, `tools/audit_corpus.py` | what the converter does not read yet |

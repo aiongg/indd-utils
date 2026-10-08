@@ -43,6 +43,10 @@ now). Licence: MIT OR Apache-2.0.
 - `tools/fetch_fixtures.py`: downloads the fixtures into the git-ignored
   `tests/fixtures/files/` and checks their SHA-256.
 - `tests/corpus.rs`: tests over the local `corpus/`; they skip if absent.
+- `src/hostile.rs`: hostile-input tests. Damaged synthetic documents and
+  fixtures must convert or fail without a panic or a hang.
+  `INDD_HOSTILE_SCALE=40 cargo test --lib hostile` runs a larger sweep.
+
 - `tools/inventory.py`: corpus inventory (`python3 -I tools/inventory.py corpus/`).
 - `tools/root_values.py [--write]`: root style values that every corpus IDML
   has; regenerates `src/idml/root_values.xml` (see `docs/format/idml-values.md`).
