@@ -95,6 +95,46 @@ enum Record {
 /// missing.
 const MISSING: u8 = 3;
 
+/// Record kind of a family that refers to another family.
+const REFERENCE: u8 = 2;
+
+/// A record of kind 2 in chunk 0x3E05: u8 2, u8, u32 UID of another font
+/// family, u16 count of the font entries that follow. Returns the UID and
+/// the count. See `docs/format/fonts.md`, families that refer to another.
+pub fn reference(enc: Encoding, data: &[u8]) -> Option<(u32, u16)> {
+    let mut c = enc.cursor(data);
+    if c.u8().ok()? != REFERENCE {
+        return None;
+    }
+    c.u8().ok()?;
+    Some((c.u32().ok()?, c.u16().ok()?))
+}
+
+impl FontFamily {
+    /// The family that a record of kind 2 makes of the family it refers
+    /// to: the same name, fonts and writing script, with the font type
+    /// `Unknown`, no version and no Typekit ID.
+    pub fn referring(&self, uid: u32) -> FontFamily {
+        FontFamily {
+            uid,
+            fonts: self
+                .fonts
+                .iter()
+                .map(|f| Font {
+                    font_type: 0xFFFF_FFFF,
+                    version: String::new(),
+                    typekit_id: Name {
+                        builtin: true,
+                        name: String::new(),
+                    },
+                    ..f.clone()
+                })
+                .collect(),
+            ..self.clone()
+        }
+    }
+}
+
 /// Chunk 0x3E05: u8 record kind, u8, flagged name, flagged native name, 6
 /// bytes, u16 font count, font records, u32 writing script. A missing-font
 /// record has other font records (`missing_fonts`).
@@ -276,6 +316,17 @@ mod tests {
         assert_eq!(font.full_name, "Myriad Pro Bold");
         assert_eq!(font.type_name(), Some("OpenTypeCFF"));
         assert_eq!(font.version, "Version 2.1");
+    }
+
+    #[test]
+    fn reads_a_record_that_refers_to_another_family() {
+        let enc = Encoding::default();
+        assert_eq!(
+            reference(enc, &[2, 0, 0x7f, 5, 0, 0, 0, 0]),
+            Some((0x57f, 0))
+        );
+        assert_eq!(reference(enc, &[1, 0, 0x7f, 5, 0, 0, 0, 0]), None);
+        assert_eq!(reference(enc, &[2, 0, 0x7f]), None);
     }
 
     #[test]

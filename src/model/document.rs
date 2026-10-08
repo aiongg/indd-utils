@@ -537,6 +537,41 @@ impl<'a> Reader<'a> {
     /// A font family. If its fonts cannot be read, the family keeps its
     /// name, which text formatting refers to.
     fn font_family(&self, uid: u32) -> Result<Option<FontFamily>, Error> {
+        // A family that refers to another (fonts.md).
+        if let Some((target, count)) = self
+            .chunk(uid, font::chunk::FAMILY)?
+            .and_then(|d| font::reference(self.enc(), &d))
+        {
+            let family = match self.class(target) {
+                Some(class::FONT_FAMILY) if target != uid => {
+                    let object = self.object(target)?;
+                    match object.chunk(font::chunk::FAMILY) {
+                        Some(d) if font::reference(self.enc(), d).is_none() => {
+                            FontFamily::read(target, &object).ok().flatten()
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let Some(family) = family else {
+                self.warn(format!(
+                    "font family {uid}: refers to family {target}, which cannot be read; left out"
+                ));
+                return Ok(None);
+            };
+            if count != 0 {
+                self.warn(format!(
+                    "font family {uid}: refers to family {target} and lists {count} \
+                     fonts of its own; fonts left out"
+                ));
+                return Ok(Some(FontFamily {
+                    fonts: Vec::new(),
+                    ..family.referring(uid)
+                }));
+            }
+            return Ok(Some(family.referring(uid)));
+        }
         match FontFamily::read(uid, &*self.object(uid)?) {
             Ok(Some(f)) => {
                 if i32::try_from(f.writing_script).is_err() {

@@ -16,7 +16,7 @@ the 251 distinct little-endian files.
 
 | Field | Contents | IDML |
 |---|---|---|
-| u8 | Record kind: 1 or 4 for the layout here, 3 for missing fonts (below), 2 for an 8-byte record without fonts | |
+| u8 | Record kind: 1 or 4 for the layout here, 3 for missing fonts (below), 2 for a family that refers to another (below) | |
 | u8 | 0 | |
 | u8 | Key flag of the family name: 1 for a built-in key | `$ID/` before the name (below) |
 | string | Family name | `FontFamily/@Name`, `Font/@FontFamily` |
@@ -28,6 +28,25 @@ the 251 distinct little-endian files.
 | u32 | Writing script | `WritingScript` of every font in the family |
 
 Strings are in-object strings (`objects.md`).
+
+**A family that refers to another (record kind 2).** The record is u8
+2, u8 0, u32 the UID of another font family (class 0x3E03, whose
+record has another kind) and a u16 count of entries that follow. 21
+families in 19 distinct corpus files have such a record. In 17 the count
+is 0 and the record has 8 bytes; in the other 4 (two files, no IDML)
+font entries follow, each three flagged strings (such as `Bold`,
+`Arial Black`, `Bold`) and 10 bytes, as in a missing-font record.
+
+IDML writes a family with a count of 0 as a copy of the family it refers
+to: the same `Name`, and the same fonts with the same attributes,
+except `FontType="Unknown"`, `Version=""` and `TypekitID="$ID/"`. This
+holds in all 15 pairs that have such a family (one family in each, with
+1 or 2 fonts; 14 of the pairs are versions of one document set from
+InDesign 18.4, one is from 17.4). The referring object's own chunk
+0x3EEB, when present, is not used: IDML writes `$ID/`. The converter
+writes the family this way. For a family with entries it writes the
+name and no fonts, with a warning, since no pair shows how IDML writes
+them.
 
 **Font record:**
 
