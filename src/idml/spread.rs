@@ -19,6 +19,25 @@ pub(super) fn spread_origin(pages: &[Page]) -> (f64, f64) {
         .unwrap_or((0.0, 0.0))
 }
 
+/// The bounding box of a spread's pages (min x, min y, max x, max y), from
+/// the corners of each page through its transform.
+fn pages_extent(pages: &[Page]) -> Option<[f64; 4]> {
+    pages
+        .iter()
+        .flat_map(|p| {
+            let [a, b, c, d, tx, ty] = p.transform.0;
+            let [l, t, r, bo] = p.bounds;
+            [(l, t), (r, t), (l, bo), (r, bo)]
+                .map(|(x, y)| (a * x + c * y + tx, b * x + d * y + ty))
+        })
+        .fold(None, |acc: Option<[f64; 4]>, (x, y)| {
+            Some(match acc {
+                None => [x, y, x, y],
+                Some([x0, y0, x1, y1]) => [x0.min(x), y0.min(y), x1.max(x), y1.max(y)],
+            })
+        })
+}
+
 /// Page item attributes that IDML writes only when they differ from the
 /// applied object style (attributes.md, page item attributes).
 const STYLE_COMPARED: &[&str] = &[
@@ -920,8 +939,19 @@ impl Writer<'_> {
             } else {
                 position - binding + 1
             };
+            let extent = pages_extent(&s.pages);
             for g in &s.guides {
                 let own_page = s.pages.iter().any(|q| q.uid == g.owner);
+                // IDML leaves out a guide of the spread that lies outside
+                // the spread's pages (objects.md, guides).
+                let outside = !own_page
+                    && extent.is_some_and(|[x0, y0, x1, y1]| {
+                        let (lo, hi) = if g.horizontal { (y0, y1) } else { (x0, x1) };
+                        g.position < lo - 1e-6 || g.position > hi + 1e-6
+                    });
+                if outside {
+                    continue;
+                }
                 if g.owner == p.uid || (first && !own_page) {
                     let index = if own_page { from_spine } else { 0 };
                     Self::guide(&mut x, g, origin, index);

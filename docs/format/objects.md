@@ -274,6 +274,20 @@ no field separates them in the objects searched (every class with at most
 `ViewPreference` with `RulerOrigin="SpreadOrigin"` and measures guide
 locations from the spread, so the two agree.
 
+**Spread guides outside the pages.** IDML leaves out a guide owned by
+the spread when its position lies outside the bounding box of the
+spread's pages (each page's corners mapped by its `ItemTransform`; the
+bleed does not count): for a horizontal guide when its y is above the
+top or below the bottom, for a vertical one the same with x. Over the
+489 trustworthy pairs before 2026-10: 84 of 85 such guides are left out
+(positions such as −15, −66 or 1215 on pages 1200 wide), all 1,198
+spread guides inside are written, and all 5,740 page guides are written
+wherever they are. With the bleed added, 30 of the left-out guides
+would be inside. The exception is a horizontal guide at −9 on a master
+spread, which IDML writes; its object has chunks 0x1424 and 0x1425,
+which no left-out guide has. The converter leaves out such guides
+(with a tolerance of 1e-6).
+
 **Other settings.** A guide has chunks 0x2C2D (`Locked`) and 0x1424
 (`OverriddenPageItemProps`) as page items do (`Page item settings`),
 and the f64 at offset 44 of the 52-byte record is `GuideZone`. Over the
