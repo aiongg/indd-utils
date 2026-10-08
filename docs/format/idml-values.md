@@ -522,6 +522,19 @@ values of `EPubExportPreference` and `HTMLExportPreference` that all
 files from DOM 8 on have. `PageItemDefault` values that name an object
 style are written only when the package has that style.
 
+**Values kept despite unpaired files.** `XMLImportPreference`
+`AllowTransform="false"`, `ImportCALSTables="true"`,
+`ImportTextIntoTables="true"`, `ImportToSelected="true"`,
+`RemoveUnmatchedExisting="false"`, `RepeatTextElements="true"` and
+`DictionaryPreference` `MergeUserDictionary="false"` are the same in all
+654 pairs. Two IDML files of the 683 differ: one in the six
+`XMLImportPreference` values, one in `MergeUserDictionary`. Both were
+exported by an earlier version than their INDD was last saved with, so
+they are not pairs, and the INDD cannot show which field holds the
+value. The values are probably stored in the INDD; with no pair that
+varies, the field cannot be found. `element_values.py` keeps these
+values from the other files (`LATER_INDD_EXCEPTIONS`).
+
 **DOM 7.** The 7 DOM 7 references of the trustworthy pairs have no
 `EPubExportPreference` and no `HTMLExportPreference` (7 of 7), though
 `preference_values.xml` lists them for all versions (its source had one

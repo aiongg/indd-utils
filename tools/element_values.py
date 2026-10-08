@@ -133,6 +133,20 @@ WHEN_WRITTEN = {
 # (path, key) -> reason, as recorded in docs/format/idml-values.md.
 EXPLAINED = {}
 EXPLAINED_SHARE = 0.995
+# Values that every pair has, but a few IDML files exported from an
+# earlier version than their INDD differ. These files are not pairs (the
+# INDD was saved again later), so they cannot show the field; the values
+# are kept from the other files. (path, key) -> reason, as recorded in
+# docs/format/idml-values.md.
+LATER_INDD_EXCEPTIONS = {
+    ("Preferences/XMLImportPreference", "@" + k): "not paired" for k in (
+        "AllowTransform", "ImportCALSTables", "ImportTextIntoTables",
+        "ImportToSelected", "RemoveUnmatchedExisting", "RepeatTextElements")
+}
+LATER_INDD_EXCEPTIONS[("Preferences/DictionaryPreference", "@MergeUserDictionary")] = "not paired"
+# IDML files whose INDD was saved by a later major version than the IDML
+# (filled by corpus_idmls).
+LATER_INDD = set()
 # The root styles, whose values tools/root_values.py collects; they are
 # left out of the style paths here.
 ROOT_STYLES = {
@@ -173,6 +187,9 @@ def corpus_idmls():
         if digest not in seen and exported_by_indesign(idml):
             seen.add(digest)
             out.append((int(dom.split(".")[0]), str(idml)))
+            version = row.get("version", "")
+            if version[:1].isdigit() and int(version.split(".")[0]) > int(dom.split(".")[0]):
+                LATER_INDD.add(str(idml))
     return out
 
 
@@ -253,7 +270,9 @@ def analyse(scans):
     files = Counter(d for d, _, _, _ in scans)
     counts = Counter()  # path -> elements
     order = defaultdict(dict)
-    for dom, _idml, found, _lists in scans:
+    # (path, key) -> dom -> files left out (LATER_INDD_EXCEPTIONS)
+    skipped = defaultdict(Counter)
+    for dom, idml, found, _lists in scans:
         for path, els in found.items():
             present[path][dom] += 1
             counts[path] += len(els)
@@ -262,7 +281,12 @@ def analyse(scans):
                 for k in e:
                     keys.setdefault(k, None)
                     order[path].setdefault(k, len(order[path]))
+            for k in LATER_INDD_EXCEPTIONS:
+                if k[0] == path and idml in LATER_INDD:
+                    skipped[k][dom] += 1
             for k in keys:
+                if (path, k) in LATER_INDD_EXCEPTIONS and idml in LATER_INDD:
+                    continue
                 vals = [e.get(k) for e in els]
                 elements[(path, k)][dom].update(vals)
                 if None in vals:
@@ -282,7 +306,7 @@ def analyse(scans):
         per_dom = {}
         varies = False
         for d in doms:
-            n = present[path].get(d, 0)
+            n = present[path].get(d, 0) - skipped[(path, key)][d]
             s = by_dom.get(d, Counter())
             if not n or not s:
                 continue

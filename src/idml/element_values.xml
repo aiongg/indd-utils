@@ -112,7 +112,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 					<NumberingRestartPolicies RestartPolicy="AnyPreviousLevel" LowerLevel="0" UpperLevel="0" />
 				</Properties>
 			</TextDefault>
-			<DictionaryPreference RecomposeWhenChanged="true" />
+			<DictionaryPreference MergeUserDictionary="false" RecomposeWhenChanged="true" />
 			<AnchoredObjectDefault AnchorContent="Unassigned" InitialAnchorHeight="72" InitialAnchorWidth="72" AnchoredParagraphStyle="ParagraphStyle/$ID/[No paragraph style]" AnchoredObjectStyle="ObjectStyle/$ID/[None]" />
 			<AnchoredObjectSetting SpineRelative="false" LockPosition="false" HorizontalReferencePoint="TextFrame" VerticalReferencePoint="LineBaseline" AnchorXoffset="0" AnchorYoffset="0" AnchorSpaceAbove="0" />
 			<BaselineFrameGridOption UseCustomBaselineFrameGrid="false" StartingOffsetForBaselineFrameGrid="0" BaselineFrameGridRelativeOption="TopOfInset" BaselineFrameGridIncrement="12" />
@@ -125,7 +125,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</FootnoteOption>
 			<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" />
-			<XMLImportPreference ImportStyle="MergeImport" IgnoreUnmatchedIncoming="false" IgnoreWhitespace="false">
+			<XMLImportPreference ImportToSelected="true" ImportStyle="MergeImport" RepeatTextElements="true" IgnoreUnmatchedIncoming="false" ImportTextIntoTables="true" IgnoreWhitespace="false" RemoveUnmatchedExisting="false" AllowTransform="false" ImportCALSTables="true">
 				<Properties>
 					<TransformFilename type="enumeration">StylesheetInXML</TransformFilename>
 					<TransformParameters></TransformParameters>
