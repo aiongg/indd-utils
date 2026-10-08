@@ -2157,8 +2157,9 @@ values 12,197 of 12,197 (7,527 without the chunk, 4,624 with space 3,
 
 Space 7 is `Space="LAB"`, with the three stored values as `ColorValue`
 (for example `79.2156862745098 38 53`). The corpus IDML files have 92
-LAB colours in 40 distinct files (all of them library spot colours,
-whose alternate is LAB too). Over all 803 pairs, `Space` is reproduced
+LAB colours in 40 distinct files: 61 spot colours from swatch libraries
+(41 with a LAB alternate) and 31 process colours made in the document.
+Over all 803 pairs, `Space` is reproduced
 for 18,935 of 18,936 colours and `ColorValue` for 18,926.
 
 Space 14 holds hue, saturation and brightness as fractions. IDML writes
