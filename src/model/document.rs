@@ -410,7 +410,9 @@ impl<'a> Reader<'a> {
                     out.page_item_sources.push(s);
                 }
             }
-            hyperlink::class::PAGE_DESTINATION | hyperlink::class::URL_DESTINATION => {
+            hyperlink::class::PAGE_DESTINATION
+            | hyperlink::class::URL_DESTINATION
+            | hyperlink::class::TEXT_DESTINATION => {
                 if let Some(d) = self.destination(uid, cls)? {
                     out.destinations.push(d);
                 }

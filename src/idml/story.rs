@@ -215,6 +215,28 @@ impl Writer<'_> {
                 open = None;
             }
             if ch == '\u{FEFF}'
+                && let Some(dests) = story.text_destinations.get(&pos)
+            {
+                // Written as empty elements in place of the character.
+                flush(x, &mut buf);
+                st.open_csr(self, x, run);
+                for d in dests {
+                    x.start(match d.kind {
+                        DestinationKind::Paragraph => "ParagraphDestination",
+                        _ => "HyperlinkTextDestination",
+                    })
+                    .attr("Self", d.reference())
+                    .attr("Name", &d.name)
+                    .attr("Hidden", d.hidden.to_string())
+                    .attr("DestinationUniqueKey", d.key.to_string())
+                    .end();
+                }
+                if !story.xml_markers.contains_key(&pos) {
+                    pos += 1;
+                    continue;
+                }
+            }
+            if ch == '\u{FEFF}'
                 && let Some(&m) = story.xml_markers.get(&pos)
             {
                 flush(x, &mut buf);
@@ -505,6 +527,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn writes_text_destinations_in_place_of_their_character() {
+        use crate::model::{Attrs, Destination};
+        let dest = Destination {
+            uid: 5,
+            name: "a:b".into(),
+            hidden: false,
+            key: 7,
+            kind: DestinationKind::Text,
+        };
+        let story = Story {
+            uid: 9,
+            runs: vec![TextRun {
+                start: 0,
+                text: "x\u{FEFF}y\r".into(),
+                paragraph_style: None,
+                character_style: None,
+                paragraph_attrs: Attrs::default(),
+                character_attrs: Attrs::default(),
+            }],
+            anchors: Default::default(),
+            tables: Default::default(),
+            text_variables: Default::default(),
+            sources: Vec::new(),
+            xml_markers: Default::default(),
+            text_destinations: [(1, vec![dest])].into_iter().collect(),
+            xml_element: None,
+            orientation: None,
+            toc_style: None,
+        };
+        let doc = Document::default();
+        let w = Writer::for_test(&doc);
+        let out: String = w.story(&story).lines().map(str::trim).collect();
+        assert!(
+            out.contains(
+                "<Content>x</Content><HyperlinkTextDestination \
+                 Self=\"HyperlinkTextDestination/a%3ab\" Name=\"a:b\" Hidden=\"false\" \
+                 DestinationUniqueKey=\"7\" /><Content>y</Content>"
+            ),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn writes_xml_elements_at_their_markers() {
         use crate::model::{Attrs, XmlStructure};
         let element = |name: &str, content, story_content, block| XmlElement {
@@ -539,6 +604,7 @@ mod tests {
             text_variables: Default::default(),
             sources: Vec::new(),
             xml_markers: markers.into_iter().collect(),
+            text_destinations: Default::default(),
             xml_element: None,
             orientation: None,
             toc_style: None,

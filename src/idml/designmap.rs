@@ -490,6 +490,16 @@ impl Writer<'_> {
             .collect()
     }
 
+    /// UIDs of the text and paragraph destinations written in stories.
+    pub(super) fn written_text_destinations(&self) -> std::collections::HashSet<u32> {
+        self.doc
+            .stories
+            .iter()
+            .flat_map(|s| s.text_destinations.values().flatten())
+            .map(|d| d.uid)
+            .collect()
+    }
+
     /// UIDs of the page items written: on spreads and master spreads, in
     /// groups and anchored in stories.
     pub(super) fn written_items(&self) -> std::collections::HashSet<u32> {
@@ -517,7 +527,17 @@ impl Writer<'_> {
     /// docs/format/hyperlinks.md.
     pub(super) fn hyperlinks(&self, x: &mut Xml) {
         let doc = self.doc;
-        let mut dests: Vec<_> = doc.destinations.iter().collect();
+        // Text and paragraph destinations are written in the stories, at
+        // their position; only those found there can be referred to.
+        let in_text = self.written_text_destinations();
+        let mut dests: Vec<_> = doc
+            .destinations
+            .iter()
+            .filter(|d| {
+                !matches!(d.kind, DestinationKind::Text | DestinationKind::Paragraph)
+                    || in_text.contains(&d.uid)
+            })
+            .collect();
         dests.sort_by_key(|d| (matches!(d.kind, DestinationKind::Url { .. }), d.key));
         for d in &dests {
             match &d.kind {
@@ -550,6 +570,7 @@ impl Writer<'_> {
                         .attr("Name", &d.name)
                         .attr("DestinationURL", url);
                 }
+                DestinationKind::Text | DestinationKind::Paragraph => continue,
             }
             x.attr("Hidden", d.hidden.to_string())
                 .attr("DestinationUniqueKey", d.key.to_string());
@@ -643,22 +664,35 @@ impl Writer<'_> {
             .filter_map(|u| doc.bookmarks.get(u))
             .filter(|b| !doc.bookmarks.contains_key(&b.parent));
         for b in top {
-            self.bookmark(x, b, 0);
+            self.bookmark(x, b, 0, &in_text);
         }
     }
 
-    pub(super) fn bookmark(&self, x: &mut Xml, b: &crate::model::Bookmark, depth: usize) {
+    pub(super) fn bookmark(
+        &self,
+        x: &mut Xml,
+        b: &crate::model::Bookmark,
+        depth: usize,
+        in_text: &std::collections::HashSet<u32>,
+    ) {
         let doc = self.doc;
         let Some(dest) = doc.destinations.iter().find(|d| d.uid == b.destination) else {
             return;
         };
+        if matches!(
+            dest.kind,
+            DestinationKind::Text | DestinationKind::Paragraph
+        ) && !in_text.contains(&dest.uid)
+        {
+            return;
+        }
         x.start("Bookmark")
             .attr("Self", uref(Some(b.uid)))
             .attr("Name", &b.name)
             .attr("Destination", dest.reference());
         if depth < 64 {
             for c in b.children.iter().filter_map(|u| doc.bookmarks.get(u)) {
-                self.bookmark(x, c, depth + 1);
+                self.bookmark(x, c, depth + 1, in_text);
             }
         }
         x.end();

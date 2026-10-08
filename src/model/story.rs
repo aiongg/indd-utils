@@ -34,6 +34,8 @@ pub struct Story {
     pub sources: Vec<SourceRange>,
     /// XML markers, by UTF-16 offset of their U+FEFF.
     pub xml_markers: BTreeMap<usize, XmlMarker>,
+    /// Text and paragraph destinations, by UTF-16 offset of their U+FEFF.
+    pub text_destinations: BTreeMap<usize, Vec<Destination>>,
     /// The XML element whose content is this story.
     pub xml_element: Option<xml::Key>,
     /// Text orientation, from the frames that show the story; `None` when
@@ -309,8 +311,25 @@ impl<'a> Reader<'a> {
         let mut anchors: BTreeMap<usize, Vec<PageItem>> = BTreeMap::new();
         let mut tables: BTreeMap<usize, Table> = BTreeMap::new();
         let mut text_variables = BTreeMap::new();
+        let mut text_destinations: BTreeMap<usize, Vec<Destination>> = BTreeMap::new();
         for (pos, cls, item) in owned {
             match cls {
+                hyperlink::class::DESTINATION_OWNER => {
+                    // The owner names its destination (hyperlinks.md).
+                    let dest = self
+                        .chunk(item, hyperlink::chunk::OWNER_DESTINATION)?
+                        .and_then(|d| self.enc().u32_at(&d, 0))
+                        .and_then(uid_or_none);
+                    if let Some(dest) = dest
+                        && let Some(d) = Destination::read(
+                            dest,
+                            hyperlink::class::TEXT_DESTINATION,
+                            &*self.object(dest)?,
+                        )?
+                    {
+                        text_destinations.entry(pos).or_default().push(d);
+                    }
+                }
                 class::TEXT_VARIABLE_INSTANCE => {
                     let v = variable::Instance::read(item, &*self.object(item)?)?;
                     text_variables.insert(pos, v);
@@ -401,6 +420,7 @@ impl<'a> Reader<'a> {
             text_variables,
             sources,
             xml_markers,
+            text_destinations,
             xml_element,
             orientation: None,
             // The story names an object (class 0x8C20) whose chunk 0x11613

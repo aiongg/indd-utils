@@ -8,6 +8,7 @@ Implemented in `src/model/hyperlink.rs`.
 | 0x13501 | Hyperlink | `Hyperlink` (designmap) |
 | 0x13502 | Text source | `HyperlinkTextSource` (story text) |
 | 0x13503 | Page item source | `HyperlinkPageItemSource` (designmap) |
+| 0x13504 | Text or paragraph destination | `HyperlinkTextDestination`, `ParagraphDestination` (story text) |
 | 0x13505 | Page destination | `HyperlinkPageDestination` (designmap) |
 | 0x13506 | URL destination | `HyperlinkURLDestination` (designmap) |
 | 0x1354C | Bookmark | `Bookmark` (designmap) |
@@ -181,6 +182,33 @@ Over 41 destinations (39, plus 2 in a pair from another save):
 
 `Self` is `HyperlinkPageDestination/` and the name.
 
+## Text and paragraph destinations (class 0x13504)
+
+**Chunk 0x13508:** u8 hidden (1 true), u8, flag byte and string
+(`Name`), u32 key (`DestinationUniqueKey`). **Chunk 0x13526:** u32 owner
+UID (class 0x1353C), u16 kind: 0 `HyperlinkTextDestination` (1,021 of
+1,021), 1 `ParagraphDestination` (169 of 169).
+
+The owner object is an owned item (run kind 0x209, `objects.md`) of the
+story strand at the destination's position, and that position holds
+U+FEFF (1,190 of 1,190). The owner's chunk 0x1352B starts with the
+destination UID (1,021 of 1,021 text destinations checked). IDML writes
+the destination as an empty element at that position, in place of the
+U+FEFF, inside the `CharacterStyleRange` (746 text destinations and all
+169 paragraph destinations; the other 275 are inside tracked changes).
+`Self` is `HyperlinkTextDestination/` or `ParagraphDestination/` and the
+name, escaped as for page destinations. Attributes: `Self`, `Name`,
+`Hidden`, `DestinationUniqueKey`, in that order. Names need not be
+unique: one pair has 7 text destinations with the same name, and IDML
+writes 7 elements with the same `Self`.
+
+The converter writes them so: in the trustworthy pairs 685 of 685 text
+and 119 of 119 paragraph destinations are reproduced with all values,
+and 48 stories whose text differed only by the U+FEFF became identical.
+Hyperlinks find them by key and bookmarks by UID, like the other
+destinations; a destination that is not written in a story (inside text
+the converter leaves out) is not referred to.
+
 ## URL destination (class 0x13506)
 
 **Chunk 0x13509:** u8 hidden, u8, flag byte and string (`Name`), u32 key.
@@ -205,6 +233,12 @@ a bookmark), UID list of child bookmarks, u32 destination UID.
 All 7 bookmarks match on `Name` and `Destination` (the destination's
 `Self`), and IDML nests each bookmark's children inside it, in the order
 of the child list (2 top-level bookmarks with 2 and 3 children).
+Over the 1,072 bookmarks of the later corpus, name, parent and child
+order match in all. The destination UID can also be a text destination
+(82 of 82, written `HyperlinkTextDestination/<name>`) or an external page
+destination (575 of 575, written as its UID). The u32 after the name (0
+to 4) grows with nesting but is not the same depth in every file; no
+attribute matches it.
 
 The document's chunk 0x13501 is u32, u16, then UID lists of the text
 sources, the hyperlinks and the bookmarks, then a fourth list. The

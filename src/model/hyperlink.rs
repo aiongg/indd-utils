@@ -10,9 +10,13 @@ pub mod class {
     pub const HYPERLINK: u32 = 0x13501;
     pub const TEXT_SOURCE: u32 = 0x13502;
     pub const PAGE_ITEM_SOURCE: u32 = 0x13503;
+    /// Text and paragraph destinations.
+    pub const TEXT_DESTINATION: u32 = 0x13504;
     pub const PAGE_DESTINATION: u32 = 0x13505;
     pub const URL_DESTINATION: u32 = 0x13506;
     pub const BOOKMARK: u32 = 0x1354C;
+    /// An item owned by a story at the position of a text destination.
+    pub const DESTINATION_OWNER: u32 = 0x1353C;
     /// A story strand that holds text ranges in a tree.
     pub const RANGE_STRAND: u32 = 0xCA1C;
     /// A node of a range tree.
@@ -39,6 +43,12 @@ pub mod chunk {
     pub const PAGE_DESTINATION: u32 = 0x13507;
     pub const PAGE_DESTINATION_VIEW: u32 = 0x13527;
     pub const URL_DESTINATION: u32 = 0x13509;
+    /// Text destination: hidden, name and key.
+    pub const TEXT_DESTINATION: u32 = 0x13508;
+    /// Text destination: owner UID and kind.
+    pub const TEXT_DESTINATION_OWNER: u32 = 0x13526;
+    /// Destination owner: the destination UID.
+    pub const OWNER_DESTINATION: u32 = 0x1352B;
     /// URL destination: the URL.
     pub const URL: u32 = 0x100B;
     pub const BOOKMARK: u32 = 0x13547;
@@ -171,6 +181,11 @@ pub enum DestinationKind {
     Url {
         url: String,
     },
+    /// A position in story text (`HyperlinkTextDestination`).
+    Text,
+    /// A paragraph (`ParagraphDestination`), the target of
+    /// cross-references.
+    Paragraph,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -193,6 +208,8 @@ impl Destination {
         match self.kind {
             DestinationKind::Page { .. } => format!("HyperlinkPageDestination/{escaped}"),
             DestinationKind::Url { .. } => format!("HyperlinkURLDestination/{escaped}"),
+            DestinationKind::Text => format!("HyperlinkTextDestination/{escaped}"),
+            DestinationKind::Paragraph => format!("ParagraphDestination/{escaped}"),
         }
     }
 }
@@ -295,10 +312,10 @@ impl TextSource {
 impl Destination {
     pub fn read(uid: u32, class: u32, obj: &Object) -> Result<Option<Destination>, Error> {
         let enc = obj.encoding;
-        let id = if class == class::PAGE_DESTINATION {
-            chunk::PAGE_DESTINATION
-        } else {
-            chunk::URL_DESTINATION
+        let id = match class {
+            class::PAGE_DESTINATION => chunk::PAGE_DESTINATION,
+            class::TEXT_DESTINATION => chunk::TEXT_DESTINATION,
+            _ => chunk::URL_DESTINATION,
         };
         let Some(d) = obj.chunk(id) else {
             return Ok(None);
@@ -308,7 +325,16 @@ impl Destination {
         c.skip(1)?;
         let name = c.name()?.name;
         let key = c.u32()?;
-        let kind = if class == class::PAGE_DESTINATION {
+        let kind = if class == class::TEXT_DESTINATION {
+            // Chunk 0x13526: owner UID, u16 kind (InDesign 5.0: the owner
+            // UID alone).
+            let owner = obj.chunk(chunk::TEXT_DESTINATION_OWNER);
+            match owner.map(|d| enc.u16_at(d, 4)) {
+                Some(Some(0) | None) => DestinationKind::Text,
+                Some(Some(1)) => DestinationKind::Paragraph,
+                _ => return Ok(None),
+            }
+        } else if class == class::PAGE_DESTINATION {
             let Some(v) = obj.chunk(chunk::PAGE_DESTINATION_VIEW) else {
                 return Ok(None);
             };
