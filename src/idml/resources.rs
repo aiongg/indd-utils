@@ -71,12 +71,19 @@ impl Writer<'_> {
         self.package_root(&mut x, "Graphic");
         let groups = self.group_swatches();
         let named = |class_id: u32| -> std::collections::HashSet<u32> {
-            self.doc
-                .prefs
+            let prefs = &self.doc.prefs;
+            prefs
                 .item_default_entries
                 .iter()
                 .filter(|e| e.0 == class_id)
                 .flat_map(|e| [e.1, e.2])
+                .chain(
+                    prefs
+                        .item_default_swatches
+                        .iter()
+                        .filter(|e| e.0 == class_id)
+                        .map(|e| e.1),
+                )
                 .collect()
         };
         let gradients: Vec<_> = {

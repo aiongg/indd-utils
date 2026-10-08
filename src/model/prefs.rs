@@ -34,6 +34,9 @@ pub struct Prefs {
     /// The entries of the two tables around that list: class, UID, UID
     /// (`objects.md`, page item defaults).
     pub item_default_entries: Vec<(u32, u32, u32)>,
+    /// The swatches that chunk 0x6E06 of the page item defaults names:
+    /// class and UID (`objects.md`, page item defaults).
+    pub item_default_swatches: Vec<(u32, u32)>,
     /// `Properties` children: element, name, value.
     pub props: Vec<(&'static str, &'static str, PrefProp)>,
     /// Records of the print settings, written in base64.
@@ -744,6 +747,9 @@ mod id {
     pub const TEXT_WRAP: u32 = 0x3768;
     /// The chunk of the page item defaults object (class 0x6E07).
     pub const ITEM_DEFAULTS: u32 = 0x6E07;
+    /// Page item defaults: 16 bytes, then three entries of u16 and u32
+    /// UID (an object of class 0x5533, a gradient and a colour).
+    pub const ITEM_DEFAULT_SWATCHES: u32 = 0x6E06;
     /// Name of a colour profile object (class 0x7D03).
     pub const PROFILE_NAME: u32 = 0x13C;
     /// Index options.
@@ -1229,6 +1235,26 @@ impl Reader<'_> {
             None => None,
         };
 
+        // The swatches of chunk 0x6E06 of the page item defaults.
+        let mut item_default_swatches = Vec::new();
+        if let Some(&(u, _)) = self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::ITEM_DEFAULTS)
+            && let Some(d) = self.chunk(u, id::ITEM_DEFAULT_SWATCHES)?
+            && d.len() == 34
+        {
+            let mut c = self.cursor(&d[16..]);
+            for _ in 0..3 {
+                c.u16()?;
+                let uid = c.u32()?;
+                if let Some(cls) = self.class(uid) {
+                    item_default_swatches.push((cls, uid));
+                }
+            }
+        }
+
         // Print settings.
         let mut print_records = Vec::new();
         for (id, element) in [
@@ -1632,6 +1658,7 @@ impl Reader<'_> {
                 .map(|d| super::AnchorSettings::read(self.enc(), d)),
             item_defaults,
             item_default_entries,
+            item_default_swatches,
             props,
             print_records,
             footnotes: match get(id::FOOTNOTE_OPTIONS)? {

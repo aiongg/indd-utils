@@ -2193,8 +2193,20 @@ groups have the same chunks and flags, so neither decides it. Named
 colours are always written. Unnamed gradients follow the same rule with
 class 0x5503: 457 unnamed gradients are referenced nowhere and named in
 no table, and none is in the IDML; 526 of the 548 unnamed gradients
-IDML writes meet the rule (the other 22 are open). Their stops go with
-them.
+IDML writes meet the rule. Their stops go with them.
+
+The other 22 are named by chunk 0x6E06 of the page item defaults object
+(class 0x6E07). The chunk has 34 bytes in all 489 trustworthy documents
+before 2026-10: u32 5, u32 0, u32 0, u32 14, then three entries of u16 0
+and a u32 UID. Entry 0 names an object of class 0x5533, entry 1 a
+gradient and entry 2 a colour (489 of 489 each). IDML writes the
+gradient of entry 1 in every document: 480 are unnamed, and all 480 are
+in the IDML; none of the 162 unnamed gradients IDML leaves out (in the
+documents checked) is in the chunk. The colour of entry 2 is in the
+IDML wherever the converter writes it (82 of 82). The converter treats
+the swatches of chunk 0x6E06 as named by the page item defaults. With
+it, every unnamed gradient of the trustworthy pairs of 2026-10 that IDML
+writes is written (783 of 783 `Gradient` elements).
 
 **Model codes.** The 250 distinct little-endian files hold 13,067
 colours with chunk 0x1F09: 12,814 with code 0, 250 with code 2 (one
