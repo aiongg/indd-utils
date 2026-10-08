@@ -14,6 +14,8 @@ pub mod class {
     pub const TEXT_DESTINATION: u32 = 0x13504;
     pub const PAGE_DESTINATION: u32 = 0x13505;
     pub const URL_DESTINATION: u32 = 0x13506;
+    /// A page of another document.
+    pub const EXTERNAL_PAGE_DESTINATION: u32 = 0x13552;
     pub const BOOKMARK: u32 = 0x1354C;
     /// An item owned by a story at the position of a text destination.
     pub const DESTINATION_OWNER: u32 = 0x1353C;
@@ -45,6 +47,10 @@ pub mod chunk {
     pub const PAGE_DESTINATION: u32 = 0x13507;
     pub const PAGE_DESTINATION_VIEW: u32 = 0x13527;
     pub const URL_DESTINATION: u32 = 0x13509;
+    /// External page destination: hidden, name and key.
+    pub const EXTERNAL_PAGE_DESTINATION: u32 = 0x13580;
+    /// External page destination: page index from 0.
+    pub const EXTERNAL_PAGE_INDEX: u32 = 0x1B8;
     /// Text destination: hidden, name and key.
     pub const TEXT_DESTINATION: u32 = 0x13508;
     /// Text destination: owner UID and kind.
@@ -186,6 +192,18 @@ pub enum DestinationKind {
     Url {
         url: String,
     },
+    /// A page of another document (`HyperlinkExternalPageDestination`).
+    ExternalPage {
+        /// Page index from 0.
+        page_index: u32,
+        zoom: Option<f64>,
+        view: u32,
+        bounds: Option<[f64; 4]>,
+        /// The link to the other document (chunk 0x1359F).
+        link: Option<u32>,
+        /// The last part of the linked document's path, decoded.
+        file_name: Option<String>,
+    },
     /// A position in story text (`HyperlinkTextDestination`).
     Text,
     /// A paragraph (`ParagraphDestination`), the target of
@@ -213,6 +231,7 @@ impl Destination {
         match self.kind {
             DestinationKind::Page { .. } => format!("HyperlinkPageDestination/{escaped}"),
             DestinationKind::Url { .. } => format!("HyperlinkURLDestination/{escaped}"),
+            DestinationKind::ExternalPage { .. } => format!("u{:x}", self.uid),
             DestinationKind::Text => format!("HyperlinkTextDestination/{escaped}"),
             DestinationKind::Paragraph => format!("ParagraphDestination/{escaped}"),
         }
@@ -330,6 +349,7 @@ impl Destination {
         let enc = obj.encoding;
         let id = match class {
             class::PAGE_DESTINATION => chunk::PAGE_DESTINATION,
+            class::EXTERNAL_PAGE_DESTINATION => chunk::EXTERNAL_PAGE_DESTINATION,
             class::TEXT_DESTINATION => chunk::TEXT_DESTINATION,
             _ => chunk::URL_DESTINATION,
         };
@@ -350,7 +370,8 @@ impl Destination {
                 Some(Some(1)) => DestinationKind::Paragraph,
                 _ => return Ok(None),
             }
-        } else if class == class::PAGE_DESTINATION {
+        } else if class == class::PAGE_DESTINATION || class == class::EXTERNAL_PAGE_DESTINATION {
+            // Chunk 0x13527: page UID, zoom, view setting, bounds.
             let Some(v) = obj.chunk(chunk::PAGE_DESTINATION_VIEW) else {
                 return Ok(None);
             };
@@ -363,11 +384,31 @@ impl Destination {
             } else {
                 None
             };
-            DestinationKind::Page {
-                page,
-                zoom,
-                view,
-                bounds,
+            if class == class::PAGE_DESTINATION {
+                DestinationKind::Page {
+                    page,
+                    zoom,
+                    view,
+                    bounds,
+                }
+            } else {
+                let Some(page_index) = obj
+                    .chunk(chunk::EXTERNAL_PAGE_INDEX)
+                    .and_then(|d| enc.u32_at(d, 0))
+                else {
+                    return Ok(None);
+                };
+                DestinationKind::ExternalPage {
+                    page_index,
+                    zoom,
+                    view,
+                    bounds,
+                    link: obj
+                        .chunk(chunk::OTHER_DOCUMENT)
+                        .and_then(|d| enc.u32_at(d, 8))
+                        .filter(|&u| u != 0),
+                    file_name: None,
+                }
             }
         } else {
             let url = match obj.chunk(chunk::URL) {

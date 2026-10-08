@@ -11,6 +11,7 @@ Implemented in `src/model/hyperlink.rs`.
 | 0x13504 | Text or paragraph destination | `HyperlinkTextDestination`, `ParagraphDestination` (story text) |
 | 0x13505 | Page destination | `HyperlinkPageDestination` (designmap) |
 | 0x13506 | URL destination | `HyperlinkURLDestination` (designmap) |
+| 0x13552 | External page destination | `HyperlinkExternalPageDestination` (designmap) |
 | 0x1354C | Bookmark | `Bookmark` (designmap) |
 
 ## Evidence
@@ -296,6 +297,36 @@ with that `mailto:` URL as `DestinationURL`. Chunk 0x100B is therefore
 taken as the URL. `Self` is
 `HyperlinkURLDestination/` and the name with `:` written as `%3a`.
 
+## External page destination (class 0x13552)
+
+| Chunk | Contents | IDML |
+|---|---|---|
+| 0x13580 | u8 hidden, u8 0, flag byte 1, string (empty in all), u32 key | `Hidden`, `DestinationUniqueKey` |
+| 0x1B8 | u32 page index from 0 | `DestinationPageIndex` = value + 1 |
+| 0x13527 | as for page destinations: u32 page (0), f64 zoom, u32 view setting, four f64 | `ViewPercentage`, `ViewSetting`, `ViewBounds` |
+| 0x1359F | u32 0x13501, u32 1, u32 link UID (class 0x8C42) | `DocumentPath` (below) |
+
+Evidence: 643 destinations in two pairs (all pairs). `Self` is the UID.
+The name is not stored: IDML writes `<file name> - Page
+<DestinationPageIndex> [Fixed]`, where the file name is the last part of
+the linked document's URI (`objects.md`, links), percent-decoded (643 of
+643; all have view setting 0, `Fixed`, so the text for other settings is
+not shown, and the converter writes `Name` only for view setting 0).
+`DocumentPath` is that path with `/` written as `:`, percent-decoding
+applied, preceded by a disk volume name and `:` (643 of 643 apart from
+the volume name, which the INDD does not hold), so the converter leaves
+it out. The flag byte 1 with an empty name, against 0 or 2 with a stored
+name for page destinations, suggests the flag marks an automatic name;
+IDML writes no `NameManually` here. Attribute order: `Self Name
+DocumentPath DestinationPageIndex ViewSetting ViewPercentage Hidden
+DestinationUniqueKey`, then `Properties/ViewBounds`. They follow the URL
+destinations, sorted by key.
+
+Hyperlinks of kind 2004 point at them by key (576), and bookmarks by UID
+(575). In the trustworthy pairs the converter writes all 643 with every
+value apart from `DocumentPath`, and their hyperlinks apart from
+`BorderColor` (see the hyperlink appearance).
+
 ## Bookmarks (class 0x1354C)
 
 **Chunk 0x13547:** flag byte and string (`Name`), u32 (1 for a top-level
@@ -340,10 +371,11 @@ described above, so the converter leaves them out with a warning.
 
 ## Order in designmap
 
-The schema puts page destinations, URL destinations and hyperlinks after
-the `idPkg:Story` elements, and bookmarks after them. The converter sorts
-destinations by key, as the pair with the most destinations does, and
-hyperlinks by UID.
+The schema puts page destinations, URL destinations, external page
+destinations, page item sources and hyperlinks after the `idPkg:Story`
+elements, in that order, and bookmarks after them. The converter sorts
+each kind of destination by key, as the pairs do, and hyperlinks by
+UID.
 
 ## Not converted
 

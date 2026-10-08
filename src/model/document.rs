@@ -412,6 +412,7 @@ impl<'a> Reader<'a> {
             }
             hyperlink::class::PAGE_DESTINATION
             | hyperlink::class::URL_DESTINATION
+            | hyperlink::class::EXTERNAL_PAGE_DESTINATION
             | hyperlink::class::TEXT_DESTINATION => {
                 if let Some(d) = self.destination(uid, cls)? {
                     out.destinations.push(d);
@@ -533,9 +534,25 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A page or URL destination.
+    /// A page, URL, external page or text destination.
     fn destination(&self, uid: u32, cls: u32) -> Result<Option<Destination>, Error> {
-        let d = Destination::read(uid, cls, &*self.object(uid)?)?;
+        let mut d = Destination::read(uid, cls, &*self.object(uid)?)?;
+        // The file name of an external page destination is the last part
+        // of its link's URI (hyperlinks.md).
+        if let Some(hyperlink::DestinationKind::ExternalPage {
+            link: Some(link),
+            file_name,
+            ..
+        }) = d.as_mut().map(|d| &mut d.kind)
+            && let Some((l, _)) = self.link(*link)?
+        {
+            *file_name = l
+                .uri
+                .rsplit('/')
+                .next()
+                .filter(|n| !n.is_empty())
+                .map(percent_decode);
+        }
         if let Some(hyperlink::DestinationKind::Page { zoom: None, .. }) =
             d.as_ref().map(|d| &d.kind)
         {
@@ -606,5 +623,37 @@ impl<'a> Reader<'a> {
             _ => None,
         };
         Ok(Some((name, color)))
+    }
+}
+
+/// `s` with `%xx` escapes replaced by their bytes, read as UTF-8.
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%'
+            && let Some(v) = s
+                .get(i + 1..i + 3)
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+        {
+            out.push(v);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+mod percent_tests {
+    use super::percent_decode;
+
+    #[test]
+    fn decodes_percent_escapes() {
+        assert_eq!(percent_decode("Ch%201%20%C3%A9.indd"), "Ch 1 é.indd");
+        assert_eq!(percent_decode("100%"), "100%");
     }
 }

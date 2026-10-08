@@ -538,11 +538,38 @@ impl Writer<'_> {
                     || in_text.contains(&d.uid)
             })
             .collect();
-        dests.sort_by_key(|d| (matches!(d.kind, DestinationKind::Url { .. }), d.key));
+        // Schema order: page, URL, external page destinations; each sorted
+        // by key.
+        dests.sort_by_key(|d| {
+            let rank = match d.kind {
+                DestinationKind::Page { .. } => 0,
+                DestinationKind::Url { .. } => 1,
+                _ => 2,
+            };
+            (rank, d.key)
+        });
+        let view_setting = |x: &mut Xml, view: u32, zoom: Option<f64>| {
+            match view {
+                0 => {
+                    x.attr("ViewSetting", "Fixed");
+                }
+                1 => {
+                    x.attr("ViewSetting", "FitWindow");
+                }
+                _ => {}
+            }
+            if let Some(zoom) = zoom {
+                x.attr("ViewPercentage", num(zoom * 100.0));
+            }
+        };
         for d in &dests {
+            let mut bounds = None;
             match &d.kind {
                 DestinationKind::Page {
-                    page, zoom, view, ..
+                    page,
+                    zoom,
+                    view,
+                    bounds: b,
                 } => {
                     // NameManually is true on every corpus page
                     // destination (hyperlinks.md).
@@ -551,18 +578,8 @@ impl Writer<'_> {
                         .attr("Name", &d.name)
                         .attr("NameManually", "true")
                         .attr("DestinationPage", uref(Some(*page)));
-                    match view {
-                        0 => {
-                            x.attr("ViewSetting", "Fixed");
-                        }
-                        1 => {
-                            x.attr("ViewSetting", "FitWindow");
-                        }
-                        _ => {}
-                    }
-                    if let Some(zoom) = zoom {
-                        x.attr("ViewPercentage", num(zoom * 100.0));
-                    }
+                    view_setting(x, *view, *zoom);
+                    bounds = *b;
                 }
                 DestinationKind::Url { url } => {
                     x.start("HyperlinkURLDestination")
@@ -570,15 +587,30 @@ impl Writer<'_> {
                         .attr("Name", &d.name)
                         .attr("DestinationURL", url);
                 }
+                DestinationKind::ExternalPage {
+                    page_index,
+                    zoom,
+                    view,
+                    bounds: b,
+                    file_name,
+                    ..
+                } => {
+                    x.start("HyperlinkExternalPageDestination")
+                        .attr("Self", d.reference());
+                    // The name is not stored; IDML makes it from the file
+                    // name and the page (shown for the Fixed view only).
+                    if let (0, Some(f)) = (view, file_name) {
+                        x.attr("Name", format!("{f} - Page {} [Fixed]", page_index + 1));
+                    }
+                    x.attr("DestinationPageIndex", (page_index + 1).to_string());
+                    view_setting(x, *view, *zoom);
+                    bounds = *b;
+                }
                 DestinationKind::Text | DestinationKind::Paragraph => continue,
             }
             x.attr("Hidden", d.hidden.to_string())
                 .attr("DestinationUniqueKey", d.key.to_string());
-            if let DestinationKind::Page {
-                bounds: Some([left, top, right, bottom]),
-                ..
-            } = d.kind
-            {
+            if let Some([left, top, right, bottom]) = bounds {
                 // IDML writes the unset bounds (1e256) in exponent form.
                 let n = |v: f64| if v == 1e256 { "1e+256".into() } else { num(v) };
                 x.start("Properties")
