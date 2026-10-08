@@ -14,7 +14,7 @@ pub(super) fn xml_tag_color(rgb: [f64; 3]) -> Option<&'static str> {
 /// The IDML name of an interface colour (class 0x1F11) by its red, green
 /// and blue fractions. See `docs/format/objects.md`, interface colours.
 pub(super) fn ui_color_name(rgb: [f64; 3]) -> Option<&'static str> {
-    const NAMES: [([f64; 3], &str); 25] = [
+    const NAMES: [([f64; 3], &str); 29] = [
         ([0.31, 0.6, 1.0], "LightBlue"),
         ([1.0, 0.0, 0.0], "Red"),
         ([0.31, 1.0, 0.31], "Green"),
@@ -40,6 +40,10 @@ pub(super) fn ui_color_name(rgb: [f64; 3]) -> Option<&'static str> {
         ([1.0, 0.71, 0.42], "GridOrange"),
         ([0.97, 0.35, 0.42], "Fiesta"),
         ([0.0, 0.6, 0.6], "Teal"),
+        ([0.73, 0.73, 0.73], "LightGray"),
+        ([0.48, 0.73, 0.85], "GridBlue"),
+        ([1.0, 0.6, 0.6], "Peach"),
+        ([0.6, 0.0, 0.2], "Burgundy"),
     ];
     NAMES
         .iter()

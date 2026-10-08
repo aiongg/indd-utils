@@ -44,6 +44,14 @@ pub struct Prefs {
     pub endnotes: Option<EndnoteOptions>,
     /// Index options (chunk 0x13010).
     pub index_options: Option<IndexOptions>,
+    /// Default paragraph and character style UIDs (chunks 0x28D4 and
+    /// 0x28D5, u32 at 8).
+    pub default_styles: [Option<u32>; 2],
+    /// Default graphic, text and grid object style UIDs (chunk 0x1B959).
+    pub default_object_styles: Option<[u32; 3]>,
+    /// Layout and story grid defaults: element, grid settings and, for
+    /// the story grid, `CharacterCountSize`.
+    pub grids: Vec<(&'static str, super::GridData, Option<f64>)>,
 }
 
 /// The document's endnote options (preferences chunk 0x2261E). See
@@ -749,6 +757,30 @@ mod id {
     pub const DICTIONARY: u32 = 0x2806;
     /// EPUB export options.
     pub const EPUB: u32 = 0x21A1A;
+    pub const DEFAULT_PARAGRAPH_STYLE: u32 = 0x28D4;
+    pub const DEFAULT_CHARACTER_STYLE: u32 = 0x28D5;
+    pub const DEFAULT_OBJECT_STYLES: u32 = 0x1B959;
+    pub const LAYOUT_GRID: u32 = 0xCD2F;
+    pub const STORY_GRID: u32 = 0xCD2E;
+    /// Present when new documents have a master text frame.
+    pub const MASTER_TEXT_FRAME: u32 = 0x59C;
+    pub const BLENDING_SPACE: u32 = 0x1081F;
+    pub const ALLOW_PAGE_SHUFFLE: u32 = 0x5A6;
+    pub const GUIDES_SHOWN: u32 = 0x568;
+    pub const SNAP: u32 = 0x55A;
+    pub const GUIDES: u32 = 0x53F;
+    pub const ZERO_POINT: u32 = 0x54A;
+    pub const LAYOUT_ADJUSTMENT: u32 = 0x7006;
+    pub const SHOW_TEXT_THREADS: u32 = 0xCA0B;
+}
+
+/// Interface colours that preferences without their chunk have
+/// (`docs/format/preferences.md`).
+mod ui {
+    pub const LIGHT_GRAY: [f64; 3] = [0.73, 0.73, 0.73];
+    pub const MAGENTA: [f64; 3] = [1.0, 0.31, 1.0];
+    pub const FIESTA: [f64; 3] = [0.97, 0.35, 0.42];
+    pub const GRID_BLUE: [f64; 3] = [0.48, 0.73, 0.85];
 }
 
 /// The EPUB identifier of documents without EPUB export options.
@@ -1117,9 +1149,21 @@ impl Reader<'_> {
             );
             set("PasteboardPreference", "MinimumSpaceAboveAndBelow", num(v));
         }
-        // Text wrap: u8 at 2.
+        // Text wrap: u8 at 0, 2 and, in 6-byte chunks, 4.
         if let Some(d) = get(id::TEXT_WRAP)?.filter(|d| d.len() >= 3) {
+            set(
+                "TextPreference",
+                "AbutTextToTextWrap",
+                (d[0] != 0).to_string(),
+            );
             set("TextPreference", "ZOrderTextWrap", (d[2] != 0).to_string());
+            if d.len() >= 6 {
+                set(
+                    "TextPreference",
+                    "HonourTextIndentsWithTextWrap",
+                    (d[4] != 0).to_string(),
+                );
+            }
         }
         // Default XML tags: name (u32 length, text segments) and u32 UID of
         // an interface colour, for story, table, (untagged), cell, image.
@@ -1223,6 +1267,220 @@ impl Reader<'_> {
                     set("PrintBookletOption", name, num(v));
                 }
             }
+        }
+
+        // Default styles: u32 UIDs; the default is the third.
+        let mut default_styles = [None, None];
+        for (i, id) in [id::DEFAULT_PARAGRAPH_STYLE, id::DEFAULT_CHARACTER_STYLE]
+            .into_iter()
+            .enumerate()
+        {
+            default_styles[i] = get(id)?.and_then(|d| self.enc().u32_at(&d, 8));
+        }
+        let default_object_styles = get(id::DEFAULT_OBJECT_STYLES)?.and_then(|d| {
+            let u = |o| self.enc().u32_at(&d, o);
+            Some([u(8)?, u(12)?, u(16)?])
+        });
+        // Layout and story grids: as page chunk 0xCD02; the story grid
+        // continues with u32 0 and f64 `CharacterCountSize`.
+        let mut grids = Vec::new();
+        for (id, element) in [
+            (id::LAYOUT_GRID, "LayoutGridDataInformation"),
+            (id::STORY_GRID, "StoryGridDataInformation"),
+        ] {
+            if let Some(d) = get(id)? {
+                let mut c = self.cursor(&d);
+                let read = (|| -> Result<(super::GridData, Option<f64>), Error> {
+                    let font = c.u32()?;
+                    c.u8()?;
+                    let font_style = c.string()?;
+                    let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?, c.f64()?];
+                    let codes = [c.u32()?, c.u32()?, c.u32()?, c.u32()?];
+                    let count = if element == "StoryGridDataInformation" {
+                        c.u32()?;
+                        Some(c.f64()?)
+                    } else {
+                        None
+                    };
+                    Ok((
+                        super::GridData {
+                            font,
+                            font_style,
+                            numbers,
+                            codes,
+                        },
+                        count,
+                    ))
+                })();
+                if let Ok((g, count)) = read {
+                    grids.push((element, g, count));
+                }
+            }
+        }
+        // Master text frame: the chunk is there when it is on.
+        let master = get(id::MASTER_TEXT_FRAME)?.is_some().to_string();
+        set("DocumentPreference", "MasterTextFrame", master.clone());
+        if major >= 8 {
+            set("DocumentPreference", "CreatePrimaryTextFrame", master);
+        }
+        match get(id::BLENDING_SPACE)? {
+            None => set("TransparencyPreference", "BlendingSpace", "CMYK".into()),
+            Some(d) => match self.enc().u32_at(&d, 0) {
+                Some(2) => set("TransparencyPreference", "BlendingSpace", "RGB".into()),
+                Some(3) => set("TransparencyPreference", "BlendingSpace", "CMYK".into()),
+                _ => {}
+            },
+        }
+        // Guides, grids, pasteboard: flags and interface colours.
+        let bool_at = |d: &[u8], o: usize| match d.get(o) {
+            Some(0) => Some("false".to_string()),
+            Some(1) => Some("true".to_string()),
+            _ => None,
+        };
+        if let Some(v) = get(id::ALLOW_PAGE_SHUFFLE)?.and_then(|d| bool_at(&d, 0)) {
+            set("DocumentPreference", "AllowPageShuffle", v);
+        }
+        match get(id::GUIDES_SHOWN)? {
+            None => set("GuidePreference", "GuidesShown", "true".into()),
+            Some(d) => {
+                if let Some(v) = bool_at(&d, 0) {
+                    set("GuidePreference", "GuidesShown", v);
+                }
+            }
+        }
+        match get(id::SNAP)? {
+            None => {
+                set("GuidePreference", "GuidesSnapto", "true".into());
+                set("GridPreference", "DocumentGridSnapto", "false".into());
+            }
+            Some(d) => {
+                if let Some(v) = bool_at(&d, 0) {
+                    set("GuidePreference", "GuidesSnapto", v);
+                }
+                if let Some(v) = bool_at(&d, 2) {
+                    set("GridPreference", "DocumentGridSnapto", v);
+                }
+            }
+        }
+        let ui_color = |colors: &mut Vec<(&'static str, &'static str, [f64; 3])>,
+                        element: &'static str,
+                        name: &'static str,
+                        uid: Option<u32>| {
+            if let Some(uid) = uid
+                && let Ok(Some(rgb)) = self.ui_color(uid)
+            {
+                colors.push((element, name, rgb));
+            }
+        };
+        if let Some(d) = get(id::GUIDES)? {
+            if let Some(v) = bool_at(&d, 0) {
+                set("GuidePreference", "GuidesInBack", v);
+            }
+            ui_color(
+                &mut colors,
+                "GuidePreference",
+                "RulerGuidesColor",
+                self.enc().u32_at(&d, 18),
+            );
+        }
+        if let Some(d) = get(id::BASELINE_GRID)? {
+            ui_color(
+                &mut colors,
+                "GridPreference",
+                "BaselineColor",
+                self.enc().u32_at(&d, 30),
+            );
+            match d.get(34) {
+                Some(0) => set(
+                    "GridPreference",
+                    "BaselineGridRelativeOption",
+                    "TopOfPageOfBaselineGridRelativeOption".into(),
+                ),
+                Some(1) => set(
+                    "GridPreference",
+                    "BaselineGridRelativeOption",
+                    "TopOfMarginOfBaselineGridRelativeOption".into(),
+                ),
+                _ => {}
+            }
+        }
+        for (id, at, element, name, absent) in [
+            (
+                id::DOCUMENT_GRID,
+                32,
+                "GridPreference",
+                "GridColor",
+                Some(ui::LIGHT_GRAY),
+            ),
+            (
+                id::MARGINS,
+                36,
+                "DocumentPreference",
+                "MarginGuideColor",
+                Some(ui::MAGENTA),
+            ),
+            (
+                id::COLUMNS,
+                18,
+                "DocumentPreference",
+                "ColumnGuideColor",
+                None,
+            ),
+        ] {
+            match get(id)? {
+                Some(d) => ui_color(&mut colors, element, name, self.enc().u32_at(&d, at)),
+                None => {
+                    if let Some(rgb) = absent {
+                        colors.push((element, name, rgb));
+                    }
+                }
+            }
+        }
+        match get(id::PASTEBOARD)? {
+            Some(d) => {
+                for (at, name) in [
+                    (20, "BleedGuideColor"),
+                    (24, "SlugGuideColor"),
+                    (28, "PreviewBackgroundColor"),
+                ] {
+                    ui_color(
+                        &mut colors,
+                        "PasteboardPreference",
+                        name,
+                        self.enc().u32_at(&d, at),
+                    );
+                }
+            }
+            None => {
+                for (name, rgb) in [
+                    ("BleedGuideColor", ui::FIESTA),
+                    ("SlugGuideColor", ui::GRID_BLUE),
+                    ("PreviewBackgroundColor", ui::LIGHT_GRAY),
+                ] {
+                    colors.push(("PasteboardPreference", name, rgb));
+                }
+            }
+        }
+        match get(id::ZERO_POINT)? {
+            None => set("Document", "ZeroPoint", "0 0".into()),
+            Some(d) => {
+                if let (Some(x), Some(y)) = (self.enc().f64_at(&d, 0), self.enc().f64_at(&d, 8)) {
+                    set("Document", "ZeroPoint", format!("{} {}", num(x), num(y)));
+                }
+            }
+        }
+        if let Some(d) = get(id::LAYOUT_ADJUSTMENT)? {
+            if let Some(v) = bool_at(&d, 0) {
+                set("LayoutAdjustmentPreference", "EnableLayoutAdjustment", v);
+            }
+            if let Some(z) = self.enc().f64_at(&d, 12) {
+                set("LayoutAdjustmentPreference", "SnapZone", num(z));
+            }
+        }
+        if (major, version.minor) >= (21, 1) {
+            let shown =
+                get(id::SHOW_TEXT_THREADS)?.is_some_and(|d| self.enc().u16_at(&d, 0) == Some(1));
+            set("ViewPreference", "ShowTextThreads", shown.to_string());
         }
 
         // Index header setting.
@@ -1394,6 +1652,9 @@ impl Reader<'_> {
                 },
                 None => None,
             },
+            default_styles,
+            default_object_styles,
+            grids,
             index_options: match get(id::INDEX_OPTIONS)? {
                 Some(d) => match IndexOptions::read(self.enc(), &d) {
                     Ok(o) => Some(o),

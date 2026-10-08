@@ -63,12 +63,16 @@ impl Node {
     }
 
     /// Add the attributes and children of `other` that `self` lacks.
-    /// Children with the same tag are merged.
+    /// Children with the same tag are merged. A typed value (an element
+    /// with a `type` attribute) keeps its own text and children.
     pub fn merge(&mut self, other: &Node) {
         for (k, v) in &other.attrs {
             if self.attr(k).is_none() {
                 self.attrs.push((k.clone(), v.clone()));
             }
+        }
+        if self.attr("type").is_some() {
+            return;
         }
         if self.text.is_none() {
             self.text = other.text.clone();

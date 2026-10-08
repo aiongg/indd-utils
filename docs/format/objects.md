@@ -412,11 +412,15 @@ other colours, as a list of three numbers (0 to 255):
 | 0.6, 0, 0 | `BrickRed` | 0, 0, 0.53 | `DarkBlue` |
 | 0.6, 0.8, 0 | `GrassGreen` | 0.81, 0.51, 0.71 | `Lipstick` |
 | 1, 0.71, 0.42 | `GridOrange` | 0.97, 0.35, 0.42 | `Fiesta` |
-| 0, 0.6, 0.6 | `Teal` | | |
+| 0, 0.6, 0.6 | `Teal` | 0.73, 0.73, 0.73 | `LightGray` |
+| 0.48, 0.73, 0.85 | `GridBlue` | 1, 0.6, 0.6 | `Peach` |
+| 0.6, 0, 0.2 | `Burgundy` | | |
 
 Evidence: in the layers and pages of the trustworthy pairs every colour
 object with these components has this name (1,107 layers and pages; from
-491 `LightBlue` down to 1 `Teal`). Two other colours occur, 1, 0.4863,
+491 `LightBlue` down to 1 `Teal`). The last four are from the guide,
+grid and pasteboard colours of the preferences (`preferences.md`), where
+every colour with these components has this name. Two other colours occur, 1, 0.4863,
 0.651 (3 layers) and 0.9412 three times (1 layer); IDML writes them as
 the lists 255, 124, 166 and 240, 240, 240, the components times 255.
 The converter writes such a list for a colour whose components are whole

@@ -171,7 +171,11 @@ Chunk 0x28BE (14 bytes, 16 from InDesign 18), u8 flags: 4
 620 files with the chunk (283 of 283 for the last). The 34 files without
 it have `SmartTextReflow="false"` and `LimitToMasterTextFrames="true"`.
 
-Chunk 0x3768 (4 bytes), u8 at 2: `ZOrderTextWrap`; 654 of 654.
+Chunk 0x3768 (4 or 6 bytes): u8 at 0 `AbutTextToTextWrap`, u8 at 2
+`ZOrderTextWrap`, and in 6-byte chunks u8 at 4
+`HonourTextIndentsWithTextWrap` (IDML has it only for those). Evidence:
+`ZOrderTextWrap` 654 of 654; the other two 489 of 489 and 139 of 139
+trustworthy pairs.
 
 ## Margins and columns of new pages (`MarginPreference`)
 
@@ -486,3 +490,56 @@ Without the chunk (469 of 469):
 - `Version` is `Epub2` for INDD files up to version 18.0 and `Epub3`
   from 18.1 (the 5 DOM 18.0 pairs whose INDD is 18.0 have `Epub2`, the
   13 whose INDD is 18.1 to 18.4 have `Epub3`).
+
+## Default styles, grids and other settings
+
+Chunks of the preferences object, trustworthy pairs. A colour is the UID
+of an interface colour (`objects.md`, interface colours).
+
+**Default styles.** Each chunk is a list of u32 UIDs; the third is the
+default:
+
+| Chunk | u32 at 8 | u32 at 12 | u32 at 16 |
+|---|---|---|---|
+| 0x28D4 (12 bytes) | `TextDefault` `AppliedParagraphStyle` | | |
+| 0x28D5 (12 bytes) | `TextDefault` `AppliedCharacterStyle` | | |
+| 0x1B959 (20 bytes) | `PageItemDefault` `AppliedGraphicObjectStyle` | `AppliedTextObjectStyle` | `AppliedGridObjectStyle` |
+
+The first two UIDs are the root style and the root style group. The
+reference is written as other style references; UID 0 is the root
+style. Evidence: every pair has the three chunks. Paragraph 487 of 489
+(the other two name another style in IDML; not explained), character
+489 of 489, graphic and text object styles 489 of 489.
+
+**Layout and story grids.** Chunks 0xCD2F (`LayoutGridDataInformation`)
+and 0xCD2E (`StoryGridDataInformation`) start as page chunk 0xCD02
+(`objects.md`): u32 font family UID (`AppliedFont`), a flag byte and the
+font style (`FontStyle`), five f64 (`PointSize`, `CharacterAki`,
+`LineAki`, and `HorizontalScale` and `VerticalScale` as fractions of
+100 %), four u32 codes. Chunk 0xCD2E continues with u32 0 and f64
+`CharacterCountSize`. Evidence: every pair has both chunks; all values
+match in 489 of 489 but `AppliedFont` (488: one family that IDML names
+in another form, `fonts.md`).
+
+**Single settings.**
+
+| Chunk | Layout | IDML | Without the chunk | Evidence |
+|---|---|---|---|---|
+| 0x59C | u16 1 | `DocumentPreference` `MasterTextFrame`, `CreatePrimaryTextFrame` (DOM 8 on) `true` | `false` | 14 with, 475 without; 489 of 489 |
+| 0x1081F | u32: 2 `RGB`, 3 `CMYK` | `TransparencyPreference` `BlendingSpace` | `CMYK` | 62 of 62; 427 of 427 |
+| 0x5A6 | u16: 1 `true`, 0 `false` | `DocumentPreference` `AllowPageShuffle` | (in every file) | 489 of 489 |
+| 0x568 | u16 | `GuidePreference` `GuidesShown` | `true` | 114 of 114; 375 of 375 |
+| 0x55A | u8 at 0, u8 at 2 | `GuidePreference` `GuidesSnapto`, `GridPreference` `DocumentGridSnapto` | `true`, `false` | 26 of 26; 463 of 463 |
+| 0x53F (22 bytes) | u8 at 0; colour at 18 | `GuidePreference` `GuidesInBack`, `RulerGuidesColor` | (in every file) | 489 of 489 |
+| 0x55F | colour at 30; u8 at 34: 0 `TopOfPageOfBaselineGridRelativeOption`, 1 `TopOfMarginOfBaselineGridRelativeOption` | `GridPreference` `BaselineColor`, `BaselineGridRelativeOption` | (in every file) | 489 of 489 |
+| 0x545 | colour at 32 | `GridPreference` `GridColor` | `LightGray` | 14 of 14; 475 of 475 |
+| 0x550 | colour at 36 | `DocumentPreference` `MarginGuideColor` | `Magenta` | 388 of 388; 101 of 101 |
+| 0x555 | colour at 18 | `DocumentPreference` `ColumnGuideColor` | (observed value) | 72 of 72 |
+| 0x5D2 | colours at 20, 24, 28 | `PasteboardPreference` `BleedGuideColor`, `SlugGuideColor`, `PreviewBackgroundColor` | `Fiesta`, `GridBlue`, `LightGray` | 80 of 80; 409 of 409 |
+| 0x54A (18 bytes) | f64 at 0, f64 at 8 | `Document` `ZeroPoint` | `0 0` | 46 of 46; 443 of 443 |
+| 0x7006 (20 bytes) | u8 at 0; f64 at 12 | `LayoutAdjustmentPreference` `EnableLayoutAdjustment`, `SnapZone` | `false` (observed), `SnapZone` not written | 24 of 24 |
+| 0xCA0B | u16 1 | `ViewPreference` `ShowTextThreads` `true`, INDD version 21.1 on | `false` | IDML has the attribute only from version 21.1: 26 of 26 (28 of 28 in all pairs) |
+
+Without chunk 0x555, `ColumnGuideColor` keeps its observed value, which
+4 of the 417 pairs without the chunk contradict. Without chunk 0x7006,
+`SnapZone` varies and is not written.

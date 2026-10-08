@@ -26,6 +26,8 @@ pub(super) const PREFERENCE_TAGS: &[&str] = &[
     "ChapterNumberPreference",
     "DictionaryPreference",
     "EPubExportPreference",
+    "TransparencyPreference",
+    "LayoutAdjustmentPreference",
 ];
 
 /// A tree of preference values as a `Node`.
@@ -761,6 +763,74 @@ impl Writer<'_> {
                     children: props.iter().map(prop_node).collect(),
                     ..Node::default()
                 });
+            }
+        }
+        // Default styles (preferences.md, default styles).
+        for (uid, paragraph, name) in [
+            (prefs.default_styles[0], true, "AppliedParagraphStyle"),
+            (prefs.default_styles[1], false, "AppliedCharacterStyle"),
+        ] {
+            let value = match uid {
+                Some(u)
+                    if self
+                        .doc
+                        .styles
+                        .get(&u)
+                        .is_some_and(|s| s.paragraph == paragraph) =>
+                {
+                    Some(self.style_ref(Some(u), paragraph))
+                }
+                Some(0) if paragraph => Some("ParagraphStyle/$ID/[No paragraph style]".into()),
+                Some(0) => Some("CharacterStyle/$ID/[No character style]".into()),
+                _ => None,
+            };
+            if let Some(v) = value {
+                let i = ours_of(&mut ours, "TextDefault");
+                ours[i].attrs.push((name.into(), v));
+            }
+        }
+        if let Some(uids) = prefs.default_object_styles {
+            for (u, name) in uids.into_iter().zip([
+                "AppliedGraphicObjectStyle",
+                "AppliedTextObjectStyle",
+                "AppliedGridObjectStyle",
+            ]) {
+                if let Some(r) = self.object_style_ref(u) {
+                    let i = ours_of(&mut ours, "PageItemDefault");
+                    ours[i].attrs.push((name.into(), r));
+                }
+            }
+        }
+        for (tag, g, count) in &prefs.grids {
+            let i = ours_of(&mut ours, tag);
+            let n = &mut ours[i];
+            n.attrs.push(("FontStyle".into(), g.font_style.clone()));
+            let [size, character_aki, line_aki, h_scale, v_scale] = g.numbers;
+            for (name, v) in [
+                ("PointSize", size),
+                ("CharacterAki", character_aki),
+                ("LineAki", line_aki),
+                ("HorizontalScale", h_scale * 100.0),
+                ("VerticalScale", v_scale * 100.0),
+            ] {
+                n.attrs.push((name.into(), num(v)));
+            }
+            if let Some(c) = count {
+                n.attrs.push(("CharacterCountSize".into(), num(*c)));
+            }
+            if let Some(f) = self.doc.fonts.get(&g.font) {
+                let p = prop_node(&("AppliedFont", "string", self.family_names(f).0.into()));
+                match n.children.iter_mut().find(|c| c.tag == "Properties") {
+                    Some(props) => props.children.push(p),
+                    None => n.children.insert(
+                        0,
+                        Node {
+                            tag: "Properties".into(),
+                            children: vec![p],
+                            ..Node::default()
+                        },
+                    ),
+                }
             }
         }
         if let Some(o) = &prefs.index_options {
