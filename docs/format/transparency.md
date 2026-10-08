@@ -70,6 +70,32 @@ writes are not explained.
 | 0x1EB91 | `GradientFeatherSetting/HiliteAngle` | f64 | 1 item (−62.2) |
 | 0x1EB92 | `GradientFeatherSetting/HiliteLength` | f64 | 1 item (1) |
 
+More IDs, found over the 489 trustworthy pairs before 2026-10 by
+matching the item's attribute list with the IDML value after resolving
+the value through the object style, `BasedOn` and
+`TransparencyDefaultContainerObject` (each ID is the only one whose
+value maps one to one onto the IDML value in all rows):
+
+| ID | IDML | Encoding | Items |
+|---|---|---|---|
+| 0x10819 | `BlendingSetting/IsolateBlending` | u16: 1 true | 46 of 46 |
+| 0x10857 | `OuterGlowSetting/Applied` | u16: 1 true | 157 of 157 |
+| 0x10858 | `OuterGlowSetting/BlendMode` | i32 code (below; 0, 1, 3, 9 seen) | 79 of 79 |
+| 0x10859 | `OuterGlowSetting/Opacity` | f64 | 144 of 144 |
+| 0x1085B | `OuterGlowSetting/EffectColor` | swatch UID | 73 of 73 |
+| 0x1085D | `OuterGlowSetting/Spread` | f64 | 106 of 106 |
+| 0x1085E | `OuterGlowSetting/Size` | f64 | 172 of 172 |
+| 0x1085F | `InnerGlowSetting/Applied` | u16 | 6 of 6 |
+| 0x10860 | `InnerGlowSetting/BlendMode` | i32 code (0, 1 seen) | 10 of 10 |
+| 0x10866 | `InnerGlowSetting/Size` | f64 | 10 of 10 |
+| 0x108D8 | `FillTransparencySetting/BlendingSetting/Opacity` | f64 | 6 of 6 (100, 40) |
+
+IDML writes `OuterGlowSetting` and `InnerGlowSetting` after
+`InnerShadowSetting`, as the schema lists them. Not identified: the
+inner glow's `Opacity`, `Spread` and `EffectColor`, the outer glow's
+`Noise`, and drop shadow `KnockedOut` (497 items of one 8.0 document,
+`true` in all, no local ID varies).
+
 All items whose value is not on the IDML item (it comes from the style
 or the default) match as well: for example 743 items for
 `InnerShadowSetting` and the gradient feather attributes, with the
@@ -85,11 +111,17 @@ The converter leaves out any value of the attributes above that is
 outside the schema's range, with a warning: sizes and distances 0–1000,
 opacity 0–100, angles −180–180.
 
-**Blend mode codes.** 1 `Multiply` (3 items), 3 `Overlay` (62),
-9 `Lighten` (5); 0 `Normal` in all 576 object styles, whose IDML blend mode
-is `Normal`. These codes are the positions of the values in the IDML
-schema's `BlendMode` enumeration, but no other code occurs in the corpus,
-so the converter writes only these four.
+**Blend mode codes.** The code is the position of the value in the IDML
+schema's `BlendMode` enumeration (`Normal`, `Multiply`, `Screen`,
+`Overlay`, `SoftLight`, `HardLight`, `ColorDodge`, `ColorBurn`,
+`Darken`, `Lighten`, `Difference`, `Exclusion`, `Hue`, `Saturation`,
+`Color`, `Luminosity`, from 0). Seen: 1 `Multiply` (3 items), 3
+`Overlay` (62), 9 `Lighten` (5), and 0 `Normal` in all 576 object
+styles, whose IDML blend mode is `Normal`; over the 489 trustworthy
+pairs before 2026-10 also 2
+`Screen` (7 items), 4 `SoftLight` (10), 5 `HardLight` (12), 7
+`ColorBurn` (3), 14 `Color` (3) and 15 `Luminosity` (7), 42 of 42. The
+converter writes all sixteen positions.
 
 **Inner shadow colour.** The 10 items with the effect applied name the
 swatch that IDML writes as `EffectColor`. Items without the effect store

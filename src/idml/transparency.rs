@@ -6,12 +6,25 @@ use super::xml::Xml;
 use super::{Writer, num};
 use crate::model::{Attrs, Value};
 
-/// Blend mode codes seen in the corpus.
+/// Blend mode codes: the index in the schema's `BlendMode` enumeration
+/// (`docs/format/transparency.md`, blend mode codes).
 const BLEND_MODES: &[(u32, &str)] = &[
     (0, "Normal"),
     (1, "Multiply"),
+    (2, "Screen"),
     (3, "Overlay"),
+    (4, "SoftLight"),
+    (5, "HardLight"),
+    (6, "ColorDodge"),
+    (7, "ColorBurn"),
+    (8, "Darken"),
     (9, "Lighten"),
+    (10, "Difference"),
+    (11, "Exclusion"),
+    (12, "Hue"),
+    (13, "Saturation"),
+    (14, "Color"),
+    (15, "Luminosity"),
 ];
 
 /// Transparency elements on a page item, in the order the schema lists them.
@@ -26,6 +39,8 @@ const EFFECTS: &[&str] = &[
     "BlendingSetting",
     "DropShadowSetting",
     "InnerShadowSetting",
+    "OuterGlowSetting",
+    "InnerGlowSetting",
     "GradientFeatherSetting",
 ];
 
@@ -45,6 +60,13 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         "BlendingSetting",
         "Opacity",
         Kind::Range(0.0, 100.0),
+    ),
+    (
+        0x10819,
+        "TransparencySetting",
+        "BlendingSetting",
+        "IsolateBlending",
+        Kind::Bool,
     ),
     (
         0x1081A,
@@ -85,6 +107,69 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         0x10855,
         "TransparencySetting",
         "InnerShadowSetting",
+        "Size",
+        Kind::Range(0.0, 1000.0),
+    ),
+    (
+        0x10857,
+        "TransparencySetting",
+        "OuterGlowSetting",
+        "Applied",
+        Kind::Bool,
+    ),
+    (
+        0x10858,
+        "TransparencySetting",
+        "OuterGlowSetting",
+        "BlendMode",
+        Kind::Enum(BLEND_MODES),
+    ),
+    (
+        0x10859,
+        "TransparencySetting",
+        "OuterGlowSetting",
+        "Opacity",
+        Kind::Range(0.0, 100.0),
+    ),
+    (
+        0x1085B,
+        "TransparencySetting",
+        "OuterGlowSetting",
+        "EffectColor",
+        Kind::Swatch,
+    ),
+    (
+        0x1085D,
+        "TransparencySetting",
+        "OuterGlowSetting",
+        "Spread",
+        Kind::Range(0.0, 100.0),
+    ),
+    (
+        0x1085E,
+        "TransparencySetting",
+        "OuterGlowSetting",
+        "Size",
+        Kind::Range(0.0, 1000.0),
+    ),
+    (
+        0x1085F,
+        "TransparencySetting",
+        "InnerGlowSetting",
+        "Applied",
+        Kind::Bool,
+    ),
+    (
+        0x10860,
+        "TransparencySetting",
+        "InnerGlowSetting",
+        "BlendMode",
+        Kind::Enum(BLEND_MODES),
+    ),
+    (
+        0x10866,
+        "TransparencySetting",
+        "InnerGlowSetting",
         "Size",
         Kind::Range(0.0, 1000.0),
     ),
@@ -159,6 +244,13 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         Kind::Point,
     ),
     (
+        0x108D8,
+        "FillTransparencySetting",
+        "BlendingSetting",
+        "Opacity",
+        Kind::Range(0.0, 100.0),
+    ),
+    (
         0x1EB9C,
         "FillTransparencySetting",
         "GradientFeatherSetting",
@@ -195,8 +287,9 @@ const STOPS: &[(u32, &str)] = &[
     (0x1EB9E, "FillTransparencySetting"),
 ];
 
-/// Applied flag of an effect whose colour is written only when applied.
-const INNER_SHADOW_APPLIED: u32 = 0x1084D;
+/// The applied flag of each effect whose colour is written only when the
+/// effect is applied.
+const COLOR_APPLIED: &[(&str, u32)] = &[("InnerShadowSetting", 0x1084D)];
 
 /// An effect element: name, attributes and opacity stops.
 type Effect = (&'static str, Vec<(&'static str, String)>, Vec<Stop>);
@@ -250,7 +343,6 @@ pub(super) fn write(
     item: &str,
 ) -> Vec<(&'static str, &'static str, f64)> {
     let mut left_out = Vec::new();
-    let inner_shadow_applied = attrs.get(INNER_SHADOW_APPLIED).and_then(Value::as_u32) == Some(1);
     for &setting in SETTINGS {
         let mut effects: Vec<Effect> = Vec::new();
         for &effect in EFFECTS {
@@ -259,7 +351,10 @@ pub(super) fn write(
                 if s != setting || e != effect {
                     continue;
                 }
-                if matches!(kind, Kind::Swatch) && !inner_shadow_applied {
+                if matches!(kind, Kind::Swatch)
+                    && let Some(&(_, applied)) = COLOR_APPLIED.iter().find(|(e, _)| *e == effect)
+                    && attrs.get(applied).and_then(Value::as_u32) != Some(1)
+                {
                     continue;
                 }
                 let Some(v) = attrs.get(id) else { continue };
