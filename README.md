@@ -72,7 +72,7 @@ the same package as a native build (`tools/check_wasm.sh`).
 | Versions | Distinct samples | State |
 |---|---:|---|
 | InDesign 1.x | 8 | Not supported (different container); reported as such. |
-| InDesign 3.0 and 4.0 | 67 | Convert. Some object layouts differ from later versions ([`big-endian.md`](docs/format/big-endian.md)). Document preferences, object style text frame settings, the composite font (3.0) and the page number style (3.0) are left out with warnings. |
+| InDesign 3.0 and 4.0 | 67 | Convert. Some object layouts differ from later versions ([`big-endian.md`](docs/format/big-endian.md)). Document preferences, object style text frame settings, and the page number style (3.0) are left out with warnings. |
 | InDesign 5.0 and 6.0 | 181 | Convert. Document preferences are left out with a warning. |
 | InDesign 7.0–7.5 | 566 | Convert. Document preferences are left out with a warning. |
 | InDesign 8.0–21.6 | 3,438 | Convert. Tables from 9.2 are not read. |
@@ -88,7 +88,7 @@ Each area below links to the document that holds the evidence.
 |---|---|
 | Document structure | Spreads, master spreads, layers, sections (start, length, continued numbering, Arabic and lower-case Roman page numbers), the story list. [`objects.md`](docs/format/objects.md) |
 | Pages and masters | Page bounds, transforms, applied master, margins and columns, page names, ruler guides, master names and prefixes. [`objects.md`](docs/format/objects.md) |
-| Page items and graphics | Text frames (with threading), rectangles, ovals, polygons, graphic lines and groups: transforms, paths, fill and stroke, corners, applied object style, text wrap, frame fitting, anchored objects. Placed images, PDF, EPS and SVG with their bounds, clipping path settings and links; graphics pasted without a link keep their data. Transparency: blending, drop shadow, inner shadow and gradient feather where the samples tell the attributes apart. [`objects.md`](docs/format/objects.md), [`attributes.md`](docs/format/attributes.md), [`transparency.md`](docs/format/transparency.md) |
+| Page items and graphics | Text frames (with threading), rectangles, ovals, polygons, graphic lines and groups: transforms, paths, fill and stroke, corners, applied object style, text wrap, frame fitting, anchored objects, text on a path. EPS text. Placed images, PDF, EPS, SVG and InDesign pages with their bounds, clipping path settings and links; graphics pasted without a link keep their data. Transparency: blending, drop shadow, inner shadow, outer and inner glow and gradient feather where the samples tell the attributes apart. [`objects.md`](docs/format/objects.md), [`attributes.md`](docs/format/attributes.md), [`transparency.md`](docs/format/transparency.md) |
 | Text and typography | Story text, paragraph and character ranges with their local formatting (about 200 text attributes, among them font, size, leading, tracking, indents, spacing, hyphenation, keeps, tabs, rules, underline and strikethrough, shading, borders, bullets and numbering lists, nested styles, span columns, directions, OpenType and CJK settings, languages), story settings, text frame settings, text variables and their instances, footnotes and endnotes with their options, notes, tracked changes, ruby, tate-chu-yoko. [`attributes.md`](docs/format/attributes.md), [`text-variables.md`](docs/format/text-variables.md) |
 | Styles | Paragraph, character, object, cell and table styles, with style groups, `BasedOn` and `NextStyle`. [`objects.md`](docs/format/objects.md), [`tables.md`](docs/format/tables.md) |
 | Colours and swatches | Process, spot and registration colours, tints, gradients, inks, colour groups, the `None` swatch. [`objects.md`](docs/format/objects.md) |
@@ -117,22 +117,23 @@ Reasons:
 | Kenten, warichu | Not in public samples |
 | XML attributes, comments, processing instructions, DTDs; XML elements that cross paragraphs | Not in public samples (left out with a warning) |
 | Hyperlink sources that cross a style range | Not in public samples with an IDML (left out with a warning) |
-| Most transparency effects (glows, bevel, satin, feathers other than gradient), drop shadow offsets | Not provable |
+| Most transparency effects (bevel, satin, feathers other than gradient, some glow values), drop shadow offsets | Not provable |
 | Which table border attribute is which side (all four sides are equal in every sample) | Not provable |
 | Font `Status`, variable font design axes | Not provable (`Status` depends on the exporting machine) |
 | Many attributes with one value in nearly every sample (`Visible`, `Locked`, `Name` of page items, …) | Not provable |
 | Tables from InDesign 9.2 | Not started (different layout) |
 | Document preferences from InDesign 3.0–7.5, object style text frame settings from 4.0 | Not started (different layouts) |
 | Transparency of placed graphics and object styles | Not started |
-| Index title and separators without stored index options; `BitmapPrinting` of the print settings | Not provable (they follow the exporting application or computer) |
-| Text on a path, QR codes | Not started |
+| Index title in languages other than Japanese or Chinese without stored index options, endnote title without stored endnote options; `BitmapPrinting` of the print settings | Not provable (they follow the exporting application or computer) |
+| QR codes | Not started |
 
 ## How fidelity is measured
 
 The local test corpus holds INDD and INDT files made by other people for
-other purposes. It is not redistributed. 654 distinct files come with an
+other purposes. It is not redistributed; its openly licensed part can be
+downloaded with `tools/fetch_corpus.py`. 803 distinct files come with an
 IDML that InDesign exported from the same document at the same major
-version. In 489 of these pairs the IDML shows the same save as the INDD
+version. In 606 of these pairs the IDML shows the same save as the INDD
 (trustworthy pairs); the others were saved again after the export
 ([`docs/measurement.md`](docs/measurement.md)).
 
@@ -156,17 +157,18 @@ privately held samples:
 
 | Measure | Result |
 |---|---|
-| Conversion failures | 0 of 654 paired files; 22 of 3,618 other files (11 not INDD files, 8 InDesign 1.x files, 2 truncated, 1 without an object database) |
+| Conversion failures | 0 of 803 paired files; 0 of 3,656 other files |
+| Rejected files | 0 of 803 paired files; 22 of 3,656 other files (11 not INDD files, 8 InDesign 1.x files, 2 truncated, 1 without an object database) |
 | Schema validation failures | 0 paired files, 11 other files |
-| Value coverage, trustworthy pairs | 98.03 % (11,404,231 of 11,632,968 values) |
-| Value coverage, all pairs | 96.13 % |
-| Story text, trustworthy pairs | 18,602 of 18,610 stories exact, 8 differ, 0 missing |
+| Value coverage, trustworthy pairs | 98.07 % (12,049,823 of 12,287,557 values) |
+| Value coverage, all pairs | 96.21 % |
+| Story text, trustworthy pairs | 19,416 of 19,424 stories exact, 8 differ, 0 missing |
 <!-- numbers:end -->
 
 
 The biggest remaining gaps are elements the converter does not write
 yet (hyperlinks in some documents, page references, footnote options of
-text frames, EPS text, graphic layers) and attributes that have one value
+text frames, graphic layers) and attributes that have one value
 in nearly every sample, so that their INDD fields cannot be located.
 `compare.py` lists them, and writes per-key tables to `target/compare/`.
 
