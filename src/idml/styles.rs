@@ -119,7 +119,7 @@ impl Writer<'_> {
             a.extend(self.cell_style_edge_attrs(&s.attrs));
             a
         } else {
-            self.table_attrs(&s.attrs)
+            self.table_attrs(&s.attrs, true)
         };
         for (k, v) in attrs {
             x.attr(k, v);
@@ -128,14 +128,25 @@ impl Writer<'_> {
         if let Some(n) = values::element(tag, self.doc.version.major) {
             x.attrs_missing(n.attrs.iter());
         }
-        if tag == "CellStyle"
-            && let Some(p) = s
+        if tag == "CellStyle" {
+            // A style without its own paragraph style has none, whatever
+            // its based-on style has (tables.md).
+            match s
                 .attrs
                 .get(CELL_STYLE_PARAGRAPH_STYLE)
                 .and_then(Value::as_u32)
-            && self.doc.styles.contains_key(&p)
-        {
-            x.attr("AppliedParagraphStyle", self.style_ref(Some(p), true));
+            {
+                Some(p) if self.doc.styles.contains_key(&p) => {
+                    x.attr("AppliedParagraphStyle", self.style_ref(Some(p), true));
+                }
+                Some(_) => {}
+                None => {
+                    x.attr(
+                        "AppliedParagraphStyle",
+                        "ParagraphStyle/$ID/[No paragraph style]",
+                    );
+                }
+            }
         }
         if let Some(base) = s.based_on.and_then(|b| styles.get(&b)) {
             // A root style is written as a string.
@@ -149,7 +160,10 @@ impl Writer<'_> {
         x.end();
     }
 
-    /// A root cell or table style, from observed values only.
+    /// A root cell or table style. The root table style takes the values
+    /// of its attribute list where the observed root values have the
+    /// attribute, and from DOM 11 its text and graphic cell values
+    /// (tables.md).
     pub(super) fn root_table_style(&self, x: &mut Xml, tag: &str, name: &str) {
         let (attrs, props, children) = self.root_values(tag, &[], &[]);
         x.start(tag)
@@ -157,6 +171,27 @@ impl Writer<'_> {
             .attr("Name", builtin_key(name));
         for (k, v) in &attrs {
             x.attr(k, v);
+        }
+        let root = self
+            .doc
+            .table_styles
+            .values()
+            .find(|s| s.builtin && s.based_on.is_none() && s.name == name);
+        if tag == "TableStyle"
+            && let Some(root) = root
+        {
+            for (k, v) in self.table_attrs(&root.attrs, true) {
+                if attrs.iter().any(|(a, _)| a == k) {
+                    x.attr(k, v);
+                }
+            }
+            if self.doc.version.major >= 11 {
+                for &(id, k, kind) in TEXT_CELL_ATTRS.iter().chain(GRAPHIC_CELL_ATTRS) {
+                    if let Some(v) = root.attrs.get(id).and_then(|v| self.value_text(kind, v)) {
+                        x.attr(k, v);
+                    }
+                }
+            }
         }
         Self::properties_with(x, &[], &props);
         for c in &children {

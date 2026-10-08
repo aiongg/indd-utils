@@ -716,23 +716,164 @@ pub(super) const CELL_STYLE_EDGE: [usize; 4] = [2, 3, 1, 0];
 pub(super) const TABLE_ATTRS: &[(u32, &str, Kind)] = &[
     (0xB662, "SpaceBefore", Kind::Number),
     (0xB663, "SpaceAfter", Kind::Number),
+    (0xB686, "StartRowStrokeCount", Kind::Integer),
+    (0xB687, "EndRowStrokeCount", Kind::Integer),
+    (0xB68C, "StartColumnStrokeCount", Kind::Integer),
+    (0xB68D, "EndColumnStrokeCount", Kind::Integer),
+    (0xB67D, "StartRowFillCount", Kind::Integer),
+    (0xB67E, "EndRowFillCount", Kind::Integer),
     (0xB684, "StartRowStrokeColor", Kind::Swatch),
+    (0xB685, "EndRowStrokeColor", Kind::Swatch),
+    (0xB68A, "StartColumnStrokeColor", Kind::Swatch),
+    (0xB68B, "EndColumnStrokeColor", Kind::Swatch),
     (0xB690, "StartRowStrokeWeight", Kind::Number),
+    (0xB691, "EndRowStrokeWeight", Kind::Number),
+    (0xB692, "StartColumnStrokeWeight", Kind::Number),
+    (0xB693, "EndColumnStrokeWeight", Kind::Number),
     (0xB688, "StartRowStrokeType", Kind::StrokeType),
+    (0xB689, "EndRowStrokeType", Kind::StrokeType),
+    (0xB6B4, "StartRowStrokeTint", Kind::Number),
+    (0xB6B5, "EndRowStrokeTint", Kind::Number),
+    (0xB6B6, "StartColumnStrokeTint", Kind::Number),
+    (0xB6B7, "EndColumnStrokeTint", Kind::Number),
     (0xB683, "ColumnFillsPriority", Kind::Enum(&[(0, "false")])),
     (0xB67B, "StartRowFillColor", Kind::Swatch),
-    (0xB6B0, "StartRowFillTint", Kind::Number),
     (0xB67C, "EndRowFillColor", Kind::Swatch),
+    (0xB67F, "StartColumnFillColor", Kind::Swatch),
+    (0xB680, "EndColumnFillColor", Kind::Swatch),
+    (0xB6B0, "StartRowFillTint", Kind::Number),
     (0xB6B1, "EndRowFillTint", Kind::Number),
+    (0xB6B2, "StartColumnFillTint", Kind::Number),
+    (0xB6B3, "EndColumnFillTint", Kind::Number),
+    (0xB695, "SkipFirstAlternatingFillRows", Kind::Integer),
+    (0xB6E2, "SkipFirstAlternatingStrokeRows", Kind::Integer),
+];
+
+/// The graphic cell values of tables and table styles.
+pub(super) const GRAPHIC_CELL_ATTRS: &[(u32, &str, Kind)] = &[
+    (0x10470, "GraphicLeftInset", Kind::Number),
+    (0x10471, "GraphicTopInset", Kind::Number),
+    (0x10472, "GraphicRightInset", Kind::Number),
+    (0x10473, "GraphicBottomInset", Kind::Number),
+    (
+        0x10478,
+        "ClipContentToGraphicCell",
+        Kind::Enum(&[(0, "false")]),
+    ),
+];
+
+/// Attributes of tables that table styles do not have (the IDML schema
+/// has none of them on `TableStyle`).
+pub(super) const TABLE_ONLY_ATTRS: &[(u32, &str, Kind)] = &[
+    (0xB62B, "LeftInset", Kind::Number),
+    (0xB62C, "TopInset", Kind::Number),
+    (0xB62D, "RightInset", Kind::Number),
+    (0xB62E, "BottomInset", Kind::Number),
+    (0x10408, "BreakHeaders", Kind::Enum(&[(2, "OncePerPage")])),
+];
+
+/// Attributes of table styles that tables do not have: the region cell
+/// styles and flags.
+pub(super) const TABLE_STYLE_ONLY_ATTRS: &[(u32, &str, Kind)] = &[
+    (0x10450, "HeaderRegionCellStyle", Kind::CellStyle),
+    (0x10451, "FooterRegionCellStyle", Kind::CellStyle),
+    (0x10452, "BodyRegionCellStyle", Kind::CellStyle),
+    (0x10453, "LeftColumnRegionCellStyle", Kind::CellStyle),
+    (0x10454, "RightColumnRegionCellStyle", Kind::CellStyle),
     (
         0x10457,
         "HeaderRegionSameAsBodyRegion",
         Kind::Enum(&[(0, "false"), (1, "true")]),
     ),
-    (0x10450, "HeaderRegionCellStyle", Kind::CellStyle),
-    (0x10452, "BodyRegionCellStyle", Kind::CellStyle),
-    (0x10453, "LeftColumnRegionCellStyle", Kind::CellStyle),
-    (0x10454, "RightColumnRegionCellStyle", Kind::CellStyle),
+    (
+        0x10458,
+        "FooterRegionSameAsBodyRegion",
+        Kind::Enum(&[(0, "false"), (1, "true")]),
+    ),
+    (
+        0x10459,
+        "LeftColumnRegionSameAsBodyRegion",
+        Kind::Enum(&[(0, "false"), (1, "true")]),
+    ),
+    (
+        0x1045A,
+        "RightColumnRegionSameAsBodyRegion",
+        Kind::Enum(&[(0, "false"), (1, "true")]),
+    ),
+];
+
+/// Table attribute groups whose IDs always have the same value in the
+/// samples, so which ID is which attribute is not known: written only
+/// when every ID is present with the same value. IDs, IDML attributes,
+/// kind, and whether only tables (not table styles) have them.
+pub(super) const TABLE_GROUPS: &[(&[u32], &[&str], Kind, bool)] = &[
+    (
+        &[0xB653, 0xB656, 0xB659, 0xB65C],
+        &[
+            "TopBorderStrokeWeight",
+            "LeftBorderStrokeWeight",
+            "BottomBorderStrokeWeight",
+            "RightBorderStrokeWeight",
+        ],
+        Kind::Number,
+        false,
+    ),
+    (
+        &[0xB654, 0xB657, 0xB65A, 0xB65D],
+        &[
+            "TopBorderStrokeColor",
+            "LeftBorderStrokeColor",
+            "BottomBorderStrokeColor",
+            "RightBorderStrokeColor",
+        ],
+        Kind::Swatch,
+        false,
+    ),
+    (
+        &[0xB655, 0xB658, 0xB65B, 0xB65E],
+        &[
+            "TopBorderStrokeType",
+            "LeftBorderStrokeType",
+            "BottomBorderStrokeType",
+            "RightBorderStrokeType",
+        ],
+        Kind::StrokeType,
+        false,
+    ),
+    (
+        &[0xB6AC, 0xB6AD, 0xB6AE, 0xB6AF],
+        &[
+            "TopBorderStrokeTint",
+            "LeftBorderStrokeTint",
+            "BottomBorderStrokeTint",
+            "RightBorderStrokeTint",
+        ],
+        Kind::Number,
+        false,
+    ),
+    (
+        &[0x10429, 0x1042A, 0x1042B, 0x1042C],
+        &[
+            "TopBorderStrokeGapColor",
+            "LeftBorderStrokeGapColor",
+            "BottomBorderStrokeGapColor",
+            "RightBorderStrokeGapColor",
+        ],
+        Kind::Swatch,
+        false,
+    ),
+    (
+        &[0xB68E, 0xB68F],
+        &["StartColumnStrokeType", "EndColumnLineStyle"],
+        Kind::StrokeType,
+        false,
+    ),
+    (
+        &[0x1040A, 0x1040B],
+        &["SkipFirstHeader", "SkipLastFooter"],
+        Kind::Enum(&[(1, "true")]),
+        true,
+    ),
 ];
 
 /// The text cell values of tables, rows, columns and cells: ID, IDML
@@ -885,9 +1026,36 @@ impl Writer<'_> {
         self.attr_values(attrs, ITEM_ATTRS)
     }
 
-    /// IDML attributes of a table or table style attribute list.
-    pub(super) fn table_attrs(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
-        self.attr_values(attrs, TABLE_ATTRS)
+    /// IDML attributes of a table or (`style`) table style attribute
+    /// list.
+    pub(super) fn table_attrs(&self, attrs: &Attrs, style: bool) -> Vec<(&'static str, String)> {
+        let mut out = self.attr_values(attrs, TABLE_ATTRS);
+        out.extend(self.attr_values(attrs, GRAPHIC_CELL_ATTRS));
+        out.extend(self.attr_values(
+            attrs,
+            if style {
+                TABLE_STYLE_ONLY_ATTRS
+            } else {
+                TABLE_ONLY_ATTRS
+            },
+        ));
+        for &(ids, names, kind, table_only) in TABLE_GROUPS {
+            if style && table_only {
+                continue;
+            }
+            let Some(first) = attrs.get(ids[0]) else {
+                continue;
+            };
+            if !ids[1..].iter().all(|&id| attrs.get(id) == Some(first)) {
+                continue;
+            }
+            match self.value_text(kind, first) {
+                Some(t) => out.extend(names.iter().map(|&n| (n, t.clone()))),
+                None if kind.is_code() => attrs.unknown_code(ids[0], first),
+                None => {}
+            }
+        }
+        out
     }
 
     /// IDML attributes of a cell attribute set other than its edges.

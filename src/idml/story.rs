@@ -367,7 +367,7 @@ impl Writer<'_> {
                 "LeftToRightDirection"
             },
         );
-        for (name, v) in self.table_attrs(&t.attrs) {
+        for (name, v) in self.table_attrs(&t.attrs, false) {
             x.attr(name, v);
         }
         for (name, v) in self.text_cell_values(|a| t.value(a, &styles)) {

@@ -320,7 +320,10 @@ fn text_layout(id: u32) -> Option<Layout> {
         0x1B75 => Layout::NestedStyles,
         0x1BBA | 0x1BBB => Layout::StyleList,
         0x1A406 => Layout::BulletChar,
-        0xB64D | 0xB64E | 0xB64F | 0xB650 | 0xB688 => Layout::Words,
+        // Stroke types of cell edges, table borders, rows and columns
+        // (tables.md).
+        0xB64D | 0xB64E | 0xB64F | 0xB650 | 0xB655 | 0xB658 | 0xB65B | 0xB65E | 0xB688 | 0xB689
+        | 0xB68E | 0xB68F => Layout::Words,
         _ => return None,
     })
 }

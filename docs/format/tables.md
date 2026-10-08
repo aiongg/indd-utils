@@ -345,7 +345,11 @@ object reference (one table style).
 
 Cell styles use the cell attribute IDs above, except the edges.
 Attribute 0x10463 is the paragraph style UID (`AppliedParagraphStyle`,
-4 of 4 styles that have it).
+4 of 4 styles that have it). A style without 0x10463 has
+`AppliedParagraphStyle="ParagraphStyle/$ID/[No paragraph style]"`, even
+when its based-on style has a paragraph style: 26 named cell styles
+without 0x10463 (7 of them based on another named style) and 495 root
+styles.
 
 **Edge IDs in cell styles are rotated.** A cell edge ID gives a
 different edge in a cell style: cell left is style top, cell right is
@@ -363,37 +367,84 @@ bottom 5 has 0xB62B = 10, 0xB62C = 5).
 ## Table attributes
 
 The table's chunk 0xB668 and a table style's chunk 0xB667 use the same
-IDs. IDML writes on a `Table` the attributes its chunk 0xB668 has.
+IDs. IDML writes on a `Table` exactly the attributes its chunk 0xB668
+has (332 tables of the trustworthy pairs, no presence mismatch for any
+ID below), and on a named `TableStyle` those of its chunk 0xB667.
 
 | ID | IDML | Encoding | Evidence |
 |---|---|---|---|
-| 0xB662 | `SpaceBefore` | f64 | 2 styles (5.67), 5 tables (14.17) |
-| 0xB663 | `SpaceAfter` | f64 | 2 styles (11.34), 5 tables |
-| 0xB67B | `StartRowFillColor` | swatch UID | 5 tables (None) and 2 styles |
-| 0xB67C | `EndRowFillColor` | swatch UID | 5 tables (a colour) and 2 styles |
-| 0xB6B0 | `StartRowFillTint` | f64 | 2 styles (10, 50), 3 tables (10) |
-| 0xB6B1 | `EndRowFillTint` | f64 | 2 styles (50, 10) |
+| 0xB662 / 0xB663 | `SpaceBefore` / `SpaceAfter` | f64 | 2 styles (5.67, 11.34), 5 tables; they differ |
+| 0xB686 / 0xB687 | `StartRowStrokeCount` / `EndRowStrokeCount` | u32 | 69 tables (6 files); 8 tables and styles with 1 / 2 tell them apart |
+| 0xB68C / 0xB68D | `StartColumnStrokeCount` / `EndColumnStrokeCount` | u32 | 64 tables; 5 samples with 1 / 2 |
+| 0xB67D / 0xB67E | `StartRowFillCount` / `EndRowFillCount` | u32 | 8 tables, 13 styles; 1 style with 1 / 2 |
+| 0xB684 / 0xB685 | `StartRowStrokeColor` / `EndRowStrokeColor` | swatch UID | 68 tables, 6 styles; told apart by presence |
+| 0xB68A / 0xB68B | `StartColumnStrokeColor` / `EndColumnStrokeColor` | swatch UID | 63 tables, 4 styles; presence |
+| 0xB690, 0xB691, 0xB692, 0xB693 | `StartRowStrokeWeight`, `EndRowStrokeWeight`, `StartColumnStrokeWeight`, `EndColumnStrokeWeight` | f64 | 61 / 55 / 56 / 55 tables; a style with 4 / 0 and 3 styles by presence tell them apart |
+| 0xB688, 0xB689 | `StartRowStrokeType`, `EndRowStrokeType` | stroke style code | 9 tables (1 `Canned Dotted`); one style by presence |
+| 0xB6B4, 0xB6B5, 0xB6B6, 0xB6B7 | `StartRowStrokeTint`, `EndRowStrokeTint`, `StartColumnStrokeTint`, `EndColumnStrokeTint` | f64 | 3 styles (50 / 70); root style 100 / 50 / 100 / 50 in 10 documents |
 | 0xB683 | `ColumnFillsPriority` | 0 = false | 8 tables |
-| 0xB684 | `StartRowStrokeColor` | swatch UID | 5 tables |
-| 0xB688 | `StartRowStrokeType` | stroke style code, as for cell edges | 1 table (`Canned Dotted`) |
-| 0xB690 | `StartRowStrokeWeight` | f64 | 5 tables (0.25), 3 styles (0) |
-| 0x10450 | `HeaderRegionCellStyle` | cell style UID, 0 = `n` | 2 styles |
-| 0x10452 | `BodyRegionCellStyle` | cell style UID | 3 styles, and the root style in 135 files (`[None]`) |
-| 0x10453 | `LeftColumnRegionCellStyle` | cell style UID | 1 style |
-| 0x10454 | `RightColumnRegionCellStyle` | cell style UID | 1 style |
-| 0x10457 | `HeaderRegionSameAsBodyRegion` | 0 false, 1 true | 2 styles (0); root style 1 |
+| 0xB67B, 0xB67C, 0xB67F, 0xB680 | `StartRowFillColor`, `EndRowFillColor`, `StartColumnFillColor`, `EndColumnFillColor` | swatch UID | 5 tables, 2 styles; root style Black / None / Black / None |
+| 0xB6B0, 0xB6B1, 0xB6B2, 0xB6B3 | `StartRowFillTint`, `EndRowFillTint`, `StartColumnFillTint`, `EndColumnFillTint` | f64 | 2 styles (10, 50), 3 tables; root style 20 / 100 / 20 / 100 |
+| 0xB695 | `SkipFirstAlternatingFillRows` | u32 | 5 tables (value 1), 7 styles |
+| 0xB6E2 | `SkipFirstAlternatingStrokeRows` | u32 | 5 tables (value 3) |
+| 0x10470, 0x10471, 0x10472, 0x10473 | `GraphicLeftInset`, `GraphicTopInset`, `GraphicRightInset`, `GraphicBottomInset` | f64 | 7 tables, root style |
+| 0x10478 | `ClipContentToGraphicCell` | u16, 0 = false | 7 tables, root style |
 
-The style evidence is from one document with four named table styles;
-the table evidence is from three documents. In these documents the two
-spaces, the two fill tints and the two fill colours differ, which tells
-each pair apart.
+Tables only (the IDML schema has none of them on `TableStyle`):
 
-**Not converted** because two or more attributes always have the same
-value: the border weights, colours and types (0xB653–0xB65E, three per
-side, same on all four sides in every sample), the row and column
-stroke and fill counts (0xB67D, 0xB67E, 0xB686, 0xB687, 0xB68C, 0xB68D:
-always 1 or always 0 in pairs), the end row and column stroke weights
-(0xB691–0xB693), and the left and right column region flags (0x10459,
-0x1045A). The alternating-pattern skip counts, `BreakHeaders`,
-`SkipFirstHeader` and `SkipLastFooter` of 12 tables in IDML are not in
-chunk 0xB668 and were not found.
+| ID | IDML | Encoding | Evidence |
+|---|---|---|---|
+| 0xB62B, 0xB62C, 0xB62D, 0xB62E | `LeftInset`, `TopInset`, `RightInset`, `BottomInset` | f64 | 1 table |
+| 0x10408 | `BreakHeaders` | u32, 2 = `OncePerPage` | 6 tables (2 files) |
+
+Table styles only (region cell styles, see "Values in effect"):
+
+| ID | IDML | Encoding | Evidence |
+|---|---|---|---|
+| 0x10450, 0x10451, 0x10452, 0x10453, 0x10454 | `HeaderRegionCellStyle`, `FooterRegionCellStyle`, `BodyRegionCellStyle`, `LeftColumnRegionCellStyle`, `RightColumnRegionCellStyle` | cell style UID, 0 = `n` | named styles; the root style has 0x10452 (`[None]`) in every file |
+| 0x10457, 0x10458, 0x10459, 0x1045A | `HeaderRegionSameAsBodyRegion`, `FooterRegionSameAsBodyRegion`, `LeftColumnRegionSameAsBodyRegion`, `RightColumnRegionSameAsBodyRegion` | u16, 0 false, 1 true | 5 to 12 styles each; the left and right flags are present exactly with the matching region cell style |
+
+**Groups that are always equal.** In every sample the IDs of each group
+below have the same value, so which ID is which attribute is not known.
+IDML writes the attributes of a group together. The converter writes all
+of them, with that value, only when every ID of the group is present
+with the same value: this needs no assignment and covers every sample.
+
+| IDs | IDML | Encoding | Evidence |
+|---|---|---|---|
+| 0xB653, 0xB656, 0xB659, 0xB65C | `Top`, `Left`, `Bottom`, `RightBorderStrokeWeight` | f64 | 57 tables, 18 styles |
+| 0xB654, 0xB657, 0xB65A, 0xB65D | the four `…BorderStrokeColor` | swatch UID | 12 tables, 17 styles |
+| 0xB655, 0xB658, 0xB65B, 0xB65E | the four `…BorderStrokeType` | stroke style code | 11 tables (`n`, `ThickThick`, `Canned Dotted`) |
+| 0xB6AC, 0xB6AD, 0xB6AE, 0xB6AF | the four `…BorderStrokeTint` | f64 | 3 styles |
+| 0x10429, 0x1042A, 0x1042B, 0x1042C | the four `…BorderStrokeGapColor` | swatch UID | 1 table |
+| 0xB68E, 0xB68F | `StartColumnStrokeType`, `EndColumnLineStyle` | stroke style code | 8 tables (1 file, `n`) |
+| 0x1040A, 0x1040B | `SkipFirstHeader`, `SkipLastFooter` | u16, 1 = true | 5 tables (tables only) |
+
+**Stroke type values.** All stroke type attributes of tables (0xB655,
+0xB658, 0xB65B, 0xB65E, 0xB688, 0xB689, 0xB68E, 0xB68F) are eight bytes,
+a stroke style code and 0, as for cell edges.
+
+**Root table style.** `[No table style]` (class 0xB63F) has a full
+attribute list in chunk 0xB667. IDML writes on it:
+
+- from DOM 11: `TextTopInset` and the other text insets (0xB62C, 0xB62B,
+  0xB62E, 0xB62D), `ClipContentToTextCell` (0xB6DE), the graphic insets
+  (0x10470–0x10473) and `ClipContentToGraphicCell` (0x10478). DOM 7 to
+  10 have none (135 pairs); DOM 11 to 21 all (380 trustworthy pairs).
+  Values: insets 4 (373) or 1.417 (7, a template family); the others 0
+  and false.
+- in every version, the attributes every root table style has
+  (`idml-values.md`). Some of them differ between documents: 10
+  trustworthy documents have `SpaceBefore`/`SpaceAfter` 2.83, border,
+  row and column stroke weights 0.709 and end stroke tints 50 where the
+  others have 4 / −4, 1, 0.25 and 100. All 495 match the INDD value. The
+  converter writes the INDD value of every attribute above that the
+  observed root values have, and leaves out the others.
+
+The alternating-pattern skip counts not listed above and the table-only
+attributes of one table (0xB634/0xB637, `DefaultRowStrokeWeight` and
+`DefaultColumnStrokeWeight`, equal so their order is not shown; 0xB66F
+`MaximumHeight`; 0xB6D8 `DiagonalLineStrokeWeight`), `NumHeaderColumns`
+and `HeaderColumnsPosition` (DOM 21.5, 1 table, no INDD attribute
+found), `ColumnType` on cells and columns, cell `P.Label` and
+`ECTablePopulationData` are not converted.
