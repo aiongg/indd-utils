@@ -59,6 +59,8 @@ pub(super) enum Kind {
     FontOrNone,
     /// A numbering list UID.
     NumberingList,
+    /// Codes written as strings of type `string`.
+    EnumString(&'static [(u32, &'static str)]),
     /// A string.
     String,
     /// A string, or the empty string for `Nothing`.
@@ -88,7 +90,7 @@ impl Kind {
     pub(super) fn is_code(self) -> bool {
         matches!(
             self,
-            Kind::Enum(_) | Kind::Builtin(..) | Kind::StrokeType | Kind::Bool
+            Kind::Enum(_) | Kind::EnumString(_) | Kind::Builtin(..) | Kind::StrokeType | Kind::Bool
         )
     }
 }
@@ -154,6 +156,10 @@ impl Writer<'_> {
                 1 => Some(text("boolean", "true".into())),
                 _ => None,
             },
+            Kind::EnumString(map) => v
+                .as_u32()
+                .and_then(|u| map.iter().find(|(k, _)| *k == u))
+                .map(|(_, n)| text("string", n.to_string())),
             Kind::Enum(map) => v
                 .as_u32()
                 .and_then(|u| map.iter().find(|(k, _)| *k == u))

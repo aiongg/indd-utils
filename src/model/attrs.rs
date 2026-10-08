@@ -310,12 +310,16 @@ enum Layout {
     BulletChar,
     /// Two u32.
     Words,
+    /// u32 reference (0 for a built-in) and u32 code.
+    RefOrCode,
 }
 
 fn text_layout(id: u32) -> Option<Layout> {
     Some(match id {
         0x1B4A => Layout::Point,
-        0x1B02 | 0x1A414 | 0x1A423 => Layout::String,
+        0x1B02 | 0x1A414 | 0x1A423 | 0x1A424 => Layout::String,
+        // Stroke types of rules, underline and strikethrough.
+        0x1B71 | 0x1B72 | 0x1B95 | 0x1B9D => Layout::RefOrCode,
         0x422E => Layout::Text,
         0x1B29 => Layout::TabList,
         0x1B75 => Layout::NestedStyles,
@@ -377,6 +381,10 @@ fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
         .ok(),
         Layout::BulletChar => None,
         Layout::Words => (|| Ok::<_, Error>(Value::Words(c.u32()?, c.u32()?)))().ok(),
+        Layout::RefOrCode if data.len() == 8 => {
+            (|| Ok::<_, Error>(Value::RefOrCode(c.u32()?, c.u32()?)))().ok()
+        }
+        Layout::RefOrCode => None,
     };
     value.unwrap_or_else(|| Value::Other(t, data.to_vec()))
 }

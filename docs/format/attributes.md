@@ -550,6 +550,123 @@ IDML writes `StartParagraph="Anywhere"`; no pair has another value. Code
 One public template without an IDML has a style with code 4; with no
 reference, the converter leaves out codes other than 0 and 2.
 
+### More paragraph and character attributes
+
+Found by aligning styles by name over all pairs and runs with IDML
+ranges at the same offset (17,914 trustworthy stories). On styles other
+than the root styles, each ID is present exactly when the IDML style has
+the attribute, and every value matches. "Styles" counts the styles that
+have both, other than the root styles in brackets.
+
+Encodings: bool = u16, 1 `true`; pct = f64 fraction, written × 100; num
+= f64 or u32 as is; swatch = u32 swatch UID, 0 = `Text Color`; stroke
+type = 8 bytes, u32 0 (a built-in style) then the stroke style code
+(`StrokeStyle/$ID/` and the name of the code, as for page items). A code
+not listed leaves the attribute out.
+
+| ID | IDML | Encoding | Styles |
+|---|---|---|---|
+| 0x1B14 | `HyphenateLadderLimit` | num | 780 (285) |
+| 0x1B68 | `HyphenateLastWord` | bool | 760 (265) |
+| 0x1B85 | `HyphenateAcrossColumns` | bool | 751 (256) |
+| 0x1B22 | `HyphenateCapitalizedWords` | bool | 709 (214) |
+| 0x1B34 | `MaximumGlyphScaling` | pct | 709 (214) |
+| 0x1B35 | `MinimumGlyphScaling` | pct | 709 (214) |
+| 0x1B20 | `HyphenateAfterFirst` | num | 651 (156) |
+| 0x1B23 | `HyphenateWordsLongerThan` | num | 636 (141) |
+| 0x1B39 | `KeepWithNext` | num | 619 (124) |
+| 0x1B2D | `DesiredWordSpacing` | pct | 587 (92) |
+| 0x1B21 | `HyphenateBeforeLast` | num | 580 (85) |
+| 0x1B30 | `DesiredLetterSpacing` | pct | 559 (64) |
+| 0x1B38 | `KeepAllLinesTogether` | bool | 556 (61) |
+| 0x1B3E | `CharacterAlignment` | 0 `AlignBaseline`, 1 `AlignEmCenter`, 2 `AlignEmBottom` | 551 (56) |
+| 0x1B4C | `RuleAboveColor` (Properties) | swatch | 546 (51) |
+| 0x1B5C | `RuleAbove` | bool | 541 (46) |
+| 0x1B83 | `HyphenWeight` | num | 541 (46) |
+| 0x1B71 | `RuleAboveType` (Properties) | stroke type | 520 (25) |
+| 0x1B95 | `UnderlineType` (Properties) | stroke type | 541 (46) |
+| 0x1B72 | `RuleBelowType` (Properties) | stroke type | 505 (10) |
+| 0x1B9D | `StrikeThroughType` (Properties) | stroke type | 499 (4) |
+| 0x1A40B | `NumberingFormat` (Properties, string) | u32: 0x1A477 `1, 2, 3, 4...`, 0x1A479 `i, ii, iii, iv...`, 0x1A47A `A, B, C, D...`, 0x1A47B `a, b, c, d...`, 0x1A497 `01,02,03...`, 0 `None` | 531 (36) |
+| 0x1B73 | `BalanceRaggedLines` (Properties, enumeration) | 0 `NoBalancing`, 1 `VeeShape` | 528 (33) |
+| 0x1A422 | `NumberingAlignment` | 0 `LeftAlign`, 2 `RightAlign` | 527 (32) |
+| 0x1A421 | `BulletsAlignment` | 0 `LeftAlign`, 1 `CenterAlign`, 2 `RightAlign` | 505 (10) |
+| 0x1B4E | `RuleAboveTint` | num (−1 kept) | 526 (31) |
+| 0x50F29 | `ParagraphDirection` | 0 `LeftToRightDirection`, 1 `RightToLeftDirection` | 526 (31) |
+| 0x50F2A | `ParagraphJustification` | 0 `DefaultJustification`, 6 `NaskhKashidaJustificationFrac` | 495 roots (4 with 6) |
+| 0x50F1F | `CharacterDirection` | 0 `DefaultDirection`, 1 `LeftToRightDirection`, 2 `RightToLeftDirection` | 518 (23) |
+| 0x50F11 | `DigitsType` | 0 `DefaultDigits`, 2 `HindiDigits` | 499 (4) |
+| 0x1A418 | `NumberingLevel` | num | 525 (30) |
+| 0x1A424 | `BulletsTextAfter` | flagged string (as `NumberingExpression`) | 512 (17) |
+| 0x1A41D | `NumberingApplyRestartPolicy` | bool | 497 (2) |
+| 0x1BB8 | `StrokeAlignment` | 0 `CenterAlignment`, 2 `OutsideAlignment` | 523 (28) |
+| 0x4297 | `LeadingModel` | 0 `LeadingModelRoman`, 1 `LeadingModelAkiBelow`, 2 `LeadingModelAkiAbove`, 3 `LeadingModelCenter` | 523 (28) |
+| 0x1BC1 | `KeepWithPrevious` | bool | 522 (27) |
+| 0x1B93 | `UnderlineTint` | num | 519 (24) |
+| 0x1B8E | `UnderlineGapColor` (Properties) | swatch | 518 (23) |
+| 0x1B77 | `RuleAboveGapColor` (Properties) | swatch | 506 (11) |
+| 0x1B96 | `StrikeThroughColor` (Properties) | swatch | 502 (7) |
+| 0x426C | `Rensuuji` | bool | 518 (23) |
+| 0x4295 | `OTFProportionalMetrics` | bool | 516 (21) |
+| 0x1B57 | `RuleBelowLeftIndent` | num | 513 (18) |
+| 0x1B58 | `RuleBelowRightIndent` | num | 504 (9) |
+| 0x1B59 | `RuleBelowWidth` | 1 `ColumnWidth`, 2 `TextWidth` | 507 (12) |
+| 0x1B86 | `KeepRuleAboveInFrame` | bool | 512 (17) |
+| 0x1B6F | `OTFTitling` | bool | 508 (13) |
+| 0x1B6E | `OTFDiscretionaryLigature` | bool | 501 (6) |
+| 0x1BCA | `OTFSwash` | bool | 501 (6) |
+| 0x1B89 | `OTFStylisticSets` | num | 501 (6) |
+| 0x1B44 | `OverprintFill` | bool | 506 (11) |
+| 0x1B92 | `UnderlineOverprint` | bool | 506 (11) |
+| 0x1B8F | `UnderlineGapOverprint` | bool | 500 (5) |
+| 0x1B3D | `StrikeThru` | bool | 505 (10) |
+| 0x1B9A | `StrikeThroughOffset` | num (−9999 kept) | 501 (6) |
+| 0x1B9E | `StrikeThroughWeight` | num (−9999 kept) | 499 (4) |
+| 0x1B9C | `StrikeThroughTint` | num | 497 (2) |
+| 0x1B78 | `RuleAboveGapTint` | num | 496 (1) |
+| 0x1B4B | `Skew` | num | 500 (5) |
+| 0x1B65 | `LastLineIndent` | num | 497 (2) |
+| 0x1B81 | `PositionalForm` | 0 `None`, 1 `Calculate`, 2 `Initial` | 500 (5) |
+| 0x1B87 | `IgnoreEdgeAlignment` | bool | 498 (3) |
+| 0x42AD | `GlyphForm` | 0 `None`, 5 `MonospacedHalfWidthForm`, 9 `ProportionalWidthForm`, 10 `FullWidthForm` | 501 (6) |
+| 0x4222 | `LeadingAki` | num (−1 kept) | 502 (7) |
+| 0x4223 | `TrailingAki` | num | 504 (9) |
+| 0x4225 | `KinsokuType` | 0 `KinsokuPushInFirst`, 2 `KinsokuPushOutOnly`, 3 `KinsokuPrioritizeAdjustmentAmount` | 502 (7) |
+| 0x4226 | `KinsokuHangType` | 0 `None`, 2 `KinsokuHangForce` | 498 (3) |
+| 0x4227 | `BunriKinshi` | bool | 499 (4) |
+| 0x421D | `Tsume` | num | 499 (4) |
+| 0x42A6 | `CjkGridTracking` | bool | 497 (2) |
+| 0x422C | `RubyOpenTypePro` | bool | 505 (10) |
+| 0x422F | `RubyFontSize` | num | 500 (5) |
+| 0x4248 | `KentenFontSize` | num | 500 (5) |
+| 0x4232 | `RubyType` | 0 `GroupRuby`, 1 `PerCharacterRuby` | 497 (2) |
+| 0x4247 | `KentenKind` | 0 `None`, 1 `KentenSesameDot` | 496 (1) |
+| 0x1DF1F | `MergeConsecutiveParaBorders` | bool | 347 |
+| 0x1DF1A | `ParagraphBorderTopLineWeight` | num | 393 (67) |
+| 0x1DF1B | `ParagraphBorderBottomLineWeight` | num | 395 (69) |
+| 0x1DF1C | `ParagraphBorderLeftLineWeight` | num | 387 (61) |
+| 0x1DF1D | `ParagraphBorderRightLineWeight` | num | 387 (61) |
+| 0x1DF01 | `ParagraphBorderLeftOffset` | num | 348 (22) |
+| 0x1DF02 | `ParagraphBorderRightOffset` | num | 347 (21) |
+| 0x1BF7 | `ParagraphBorderTint` | num | 336 (10) |
+| 0x1DF16 | `ParagraphBorderStrokeEndCap` | 0 `ButtEndCap`, 1 `RoundEndCap` | 339 (13) |
+| 0x1DF17 | `ParagraphBorderWidth` | 0 `ColumnWidth`, 1 `TextWidth` | 328 (2) |
+| 0x1DF20 | `ProviderHyphenationStyle` | 0 `HyphAll`, 3 `HyphPreferredAesthetic` | 327 (1) |
+| 0x1BD9 | `ParagraphShadingLeftOffset` | num | 406 (26) |
+| 0x1BDA | `ParagraphShadingRightOffset` | num | 406 (26) |
+| 0x1BD5 | `ParagraphShadingWidth` | 0 `ColumnWidth`, 1 `TextWidth` | 386 (6) |
+| 0x1BD7 | `ParagraphShadingClipToFrame` | bool | 388 (8) |
+
+`MergeConsecutiveParaBorders` is in IDML from version 13.1 (in none of
+the 3 trustworthy pairs of version 13.0, in all 46 of 13.1); the
+converter writes it from 13.1.
+
+Evidence over the converter's output (trustworthy pairs): 121,196
+values of these attributes in paragraph and character styles, text
+defaults and text ranges; 120,409 reproduced, 3 wrong (`TextDefault`
+`DesiredLetterSpacing`, `DesiredWordSpacing` and `UnderlineType` in one
+document each), the rest in stories whose text differs.
+
 ### Root styles and text defaults
 
 The root paragraph style `[No paragraph style]` and the document's text
