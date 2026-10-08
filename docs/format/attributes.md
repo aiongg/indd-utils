@@ -265,6 +265,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1A406 | `BulletChar` (Properties) | u32 type, u32 value; see below | 1/1 ranges, 84/84 styles |
 | 0x1A413 | `BulletsFont` (Properties) | font family UID, 0 = `$ID/` | 1/1 ranges, 84/84 styles |
 | 0x1A414 | `BulletsFontStyle` (Properties) | flag + string; empty = `Nothing` | 1/1 ranges, 84/84 styles |
+| 0x1A417 | `AppliedNumberingList` (Properties) | numbering list UID (`objects.md`, numbering lists) | 519/519 styles |
 | 0x1A419 | `NumberingContinue` | 1 = true | 2/2 ranges, 78/78 styles |
 | 0x1A41F | `BulletsCharacterStyle` (Properties) | character style UID | 84/84 styles |
 | 0x1A420 | `NumberingCharacterStyle` (Properties) | character style UID | 79/79 styles |

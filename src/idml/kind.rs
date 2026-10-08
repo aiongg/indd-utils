@@ -57,6 +57,8 @@ pub(super) enum Kind {
     Font,
     /// A font family, or 0 for none (`$ID/`).
     FontOrNone,
+    /// A numbering list UID.
+    NumberingList,
     /// A string.
     String,
     /// A string, or the empty string for `Nothing`.
@@ -181,6 +183,10 @@ impl Writer<'_> {
                 0 => Some(text("string", "Text Color".into())),
                 u => swatch(u).map(|s| text("object", s)),
             },
+            Kind::NumberingList => v
+                .as_u32()
+                .and_then(|u| self.doc.numbering_lists.iter().find(|l| l.uid == u))
+                .map(|l| text("object", format!("NumberingList/{}", self_name(&l.name)))),
             Kind::Font => v
                 .as_u32()
                 .and_then(|u| self.doc.fonts.get(&u))

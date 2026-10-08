@@ -94,12 +94,15 @@ next to it are read from the INDD (`preferences.md`).
 
 ## Default numbering list
 
-The root paragraph style refers to `NumberingList/$ID/[Default]`. All 240
-corpus IDML files have this element in `designmap.xml`, with the same
+The root paragraph style refers to `NumberingList/$ID/[Default]`. Every
+corpus IDML file has this element in `designmap.xml`, with the same
 attributes: `Name="$ID/[Default]"`,
 `ContinueNumbersAcrossStories="false"` and
-`ContinueNumbersAcrossDocuments="false"`. The converter writes it after
-`idPkg:Styles`, where the IDML schema puts it.
+`ContinueNumbersAcrossDocuments="false"`. The converter reads the
+numbering lists from the INDD (`objects.md`, numbering lists) and writes
+them after `idPkg:Styles`, where the IDML schema puts them. It writes
+this default list with these values only for a file whose lists it
+cannot read.
 
 ## Built-in stroke styles
 

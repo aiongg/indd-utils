@@ -25,6 +25,8 @@ pub struct Document {
     /// The document's label (chunk 0x1630B): key and value, as IDML
     /// writes them.
     pub label: Vec<(String, String)>,
+    /// The numbering lists, the default list first.
+    pub numbering_lists: Vec<NumberingList>,
     /// Index sort groups (preferences chunk 0x1307E), in order: name,
     /// include flag and header variant.
     pub index_groups: Vec<(String, bool, u16)>,
@@ -185,6 +187,10 @@ impl<'a> Reader<'a> {
         let constant_shade = self.constant_shade();
         let assignments = self.assignments();
         let users_script = self.users_script(DOC);
+        let numbering_lists = self.numbering_lists().unwrap_or_else(|e| {
+            self.warn(format!("numbering lists left out: {e}"));
+            Vec::new()
+        });
         let label = self.label(DOC).unwrap_or_else(|e| {
             self.warn(format!("document label left out: {e}"));
             Vec::new()
@@ -248,6 +254,7 @@ impl<'a> Reader<'a> {
             users,
             users_script,
             label,
+            numbering_lists,
             sections,
             text_variables: objects.text_variables,
             hyperlinks: objects.hyperlinks,

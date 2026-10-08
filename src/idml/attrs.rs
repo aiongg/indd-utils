@@ -381,6 +381,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (0x1A406, "BulletChar", Kind::BulletChar, true),
     (0x1A413, "BulletsFont", Kind::FontOrNone, true),
     (0x1A414, "BulletsFontStyle", Kind::StringOrNothing, true),
+    (0x1A417, "AppliedNumberingList", Kind::NumberingList, true),
     (0x1A419, "NumberingContinue", Kind::Equals(1), false),
     (0x1A41F, "BulletsCharacterStyle", Kind::CharacterStyle, true),
     (

@@ -97,17 +97,34 @@ impl Writer<'_> {
             }
         }
         x.empty("idPkg:Styles", &[("src", "Resources/Styles.xml".into())]);
-        // Present, with these values, in every corpus IDML; the root
-        // paragraph style refers to it. See docs/format/idml-values.md.
-        x.empty(
-            "NumberingList",
-            &[
-                ("Self", "NumberingList/$ID/[Default]".into()),
-                ("Name", "$ID/[Default]".into()),
-                ("ContinueNumbersAcrossStories", "false".into()),
-                ("ContinueNumbersAcrossDocuments", "false".into()),
-            ],
-        );
+        // The numbering lists, the default first (objects.md, numbering
+        // lists). Without them, the default list every corpus IDML has
+        // (idml-values.md), which the root paragraph style refers to.
+        let default = [crate::model::NumberingList {
+            uid: 0,
+            name: "$ID/[Default]".into(),
+            across_stories: false,
+            across_documents: false,
+        }];
+        let lists = if doc.numbering_lists.is_empty() {
+            &default[..]
+        } else {
+            &doc.numbering_lists[..]
+        };
+        for l in lists {
+            x.empty(
+                "NumberingList",
+                &[
+                    ("Self", format!("NumberingList/{}", self_name(&l.name))),
+                    ("Name", l.name.clone()),
+                    ("ContinueNumbersAcrossStories", l.across_stories.to_string()),
+                    (
+                        "ContinueNumbersAcrossDocuments",
+                        l.across_documents.to_string(),
+                    ),
+                ],
+            );
+        }
         let major = doc.version.major;
         // Elements every IDML of the version has, with the values they
         // all have (idml-values.md), in the order of the IDML files.

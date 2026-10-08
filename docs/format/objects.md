@@ -323,6 +323,23 @@ match the IDML in all 4,934 groups on every attribute. Over all 654
 pairs the Alphabet variant is 0 in 652 files, 3 and 5 in one each, and
 the Cyrillic variant is 2 in all.
 
+## Numbering lists (0x1A483)
+
+Chunk 0x1A49B of the preferences object: u32 UID of the default list,
+u16 count *n*, *n* list UIDs, i32 −1. Each list has chunk 0x1A49A: a
+flag byte (1 for a built-in key; 0 and 2 plain) and the name, then u8
+`ContinueNumbersAcrossStories` and, two bytes after the name, u8
+`ContinueNumbersAcrossDocuments` (1 `true`); the rest is not identified.
+
+IDML writes one `NumberingList` per list in `designmap.xml`, the default
+(`$ID/[Default]`) first, then the *n* lists in stored order, with
+`Self` `NumberingList/` and the name. The paragraph attribute 0x1A417
+(`AppliedNumberingList`, a `Properties` child of type `object`) is the
+UID of a list. Evidence: 705 of 705 lists of the trustworthy pairs
+(953 of 953 in all pairs), names, both flags and order;
+`AppliedNumberingList` 519 of 519 paragraph styles and 489 of 489 text
+defaults.
+
 ## Assignments (0x1BE01)
 
 Every document has one object of class 0x1BE01, listed in chunk 0x1BE13

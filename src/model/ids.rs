@@ -58,6 +58,8 @@ pub mod class {
     pub const TABLE_STYLE_ROOT_GROUP: u32 = 0x1044F;
     /// Document-wide preferences.
     pub const PREFERENCES: u32 = 0x2202;
+    /// A numbering list.
+    pub const NUMBERING_LIST: u32 = 0x1A483;
     pub const GUIDE: u32 = 0x3301;
     pub const XML_TAG: u32 = 0xBF19;
     /// A colour used in the interface (XML tags).
@@ -89,6 +91,10 @@ pub mod chunk {
     pub const DOC_USERS: u32 = 0xA443;
     /// Document label: u16 0x7B7B, u32 count, flagged key and value strings.
     pub const DOC_LABEL: u32 = 0x1630B;
+    /// Preferences: u32 default numbering list, u16 count, list UIDs, i32 -1.
+    pub const NUMBERING_LISTS: u32 = 0x1A49B;
+    /// Numbering list: flagged name, then u8 flags.
+    pub const NUMBERING_LIST_INFO: u32 = 0x1A49A;
     pub const SPREAD_CHILDREN: u32 = 0x503;
     pub const SPREAD_TRANSFORM: u32 = 0x56E;
     pub const SPREAD_BINDING: u32 = 0x1B8;

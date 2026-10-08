@@ -6,6 +6,16 @@
 
 use super::*;
 
+/// A numbering list (class 0x1A483).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumberingList {
+    pub uid: u32,
+    /// The name as IDML writes it.
+    pub name: String,
+    pub across_stories: bool,
+    pub across_documents: bool,
+}
+
 /// A pasted smooth shade with a constant shading. See
 /// `docs/format/objects.md`, pasted smooth shades.
 #[derive(Debug, Clone, PartialEq)]
@@ -171,6 +181,55 @@ impl<'a> Reader<'a> {
                 Ok((flag, name))
             })
             .collect()
+    }
+
+    /// The numbering lists (preferences chunk 0x1A49B): the default list
+    /// first, then the others in stored order. A list whose chunk cannot
+    /// be read is left out with a warning. See `docs/format/objects.md`.
+    pub(super) fn numbering_lists(&self) -> Result<Vec<NumberingList>, Error> {
+        let Some(&(prefs, _)) = self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::PREFERENCES)
+        else {
+            return Ok(Vec::new());
+        };
+        let Some(d) = self.chunk(prefs, chunk::NUMBERING_LISTS)? else {
+            return Ok(Vec::new());
+        };
+        let mut c = self.cursor(&d);
+        let default = c.u32()?;
+        let n = c.u16()? as usize;
+        let mut uids = vec![default];
+        for _ in 0..n {
+            uids.push(c.u32()?);
+        }
+        let mut out = Vec::new();
+        for uid in uids {
+            if self.class(uid) != Some(class::NUMBERING_LIST) {
+                continue;
+            }
+            let Some(d) = self.chunk(uid, chunk::NUMBERING_LIST_INFO)? else {
+                continue;
+            };
+            let mut c = self.cursor(&d);
+            let read = (|| -> Result<NumberingList, Error> {
+                let name = c.name()?.idml();
+                let flags = c.bytes(3)?;
+                Ok(NumberingList {
+                    uid,
+                    name,
+                    across_stories: flags[0] == 1,
+                    across_documents: flags[2] == 1,
+                })
+            })();
+            match read {
+                Ok(l) => out.push(l),
+                Err(e) => self.warn(format!("numbering list {uid} left out: {e}")),
+            }
+        }
+        Ok(out)
     }
 
     /// The label of an object (chunk 0x1630B of the document): u16 0x7B7B,
