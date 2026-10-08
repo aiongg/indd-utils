@@ -255,13 +255,25 @@ impl Writer<'_> {
         let mut open: Option<usize> = None;
         // End offset of the open endnote range.
         let mut endnote: Option<usize> = None;
+        // The open `Change` of inserted text: the index of its change run.
+        // It is always the innermost open element, so the others can close
+        // around it; it is opened again where its text continues.
+        let mut inserted: Option<usize> = None;
+        let close_inserted = |x: &mut Xml, buf: &mut String, inserted: &mut Option<usize>| {
+            if inserted.take().is_some() {
+                flush(x, buf);
+                x.end();
+            }
+        };
         for ch in text.chars() {
             if open == Some(pos) {
+                close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 x.end();
                 open = None;
             }
             if endnote == Some(pos) {
+                close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 if open.take().is_some() {
                     x.end();
@@ -274,6 +286,7 @@ impl Writer<'_> {
             {
                 // Around the endnote's text, inside the character range
                 // (footnotes.md).
+                close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 if open.take().is_some() {
                     x.end();
@@ -283,6 +296,102 @@ impl Writer<'_> {
                     .attr("Self", uref(Some(r.uid)))
                     .attr("SourceEndnote", uref(Some(r.endnote)));
                 endnote = Some(r.start + r.len);
+            }
+            // Deleted text of tracked changes, before the character that
+            // follows it (objects.md, tracked changes).
+            if let Some(ds) = story.deletions.get(&pos) {
+                close_inserted(x, &mut buf, &mut inserted);
+                flush(x, &mut buf);
+                st.open_csr(self, x, run);
+                let mut entries = story
+                    .changes
+                    .iter()
+                    .filter(|c| c.start == pos)
+                    .flat_map(|c| &c.entries)
+                    .filter(|e| e.is_deletion());
+                for d in ds {
+                    x.start("Change");
+                    if let Some(e) = entries.next() {
+                        self.change_attrs(x, e, "DeletedText");
+                    } else {
+                        x.attr("ChangeType", "DeletedText");
+                    }
+                    self.text_ranges(x, &d.runs, story, scope);
+                    x.end();
+                }
+            }
+            // A character-level text source opens before its first
+            // character, which can be an element (a note, a text
+            // destination). The schema allows no paragraph destination in
+            // it: one at the start stays before the source.
+            let paragraph_destination = story
+                .text_destinations
+                .get(&pos)
+                .is_some_and(|d| d.iter().any(|d| d.kind == DestinationKind::Paragraph));
+            if open.is_none()
+                && endnote.is_none()
+                && !story.xml_markers.contains_key(&pos)
+                && !paragraph_destination
+                && let Some(r) = story
+                    .sources
+                    .iter()
+                    .find(|r| r.start == pos && !r.paragraph)
+                && let Some(src) = self.doc.text_sources.get(&r.source)
+            {
+                close_inserted(x, &mut buf, &mut inserted);
+                flush(x, &mut buf);
+                st.open_csr(self, x, run);
+                self.source_start(x, src);
+                open = Some(r.start + r.len);
+            }
+            // Inserted text: inside a `Change`, except a table, an anchored
+            // item and an XML marker, which close it (the schema allows no
+            // page item in a `Change`).
+            let want = story.changes.partition_point(|c| c.start + c.len <= pos);
+            let want = story
+                .changes
+                .get(want)
+                .filter(|c| c.start <= pos && c.entries.iter().any(|e| e.is_insertion()))
+                .map(|_| want)
+                .filter(|_| {
+                    !matches!(ch, '\u{16}' | '\u{FFFC}') && !story.xml_markers.contains_key(&pos)
+                });
+            if inserted != want {
+                close_inserted(x, &mut buf, &mut inserted);
+                if let Some(i) = want
+                    && let Some(e) = story.changes[i].entries.iter().find(|e| e.is_insertion())
+                {
+                    flush(x, &mut buf);
+                    st.open_csr(self, x, run);
+                    x.start("Change");
+                    self.change_attrs(x, e, "InsertedText");
+                    inserted = Some(i);
+                }
+            }
+            // An index marker is written as a `PageReference` in place of
+            // its character (objects.md, notes and index markers).
+            if ch == '\u{FEFF}'
+                && !story.xml_markers.contains_key(&pos)
+                && let Some(&(uid, id)) = story.index_markers.get(&pos)
+            {
+                flush(x, &mut buf);
+                st.open_csr(self, x, run);
+                x.start("PageReference").attr("Self", uref(Some(uid)));
+                if let Some(id) = id {
+                    x.attr("Id", id.to_string());
+                }
+                x.end();
+                pos += 1;
+                continue;
+            }
+            if ch == '\u{FEFF}'
+                && let Some(n) = story.notes.get(&pos)
+            {
+                flush(x, &mut buf);
+                st.open_csr(self, x, run);
+                self.note(x, n, story, scope);
+                pos += 1;
+                continue;
             }
             if ch == '\u{FEFF}'
                 && let Some(dests) = story.text_destinations.get(&pos)
@@ -302,6 +411,19 @@ impl Writer<'_> {
                     .end();
                 }
                 if !story.xml_markers.contains_key(&pos) {
+                    if paragraph_destination
+                        && open.is_none()
+                        && endnote.is_none()
+                        && let Some(r) = story
+                            .sources
+                            .iter()
+                            .find(|r| r.start == pos && !r.paragraph)
+                        && let Some(src) = self.doc.text_sources.get(&r.source)
+                    {
+                        close_inserted(x, &mut buf, &mut inserted);
+                        self.source_start(x, src);
+                        open = Some(r.start + r.len);
+                    }
                     pos += 1;
                     continue;
                 }
@@ -310,6 +432,7 @@ impl Writer<'_> {
                 && let Some(&m) = story.xml_markers.get(&pos)
             {
                 flush(x, &mut buf);
+                close_inserted(x, &mut buf, &mut inserted);
                 // An XML marker ends the open text source.
                 if open.take().is_some() {
                     x.end();
@@ -359,18 +482,6 @@ impl Writer<'_> {
                 continue;
             }
             st.open_csr(self, x, run);
-            if open.is_none()
-                && endnote.is_none()
-                && let Some(r) = story
-                    .sources
-                    .iter()
-                    .find(|r| r.start == pos && !r.paragraph)
-                && let Some(src) = self.doc.text_sources.get(&r.source)
-            {
-                flush(x, &mut buf);
-                self.source_start(x, src);
-                open = Some(r.start + r.len);
-            }
             match ch {
                 '\r' => {
                     flush(x, &mut buf);
@@ -412,11 +523,55 @@ impl Writer<'_> {
             pos += ch.len_utf16();
         }
         flush(x, &mut buf);
+        close_inserted(x, &mut buf, &mut inserted);
         if open.is_some() {
             x.end();
         }
         if endnote.is_some() {
             x.end();
+        }
+    }
+
+    /// The attributes of a `Change`, in IDML's order (objects.md, tracked
+    /// changes).
+    fn change_attrs(&self, x: &mut Xml, e: &ChangeEntry, kind: &str) {
+        let (name, user) = self.document_user(&e.user);
+        x.attr("Date", link_time(e.time, &self.doc.xmp_dates))
+            .attr("ChangeType", kind)
+            .attr("UserName", name)
+            .attr("AppliedDocumentUser", user);
+    }
+
+    /// A `Note` with its text (objects.md, notes).
+    fn note(&self, x: &mut Xml, n: &Note, story: &Story, scope: &str) {
+        let (name, user) = self.document_user(&n.user);
+        x.start("Note")
+            .attr("Collapsed", "false")
+            .attr("CreationDate", link_time(n.created, &self.doc.xmp_dates))
+            .attr(
+                "ModificationDate",
+                link_time(n.modified, &self.doc.xmp_dates),
+            )
+            .attr("UserName", name)
+            .attr("AppliedDocumentUser", user);
+        self.text_ranges(x, &n.runs, story, scope);
+        x.end();
+    }
+
+    /// `UserName` and `AppliedDocumentUser` for a user name stored with a
+    /// note or a change: the first document user with that name (`n` if
+    /// none), whose name IDML replaces when it is the unknown user.
+    pub(super) fn document_user(&self, name: &str) -> (String, String) {
+        match self.doc.users.iter().position(|(_, u)| u == name) {
+            Some(i) => {
+                let shown = if self.doc.users[i].0 == 2 {
+                    "$ID/Unknown User Name".to_string()
+                } else {
+                    name.to_string()
+                };
+                (shown, format!("dDocumentUser{i:x}"))
+            }
+            None => (name.to_string(), "n".into()),
         }
     }
 
@@ -683,6 +838,10 @@ mod tests {
             }],
             xml_markers: Default::default(),
             footnotes: Default::default(),
+            notes: Default::default(),
+            deletions: Default::default(),
+            changes: Vec::new(),
+            index_markers: Default::default(),
             endnotes: Default::default(),
             is_endnote: false,
             endnote_ranges: Vec::new(),
@@ -754,6 +913,10 @@ mod tests {
             sources: Vec::new(),
             xml_markers: Default::default(),
             footnotes: Default::default(),
+            notes: Default::default(),
+            deletions: Default::default(),
+            changes: Vec::new(),
+            index_markers: Default::default(),
             endnotes: Default::default(),
             is_endnote: false,
             endnote_ranges: Vec::new(),
@@ -811,6 +974,10 @@ mod tests {
             sources: Vec::new(),
             xml_markers: markers.into_iter().collect(),
             footnotes: Default::default(),
+            notes: Default::default(),
+            deletions: Default::default(),
+            changes: Vec::new(),
+            index_markers: Default::default(),
             endnotes: Default::default(),
             is_endnote: false,
             endnote_ranges: Vec::new(),

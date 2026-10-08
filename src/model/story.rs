@@ -36,6 +36,17 @@ pub struct Story {
     pub xml_markers: BTreeMap<usize, XmlMarker>,
     /// Footnotes, by UTF-16 offset of their reference (U+0004).
     pub footnotes: BTreeMap<usize, Footnote>,
+    /// InDesign notes, by UTF-16 offset of their anchor (U+FEFF).
+    pub notes: BTreeMap<usize, Note>,
+    /// Deleted texts of tracked changes, by UTF-16 offset of the character
+    /// that follows the deletion.
+    pub deletions: BTreeMap<usize, Vec<Deletion>>,
+    /// Tracked-change runs (strand run kind 0xA466) that have entries,
+    /// sorted by start.
+    pub changes: Vec<ChangeRun>,
+    /// Index markers (`PageReference`), by UTF-16 offset of their
+    /// U+FEFF: UID and `Id`.
+    pub index_markers: BTreeMap<usize, (u32, Option<u32>)>,
     /// Endnote references, by UTF-16 offset of their U+0004: the endnote
     /// UID and the UID of its range.
     pub endnotes: BTreeMap<usize, (u32, u32)>,
@@ -61,6 +72,55 @@ pub struct Story {
 pub struct Footnote {
     pub uid: u32,
     pub runs: Vec<TextRun>,
+}
+
+/// An InDesign note: its text runs, at their offsets in the story text,
+/// and chunk 0xA412 (`docs/format/objects.md`, notes).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Note {
+    pub uid: u32,
+    pub runs: Vec<TextRun>,
+    pub user: String,
+    /// Creation and modification times (FILETIME, UTC).
+    pub created: u64,
+    pub modified: u64,
+}
+
+/// Deleted text of a tracked change (class 0xA40A): its text runs, at
+/// their offsets in the story text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Deletion {
+    pub uid: u32,
+    pub runs: Vec<TextRun>,
+}
+
+/// A run of the tracked-change strand (run kind 0xA466).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChangeRun {
+    /// UTF-16 offset and length.
+    pub start: usize,
+    pub len: usize,
+    pub entries: Vec<ChangeEntry>,
+}
+
+/// One entry of a tracked-change run.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChangeEntry {
+    /// 1: a deletion at the start of the run; 2: the run was inserted.
+    pub kind: u16,
+    pub user: String,
+    /// FILETIME, UTC.
+    pub time: u64,
+}
+
+impl ChangeEntry {
+    pub fn is_deletion(&self) -> bool {
+        self.kind == 1
+    }
+
+    pub fn is_insertion(&self) -> bool {
+        self.kind == 2
+    }
 }
 
 /// The text of an endnote in the endnote story.
@@ -203,6 +263,8 @@ impl<'a> Reader<'a> {
         let mut para: Vec<StyleRun> = Vec::new();
         let mut chars: Vec<StyleRun> = Vec::new();
         let mut owned: Vec<(usize, u32, u32)> = Vec::new();
+        // (start, length, entries) of the tracked-change runs.
+        let mut changes: Vec<(usize, usize, Vec<ChangeEntry>)> = Vec::new();
         // (start, length, owner, cell) for each stretch of text.
         let mut owners: Vec<(usize, usize, u32, u32)> = Vec::new();
         let mut sources = Vec::new();
@@ -265,6 +327,21 @@ impl<'a> Reader<'a> {
                             let owner = rc.u32()?;
                             let cell = rc.u32()?;
                             owners.push((start, len, owner, cell));
+                        }
+                        strand::CHANGES => {
+                            let n = rc.u16()?;
+                            let mut entries = Vec::new();
+                            for _ in 0..n {
+                                rc.flag()?;
+                                let user = rc.string()?;
+                                let kind = rc.u16()?;
+                                let time = (u64::from(rc.u32()?) << 32) | u64::from(rc.u32()?);
+                                rc.skip(2)?;
+                                entries.push(ChangeEntry { kind, user, time });
+                            }
+                            if !entries.is_empty() {
+                                changes.push((start, len, entries));
+                            }
                         }
                         strand::PARAGRAPH_STYLE | strand::CHARACTER_STYLE => {
                             let style = rc.u32()?;
@@ -344,6 +421,14 @@ impl<'a> Reader<'a> {
             .into_iter()
             .map(|(p, len, owner, cell)| (unit(p), unit(p + len) - unit(p), owner, cell))
             .collect();
+        let changes: Vec<ChangeRun> = changes
+            .into_iter()
+            .map(|(p, len, entries)| ChangeRun {
+                start: unit(p),
+                len: unit(p + len) - unit(p),
+                entries,
+            })
+            .collect();
         for r in &mut sources {
             let start = unit(r.start);
             r.len = unit(r.start + r.len) - start;
@@ -369,6 +454,9 @@ impl<'a> Reader<'a> {
         let mut text_destinations: BTreeMap<usize, Vec<Destination>> = BTreeMap::new();
         let mut footnotes: BTreeMap<usize, Footnote> = BTreeMap::new();
         let mut endnotes = BTreeMap::new();
+        let mut notes: BTreeMap<usize, Note> = BTreeMap::new();
+        let mut index_markers = BTreeMap::new();
+        let mut deletions: BTreeMap<usize, Vec<Deletion>> = BTreeMap::new();
         for (pos, cls, item) in owned {
             match cls {
                 class::ENDNOTE => {
@@ -380,6 +468,46 @@ impl<'a> Reader<'a> {
                     {
                         endnotes.insert(pos, (item, range));
                     }
+                }
+                class::NOTE => {
+                    let d = self.required(item, chunk::NOTE)?;
+                    let mut c = self.cursor(&d);
+                    let n = c.u32()? as usize;
+                    let user = if n == 0 {
+                        String::new()
+                    } else {
+                        c.segments(n)?
+                    };
+                    let mut filetime = || -> Result<u64, Error> {
+                        Ok((u64::from(c.u32()?) << 32) | u64::from(c.u32()?))
+                    };
+                    let created = filetime()?;
+                    let modified = filetime()?;
+                    notes.insert(
+                        pos,
+                        Note {
+                            uid: item,
+                            runs: Vec::new(),
+                            user,
+                            created,
+                            modified,
+                        },
+                    );
+                }
+                class::DELETED_TEXT => {
+                    deletions.entry(pos).or_default().push(Deletion {
+                        uid: item,
+                        runs: Vec::new(),
+                    });
+                }
+                class::INDEX_MARKER => {
+                    // `Id` is the last u32 of chunk 0x13009 when the chunk
+                    // has 30 bytes; IDML has no `Id` for a 26-byte chunk.
+                    let id = self
+                        .chunk(item, chunk::INDEX_MARKER)?
+                        .filter(|d| d.len() == 30)
+                        .and_then(|d| self.enc().u32_at(&d, 26));
+                    index_markers.insert(pos, (item, id));
                 }
                 class::FOOTNOTE => {
                     footnotes.insert(
@@ -456,6 +584,14 @@ impl<'a> Reader<'a> {
                 {
                     f.runs.push(run);
                 }
+                Some((owner, _)) if let Some(n) = notes.values_mut().find(|n| n.uid == owner) => {
+                    n.runs.push(run);
+                }
+                Some((owner, _))
+                    if let Some(d) = deletions.values_mut().flatten().find(|d| d.uid == owner) =>
+                {
+                    d.runs.push(run);
+                }
                 Some((owner, cell)) if owner != uid => {
                     if let Some(t) = tables.values_mut().find(|t| t.uid == owner)
                         && let Some(c) = t.cells.iter_mut().find(|c| c.id == cell)
@@ -503,9 +639,13 @@ impl<'a> Reader<'a> {
             .values()
             .flat_map(|t| t.cells.iter().map(|c| c.runs.as_slice()));
         let footnote_lists = footnotes.values().map(|f| f.runs.as_slice());
+        let note_lists = notes.values().map(|n| n.runs.as_slice());
+        let deletion_lists = deletions.values().flatten().map(|d| d.runs.as_slice());
         let lists: Vec<&[TextRun]> = std::iter::once(runs.as_slice())
             .chain(cell_lists)
             .chain(footnote_lists)
+            .chain(note_lists)
+            .chain(deletion_lists)
             .collect();
         sources.retain_mut(|r| {
             if r.len == 0 {
@@ -582,6 +722,10 @@ impl<'a> Reader<'a> {
             sources,
             xml_markers,
             footnotes,
+            notes,
+            deletions,
+            changes,
+            index_markers,
             endnotes,
             is_endnote: self.class(uid) == Some(class::ENDNOTE_STORY),
             endnote_ranges,
@@ -641,10 +785,6 @@ impl<'a> Reader<'a> {
             Some(d) if d.len() >= 4 => self.cursor(&d).u32()?,
             _ => return Ok(out),
         };
-        let nodes = xml::read_store(self.enc(), first, |p| self.chunk(p, xml::chunk::PAGE))?;
-        if nodes.is_empty() {
-            return Ok(out);
-        }
         let positions = match marker_strand.map(|s| self.chunk(s, xml::chunk::MARKER_TREE)) {
             Some(r) => match r? {
                 Some(d) => xml::marker_positions(self.enc(), &d)?,
@@ -652,6 +792,21 @@ impl<'a> Reader<'a> {
             },
             None => BTreeMap::new(),
         };
+        let nodes = match xml::read_store(self.enc(), first, |p| self.chunk(p, xml::chunk::PAGE)) {
+            Ok(n) => n,
+            Err(e) => {
+                // The markers are not text even when their nodes cannot be
+                // read (xml.md).
+                self.warn(format!("story {uid}: XML structure left out: {e}"));
+                return Ok(positions
+                    .values()
+                    .map(|&p| (unit(p), XmlMarker::Hidden))
+                    .collect());
+            }
+        };
+        if nodes.is_empty() {
+            return Ok(out);
+        }
         let para_of = |at: usize| {
             let mut end = 0;
             para.iter().position(|(len, _, _)| {

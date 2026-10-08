@@ -35,6 +35,13 @@ pub mod class {
     pub const ANCHOR: u32 = 0x262;
     /// A footnote, owned by a story at its reference (U+0004).
     pub const FOOTNOTE: u32 = 0x24F;
+    /// An InDesign note, owned by a story at its anchor (U+FEFF).
+    pub const NOTE: u32 = 0xA429;
+    /// Deleted text of a tracked change, owned by the character after the
+    /// deletion.
+    pub const DELETED_TEXT: u32 = 0xA40A;
+    /// An index marker, owned by a story at its U+FEFF.
+    pub const INDEX_MARKER: u32 = 0x13006;
     /// The endnote story (`IsEndnoteStory`).
     pub const ENDNOTE_STORY: u32 = 0x2801;
     /// An endnote, owned by a story at its reference (U+0004).
@@ -68,6 +75,10 @@ pub mod chunk {
     pub const DOC_LAYERS: u32 = 0x301;
     pub const DOC_ACTIVE_LAYER: u32 = 0x313;
     pub const DOC_STORIES: u32 = 0x222;
+    /// Note: user name and times.
+    pub const NOTE: u32 = 0xA412;
+    /// Index marker: its `Id` in the last u32.
+    pub const INDEX_MARKER: u32 = 0x13009;
     /// Endnote: the UID of its range.
     pub const ENDNOTE_RANGE_OF: u32 = 0x22616;
     /// Endnote range: the UID of its endnote.
@@ -235,6 +246,8 @@ pub mod strand {
     pub const OWNED_ITEMS: u32 = 0x209;
     /// Which object (story, or table and cell) each stretch of text belongs to.
     pub const TEXT_OWNER: u32 = 0x2A4;
+    /// Tracked changes: user, kind and time of each change.
+    pub const CHANGES: u32 = 0xA466;
 }
 
 /// Text wrap mode codes.

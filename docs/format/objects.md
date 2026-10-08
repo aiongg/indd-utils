@@ -1144,7 +1144,92 @@ the character U+FFFC at that position and is owned through an object of
 class 0x262, whose chunk 0x2C8 (u32, u32, UID list) lists the anchored page
 item. IDML writes the page item element in place of the U+FFFC.
 A text variable instance (class 0xCA64) is owned by a U+0018 at its
-position; see `text-variables.md`.
+position; see `text-variables.md`. Footnotes (class 0x24F) and endnotes (class
+0x2805) are owned by a U+0004 (`footnotes.md`), text and paragraph
+destinations through class 0x1353C by a U+FEFF (`hyperlinks.md`).
+
+**Text owners.** The text-owner strand (run kind 0x2A4, `tables.md`)
+gives each stretch of a story's text an owner. In the 495 trustworthy
+pairs of the research run the owners were the story itself (19,418
+stretches), a table (class 0xB608, 11,844), a deleted text (class 0xA40A,
+1,889), a footnote (class 0x24F, 502) and a note (class 0xA429, 186). The
+cell field is 1 for footnotes and 0 for the story, deleted texts and
+notes. Each footnote, note and deleted-text stretch ends with U+000D
+(2,577 of 2,577), which IDML does not write, as for a table cell.
+
+**Notes (class 0xA429).** A note is owned by a U+FEFF (186 of 186), and
+IDML writes a `Note` element in its place, inside the character range;
+the `Note` holds the note's text stretch as paragraph and character
+ranges. Chunk 0xA412: u32 length *n* and *n* UTF-16 units of text
+segments (the user name), then two FILETIME values (u32 high part, u32
+low part; 100 ns since 1601-01-01 UTC), creation and modification, then
+u16 (0 in all 186). Attributes, in this order:
+
+| Attribute | Value |
+|---|---|
+| `Collapsed` | `false` in all; the trailing u16 may hold it, but it never varies |
+| `CreationDate`, `ModificationDate` | the two times as local time, by the link time rule below |
+| `UserName` | the user name; `$ID/Unknown User Name` when the first document user of that name has flag 2 |
+| `AppliedDocumentUser` | `dDocumentUser<index hex>` of the first document user (document chunk 0xA443) with that name; `n` if none has it |
+
+Check: over all pairs the converter's notes equal the IDML notes on these
+five attributes in 211 of 211 (compared as multisets per pair, since
+`Note` has no `Self`).
+
+**Tracked changes.** Deleted text is an object of class 0xA40A, owned by
+the character that follows the deletion (any character; 1,696 of 1,889
+in the research run were U+F035). Its text is the stretch the text-owner
+strand gives to its UID, without the final U+000D. IDML writes it as
+`<Change ChangeType="DeletedText">` inside the character range of the
+owning character, before that character and before any element that
+replaces it, holding the deleted text as paragraph and character ranges
+(one `Change` per object: 1,889 of 1,889 in 21 pairs).
+
+A story strand of class 0xA465 has runs of kind 0xA466 that cover the
+whole story text (positions count characters). Each record: u32 run
+length, u16 entry count, then per entry a flag byte (0), a string (the
+user name, in-object form), u16 kind, FILETIME (u32 high part, u32 low
+part) and u16 (0). Kind 1 is a deletion at the start of the run, with the
+user and time of that deleted text; kind 2 marks the run's text as
+inserted, which IDML writes as `<Change ChangeType="InsertedText">`
+around it (2,073 of 2,073 entries, one element each). Records of
+deleted-text stretches have no entries. `Change` attributes, in this
+order: `Date`, `ChangeType`, `UserName`, `AppliedDocumentUser`, the last
+two by the rule for notes.
+
+The converter writes deleted text before the owning character and wraps
+inserted text in a `Change` inside each character range it covers; a
+table, an anchored item (the schema allows no page item in a `Change`) or
+an XML marker ends it, and it is opened again after them, so a
+change that crosses character ranges or elements is written as several
+`Change` elements. Over all pairs, 6,024 of the 6,027 reference `Change`
+elements have an equal `Change` in the output (`Date`, `ChangeType`,
+`UserName`, `AppliedDocumentUser`, compared as multisets per pair); the
+output has 92 more, from such splits. Where a paragraph-level hyperlink
+source starts at an inserted character, InDesign writes an empty
+`Change` before the source (1,668 of the 1,681 empty changes in the
+research run); the converter writes the inserted text inside the
+`Change` instead.
+
+**Dates of notes and changes.** IDML writes `CreationDate`,
+`ModificationDate` and `Date` as local time of the exporting computer,
+like link times: the converter applies the link time rule below (the
+offset of the XMP date nearest in day of the year). With it, 211 of 211
+notes and 6,024 of 6,027 changes have an equal element in the output;
+the other 3 are deleted texts, not examined further. The 21 pairs with tracked changes come from at most two
+computers in one time zone, so the rule is checked on one time zone
+only.
+
+**Index markers (class 0x13006).** An index marker is owned by a U+FEFF,
+which is not text in IDML: IDML writes a `PageReference` in its place.
+`Self` is `u` and the UID in hexadecimal (7,495 of 7,495 in the
+research run). `Id` is the u32 at offset 26 of chunk 0x13009 when the
+chunk has 30 bytes (7,558 of 7,558 over all pairs); the IDML has no
+`Id` for the 3 markers whose chunk has 26 bytes. `PageReferenceType`
+(`CurrentPage` in all) has no located field, and `ReferencedTopic` names
+an index topic, which the converter does not write yet; both are left
+out (the schema allows that). Chunk 0x13008 is u16 1 and the topic UID
+(class 0x13005).
 
 **Anchored object settings (chunk 0x2800).** The anchor object (class
 0x262) and object styles have a 62-byte chunk 0x2800:

@@ -70,6 +70,13 @@ Of their 1,015 markers, all are on a U+FEFF character, all are named by
 a node's part 0x1032, and every marker that a node names is in the tree.
 The texts hold another 2,690 U+FEFF characters that are not markers.
 
+The positions in the marker tree are markers even when the story's node
+store cannot be read (a node layout the converter does not know: 10
+trustworthy pairs, one story each, and 79 stories of one stale pair). The
+converter then leaves the structure out, with a warning, and does not
+write the marker characters; dropping them gives the IDML text in every
+such story of the trustworthy pairs (18 markers).
+
 ## The backing story
 
 The document's chunk 0xBF14 names the backing story, which IDML writes
