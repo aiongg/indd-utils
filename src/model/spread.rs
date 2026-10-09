@@ -69,6 +69,8 @@ pub struct PageSettings {
     pub overrides: Vec<(u32, u32)>,
     /// Chunk 0xCD04: whether the page uses its master's layout grid.
     pub use_master_grid: Option<bool>,
+    /// Chunk 0xCD04: the layout grid starting point code (u32 at 0).
+    pub grid_start: Option<u32>,
     /// Layout rule code (chunk 0x563); `None` without the chunk.
     pub layout_rule: Option<u32>,
     pub color: UiColorRef,
@@ -604,6 +606,9 @@ impl<'a> Reader<'a> {
                 .chunk(uid, chunk::PAGE_GRID_USE)?
                 .and_then(|d| self.enc().u16_at(&d, 4))
                 .map(|v| v != 0),
+            grid_start: self
+                .chunk(uid, chunk::PAGE_GRID_USE)?
+                .and_then(|d| self.enc().u32_at(&d, 0)),
             layout_rule: self
                 .chunk(uid, chunk::PAGE_LAYOUT_RULE)?
                 .and_then(|d| self.enc().u32_at(&d, 4)),

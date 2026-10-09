@@ -508,7 +508,8 @@ of a named grid of the document; otherwise it leaves the attribute out.
 
 Chunk 0x11605: a flag byte (1 = built-in key) and the name, three u32
 (the third the UID of the title's paragraph style), a flag byte and the
-title, a flag byte and a string not identified, then u16 fields: at 2
+title, a flag byte and a string not identified, then u16 fields: at 0
+`SetStoryDirection` (0 `Horizontal`, 1 `Vertical`), at 2
 `NumberedParagraphs` (0 `IncludeFullParagraph`, 2 `ExcludeNumbers`), at
 4 `MakeAnchor` and at 6 `RemoveForcedLineBreak` (1 = true; the chunk of
 older files ends before the fields IDML does not have yet), then the
@@ -520,13 +521,19 @@ that style as the story's `AppliedTOCStyle`, and `n` for other stories.
 
 Evidence over the trustworthy pairs: the 511 TOC styles the converter
 writes match on `Name`, `Title` and `TitleStyle` (511 of 511),
-`NumberedParagraphs` (511, one `ExcludeNumbers`), `MakeAnchor` (445 of
+`NumberedParagraphs` (511, one `ExcludeNumbers`), `SetStoryDirection`
+(620 of 620 in the corpus of 2026-10; over all its pairs 823 of 824, 2
+`Vertical` in two pairs of version 18), `MakeAnchor` (445 of
 445 from DOM 9 on, 4 true) and `RemoveForcedLineBreak` (340 of 340 from
 DOM 13 on, 4 true); `AppliedTOCStyle` matches for 18,923 of 18,923
 stories (21 made by a table of contents). `CreateBookmarks` (false in 1
 of 676 IDML styles) and `IncludeBookDocuments` (true in 8) were not
 found, and the entries (`TOCStyleEntry`, 130 in all corpus IDML files)
 are not decoded: the converter writes the styles without them.
+Two TOC styles of the corpus pairs have another value at the
+`SetStoryDirection` field: 0x40 with no `SetStoryDirection` in the IDML
+(version 15.0) and 0xF6FC with `Horizontal` (a stale pair of version
+12.0). The converter writes the attribute for 0 and 1 only.
 
 ## Languages (0x2D07)
 
@@ -606,7 +613,7 @@ chunks 0x151 and 0x154, and chunk 0x140F has no matrix
 | Chunk | Contents | IDML | Without the chunk |
 |---|---|---|---|
 | 0x1404 | u32 count; if not 0, a UID list of master page items and a UID list of their overrides | `OverrideList`: each item and its override (`n` for 0) | empty |
-| 0xCD04 | 6 bytes, the last u16 | `UseMasterGrid` (1 = true) | |
+| 0xCD04 | 6 bytes: u32 at 0, then u16 | `GridStartingPoint` (u32: 0 `TopOutside`, 4 `CenterVertical`; below), `UseMasterGrid` (u16, 1 = true) | |
 | 0x563 | u32, u32 code: 1 `Recenter`, 2 `ObjectBased`, 3 `Scale`, 4 `GuideBased`, 5 `UseMaster` | `LayoutRule` | `Off` |
 | 0x5FF | u32: 0 `Nothing`, 1 `UseMasterColor`, else an interface colour | `PageColor` | `UseMasterColor` |
 
@@ -619,6 +626,15 @@ and `Off`, 4,117 `UseMaster`, 92 `ObjectBased`, 24 `GuideBased`, 3
 `Recenter` and 1 `Scale`; 9,260 have no chunk 0x5FF, 44 code 1, 5 code 0
 and 58 an interface colour. `LayoutRule` is in IDML from DOM 8 on (no
 page of the DOM 7 files has it).
+
+**Layout grid starting point.** The u32 at 0 of chunk 0xCD04 is
+`GridStartingPoint`. Over all pairs of the corpus of 2026-10, 13,458 of
+13,458 pages that the converter writes match (10,080 of 10,080 in the
+trustworthy pairs): 13,430 have 0 and `TopOutside`, 28 have 4 and
+`CenterVertical` (master pages in 14 pairs of version 18.4). Every page
+in the corpus has the chunk. Codes 1, 5 and 6 occur only in files
+without an IDML (versions 3, 6, 19 and 21), so their values are not
+shown; the converter leaves the attribute out for them.
 | 0x51A | Margins: four f64 (left, top, right, bottom), u16 own-margins flag |
 | 0x528 | Columns: u32 count *n*, *n* f64 column edges, f64 gutter, u16 own-columns flag, u16, u16 column direction (1 vertical, 0 horizontal) |
 | 0xCD02 | Layout grid (`GridDataInformation`, below) |
@@ -1805,7 +1821,7 @@ counts are matches of 337 unless stated.
 | 0x1B92B | Attribute list, u16 count, page item records (`attributes.md`) | `FillColor`, `StrokeColor`, `StrokeWeight`, `StrokeType`, `CornerOption`, `CornerRadius`, `GradientFillAngle` (0x551E), `GradientStrokeAngle` (0x5524) |
 | 0x1B956 | Attribute list, frame fitting (see frame fitting) | `FrameFittingOption` |
 | 0x1B924 | Text frame settings (below) | `TextFramePreference`, `TextFrameFootnoteOptionsObject` |
-| 0x285B | u16 story orientation at 0, f64 12 at 2, u16 frame type at 14 | `StoryPreference` |
+| 0x285B | u16 story orientation at 0, f64 at 2, u16 at 12, u16 frame type at 14 | `StoryPreference` (`OpticalMarginSize` from the f64, `OpticalMarginAlignment` from the u16 at 12: 0 `false`, 1 `true`) |
 | 0x50F28 | u16 story direction | `StoryPreference/StoryDirection` |
 | 0x3776, 0x3777 | Text wrap, as chunks 0x3703 and 0x373D of page items | `TextWrapPreference` |
 | 0x1B92E | u32 count, IDs of the categories the style turns on | `Enable…` attributes (below) |
@@ -1817,6 +1833,14 @@ is `None` and 0x5A16 `InverseRoundedCorner` (1 style). The two gradient
 angles are told apart by one style with −90 and 0. Each corner radius
 and corner option has its own ID, as in page items (`attributes.md`,
 corners), and the converter writes each corner from its ID.
+
+**Optical margin (chunk 0x285B).** The f64 at 2 is `OpticalMarginSize`
+and the u16 at 12 `OpticalMarginAlignment` (1 = true), as in the story
+chunk 0x2EE (stories). Over all pairs of the corpus of 2026-10, both
+match in 3,515 of 3,515 object styles (2,661 of 2,661 in the trustworthy
+pairs). The IDML sizes are 12 (3,172 styles), 9.2126 (336), 8 (4) and
+9.9213 (3); 4 styles have `OpticalMarginAlignment="true"`. The u16 at 10
+is not identified.
 
 **Text frame settings (chunk 0x1B924).** 222 bytes; 162, 142 or 106 in
 files from older versions (942, 48, 66 and 61 object styles in the

@@ -476,10 +476,13 @@ impl ObjectStyleFrame {
 }
 
 /// Story settings of an object style (chunk 0x285B), if the chunk has 16
-/// bytes: u16 story orientation at 0 and u16 frame type at 14.
+/// bytes: u16 story orientation at 0, f64 optical margin size at 2, u16
+/// optical margin alignment at 12 and u16 frame type at 14.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StorySettings {
     pub orientation: u16,
+    pub optical_size: f64,
+    pub optical_alignment: u16,
     pub frame_type: u16,
 }
 
@@ -487,6 +490,8 @@ impl StorySettings {
     pub(super) fn read(enc: Encoding, d: &[u8]) -> Option<StorySettings> {
         Some(StorySettings {
             orientation: enc.u16_at(d, 0)?,
+            optical_size: enc.f64_at(d, 2)?,
+            optical_alignment: enc.u16_at(d, 12)?,
             frame_type: enc.u16_at(d, 14)?,
         })
     }

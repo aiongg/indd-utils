@@ -723,6 +723,17 @@ impl Writer<'_> {
             .flat_map(|&(item, with)| [uref(Some(item)), uref((with != 0).then_some(with))])
             .collect();
         x.attr("OverrideList", overrides.join(" "));
+        // Codes 0 and 4 only; the others are in no pair (objects.md, page
+        // settings).
+        match st.grid_start {
+            Some(0) => {
+                x.attr("GridStartingPoint", "TopOutside");
+            }
+            Some(4) => {
+                x.attr("GridStartingPoint", "CenterVertical");
+            }
+            _ => {}
+        }
         if let Some(v) = st.use_master_grid {
             x.attr("UseMasterGrid", v.to_string());
         }

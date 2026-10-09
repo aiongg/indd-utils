@@ -642,6 +642,12 @@ impl Writer<'_> {
                 1 => story.push(("StoryOrientation", "Horizontal".to_string())),
                 _ => {}
             }
+            story.push(("OpticalMarginSize", num(st.optical_size)));
+            match st.optical_alignment {
+                0 => story.push(("OpticalMarginAlignment", "false".to_string())),
+                1 => story.push(("OpticalMarginAlignment", "true".to_string())),
+                _ => {}
+            }
         }
         match os.direction {
             Some(1) => story.push(("StoryDirection", "LeftToRightDirection".into())),

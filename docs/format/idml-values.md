@@ -365,8 +365,8 @@ character styles in the IDML files):
 | `SplitDocument="false"` where written | character | 10 on |
 
 TOC styles (851 in the IDML files) all have `RunIn="false"` and
-`IncludeHidden="false"`. `SetStoryDirection` is left out: 3 styles have
-`Vertical`.
+`IncludeHidden="false"`. `SetStoryDirection` varies and is read from
+the INDD (`objects.md`, table of contents styles).
 
 The paragraph styles' `SplitDocument` and `IncludeClass` are left out:
 a few styles have other values, whose INDD field was not found. Keyboard

@@ -408,6 +408,15 @@ impl Writer<'_> {
                 .attr("Name", &name);
             let major = self.doc.version.major;
             let flag = |i: usize| t.flags.get(i).copied();
+            match flag(0) {
+                Some(0) => {
+                    x.attr("SetStoryDirection", "Horizontal");
+                }
+                Some(1) => {
+                    x.attr("SetStoryDirection", "Vertical");
+                }
+                _ => {}
+            }
             match flag(1) {
                 Some(0) => {
                     x.attr("NumberedParagraphs", "IncludeFullParagraph");

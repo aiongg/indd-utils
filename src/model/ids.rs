@@ -123,7 +123,8 @@ pub mod chunk {
     pub const MASTER_PRIMARY_STORY: u32 = 0x140A;
     /// Overridden master page items: u32 count, two UID lists.
     pub const PAGE_OVERRIDES: u32 = 0x1404;
-    /// Layout grid use: six bytes, the last u16 1 to use the master's.
+    /// Layout grid use: six bytes, u32 grid starting point code, then
+    /// u16 1 to use the master's grid.
     pub const PAGE_GRID_USE: u32 = 0xCD04;
     /// Layout rule: u32, then u32 code.
     pub const PAGE_LAYOUT_RULE: u32 = 0x563;

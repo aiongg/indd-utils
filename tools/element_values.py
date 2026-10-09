@@ -134,7 +134,6 @@ WHEN_WRITTEN = {
     "ParagraphStyle": ["EmitCss"],
     "Story": ["UserText"],
     "XmlStory": ["UserText"],
-    "TOCStyle": ["SetStoryDirection"],
     "CharacterStyle": ["EmitCss", "SplitDocument"],
 }
 # Elements the converter writes only for one value of an attribute that
