@@ -33,6 +33,8 @@ pub mod class {
     pub const TEXT_PATH_COLUMN: u32 = 0xB318;
     /// A plain byte stream, such as the file of an embedded graphic.
     pub const RAW_DATA: u32 = 0x129;
+    /// A graphic's screen preview; chunk 0x119 names its raw data object.
+    pub const PREVIEW: u32 = 0x1708;
     pub const FONT_FAMILY: u32 = 0x3E03;
     pub const LANGUAGE: u32 = 0x2D07;
     pub const TOC_STYLE: u32 = 0x11605;
@@ -246,6 +248,10 @@ pub mod chunk {
     pub const IMAGE_DATA: u32 = 0x8C23;
     /// Pasted PDF without a link: u32 raw data object.
     pub const PDF_DATA: u32 = 0x2521;
+    /// u32 preview object (class 0x1708) of a placed graphic.
+    pub const GRAPHIC_PREVIEW: u32 = 0x170D;
+    /// u32 raw data object of a preview.
+    pub const PREVIEW_DATA: u32 = 0x119;
     pub const SWATCH_NAME: u32 = 0x1F30;
     pub const TEXT_WRAP: u32 = 0x3703;
     pub const CONTOUR_OPTION: u32 = 0x373D;

@@ -185,6 +185,43 @@ fn little_endian_fixtures_convert() {
     }
 }
 
+/// Graphics whose file the document does not hold come with InDesign's
+/// previews, which the package does not hold either (`docs/format/objects.md`,
+/// graphic previews). The flyer has two images and the template one PDF,
+/// each placed four times with one preview.
+#[test]
+fn linked_graphics_come_with_their_previews() {
+    let Some(root) = fixtures() else {
+        return;
+    };
+    for (rel, signatures) in [
+        (
+            "opf-neddy-flyer/Neddy_Flyer_HeatherRyan.indd",
+            &[&b"\xFF\xD8\xFF"[..], b"MM\0*"][..],
+        ),
+        (
+            "bootstrap3-template/bootstrap3-indesign-template.indd",
+            &[&b"II*\0"[..]][..],
+        ),
+    ] {
+        let bytes = std::fs::read(root.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        let c = indd::convert(&bytes, "test.indd").unwrap_or_else(|e| panic!("{rel}: {e}"));
+        let text = String::from_utf8_lossy(&c.idml);
+        assert_eq!(c.previews.len(), signatures.len(), "{rel}");
+        for (p, signature) in c.previews.iter().zip(signatures) {
+            assert!(p.data.starts_with(signature), "{rel}");
+            assert_eq!(p.graphics.len(), 4, "{rel}");
+            for g in &p.graphics {
+                assert!(text.contains(&format!(" Self=\"{g}\"")), "{rel}: no {g}");
+            }
+        }
+        // The package is the same as without previews.
+        let mut idml = Vec::new();
+        indd::convert_into(&bytes, "test.indd", &mut idml).unwrap();
+        assert!(idml == c.idml, "{rel}: the previews changed the package");
+    }
+}
+
 /// The InDesign 7.5 template has character styles whose kind field is
 /// followed by a non-zero u16, the imported flag
 /// (`docs/format/objects.md`, Styles).

@@ -39,9 +39,10 @@ value, decode it in the model and add a field or a `Value` variant.
 5. The warnings of the model and of the writer are returned with the
    package.
 
-`indd::convert` returns the package as bytes; `indd::convert_file`
-reads a file first. The CLI (`src/main.rs`) uses `convert_into` to write
-to a file.
+`indd::convert` returns the package as bytes, with the previews of
+graphics whose file the document does not hold (read after step 4 from
+the database); `indd::convert_file` reads a file first. The CLI
+(`src/main.rs`) uses `convert_into` to write to a file.
 
 ### No global state
 
