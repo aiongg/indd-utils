@@ -546,6 +546,29 @@ mod tests {
         Reader::new(&db).last_session_code(1)
     }
 
+    fn applied_grid(chunk: Option<Vec<u8>>) -> Option<Option<u32>> {
+        let chunks = synthetic::chunks(
+            &chunk
+                .into_iter()
+                .map(|d| (chunk::APPLIED_NAMED_GRID, d))
+                .collect::<Vec<_>>(),
+        );
+        let objects = [(1, class::DOCUMENT, chunks)];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        Reader::new(&db).applied_named_grid(1).unwrap()
+    }
+
+    #[test]
+    fn reads_the_applied_named_grid() {
+        let grid = [1u16.to_le_bytes().as_slice(), &0x2Au32.to_le_bytes()].concat();
+        assert_eq!(applied_grid(Some(grid)), Some(Some(0x2A)));
+        assert_eq!(applied_grid(Some(0u16.to_le_bytes().to_vec())), Some(None));
+        assert_eq!(applied_grid(None), Some(None));
+        assert_eq!(applied_grid(Some(2u16.to_le_bytes().to_vec())), None);
+        assert_eq!(applied_grid(Some(1u16.to_le_bytes().to_vec())), None);
+    }
+
     #[test]
     fn reads_the_code_of_the_last_session() {
         assert_eq!(last_code(Some(history(&[0x0100, 0x0101]))), Some(0x0101));

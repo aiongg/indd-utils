@@ -1086,6 +1086,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stroke_categories_turn_off_their_own_attributes() {
+        // Only EnableStrokeAndCornerOptions off.
+        let on = [0x1B933, 0x1B934];
+        assert!(category_off("StrokeWeight", &on));
+        assert!(category_off("TopLeftCornerRadius", &on));
+        assert!(!category_off("StrokeColor", &on));
+        assert!(!category_off("StrokeType", &on));
+        assert!(!category_off("FillColor", &on));
+        // Fill and both stroke categories off.
+        assert!(category_off("StrokeType", &[]));
+        assert!(category_off("FillTint", &[]));
+    }
+
+    #[test]
     fn primary_text_frame_needs_a_first_frame_of_the_story() {
         let mut s = Spread {
             uid: 1,
