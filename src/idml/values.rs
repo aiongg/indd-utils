@@ -435,11 +435,11 @@ mod tests {
         let old = root_style("ParagraphStyle", 7);
         let new = root_style("ParagraphStyle", 21);
         assert_eq!(old.attr("KeepFirstLines"), Some("2"));
-        assert_eq!(old.attr("KeepAllLinesTogether"), Some("false"));
+        assert_eq!(old.attr("KeepLastLines"), Some("2"));
         assert!(old.attr("EmitCss").is_none());
         assert_eq!(new.attr("EmitCss"), Some("true"));
         let props = new.child("Properties").unwrap();
-        assert!(props.child("RuleAboveType").is_some());
+        assert!(props.child("RuleBelowGapColor").is_some());
         assert!(props.child("ParagraphBorderType").is_some());
         let os = root_style("ObjectStyle", 21);
         assert!(
