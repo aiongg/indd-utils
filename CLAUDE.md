@@ -1,8 +1,8 @@
 # indd-utils
 
 Rust reader for INDD files (Adobe InDesign's native format) and converter
-to IDML. Crate and command: `indd`. Repo: `aiongg/indd-utils` (private for
-now). Licence: MIT OR Apache-2.0.
+to IDML. Crate and command: `indd`. Repo: `aiongg/indd-utils` (public).
+Licence: MIT OR Apache-2.0.
 
 ## Clean-room rules (read `CLEANROOM.md`)
 
@@ -55,9 +55,9 @@ now). Licence: MIT OR Apache-2.0.
 
 ## Corpus
 
-`corpus/` (git-ignored, ~3.4 GB): 357 third-party INDD files, 240 with a
-sibling IDML, plus privately held samples in `corpus/own/`.
-`corpus/inventory.tsv` lists version and pairing per file. Priority:
+`corpus/` (git-ignored, tens of GB): third-party INDD/INDT files, many with a
+sibling IDML, plus privately held samples in `corpus/own/`. Current counts:
+`corpus/inventory.tsv` (version and pairing per file) and the README. Priority:
 InDesign 18–21, little-endian. Some IDMLs show a different save than their
 INDD; compare.py marks those pairs stale and reports trustworthy pairs
 separately (rule and evidence: `docs/measurement.md`).
@@ -72,7 +72,6 @@ separately (rule and evidence: `docs/measurement.md`).
   given). Needs Node.js for the last two steps. The library's conversion
   path must not use `std::fs`, clocks or threads.
 - `python3 -I tools/fetch_fixtures.py`: fetch the fixture files before
-
   `cargo test`. To add a fixture, add its pinned URL, size and SHA-256 to
   `tests/fixtures/manifest.json` and its licence and source to
   `tests/fixtures/README.md`.
