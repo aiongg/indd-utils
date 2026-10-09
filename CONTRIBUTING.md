@@ -55,8 +55,8 @@ accepted.
 
 ## Checks
 
-There is no hosted CI. Run the checks on your own machine before every
-commit:
+There is no hosted CI. Run the checks on your own machine once your change
+is complete, before you push it:
 
 ```sh
 cargo fmt
