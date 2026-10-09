@@ -482,6 +482,28 @@ every attribute of their `GridDataInformation` (`AppliedFont` 875: one
 family that IDML names in another form, `fonts.md`); 38 pairs have
 grids made by the user (2 or 3 named grids).
 
+**Applied named grid (chunk 0xCD32).** A story (class 0x201) or object
+style (class 0x1B901) that uses a named grid has chunk 0xCD32: u16 1,
+then the UID of the named grid object (6 bytes). An object style can
+also have u16 0 (2 bytes). IDML writes `AppliedNamedGrid` as the grid's
+`Self` (`NamedGrid/<name>`, `NamedGrid/$ID/[Page Grid]` for the
+built-in grid), and `n` for u16 0 or without the chunk. Evidence over
+all pairs of the corpus of 2026-10, compared by `compare.py`:
+
+- Stories: 26,805 of 26,805 (19,424 of 19,424 in the trustworthy
+  pairs). 106 IDML stories name a grid made by the user (two grids, in
+  13 pairs of version 12.1), and their INDD stories have the chunk with
+  that grid's UID.
+- Object styles: 3,515 of 3,515 (2,661 of 2,661 trustworthy). 55 name
+  `[Page Grid]` (u16 1); the others have u16 0 or no chunk and `n`,
+  among them all root styles `[None]` but one, which names
+  `[Page Grid]`.
+
+Over the whole little-endian corpus, every story chunk 0xCD32 has 6
+bytes, u16 1 and the UID of a named grid object. The converter writes
+`n` for u16 0 or no chunk, and the grid's `Self` for u16 1 with the UID
+of a named grid of the document; otherwise it leaves the attribute out.
+
 ## Table of contents styles (0x11605)
 
 Chunk 0x11605: a flag byte (1 = built-in key) and the name, three u32
@@ -1788,6 +1810,7 @@ counts are matches of 337 unless stated.
 | 0x3776, 0x3777 | Text wrap, as chunks 0x3703 and 0x373D of page items | `TextWrapPreference` |
 | 0x1B92E | u32 count, IDs of the categories the style turns on | `Enable…` attributes (below) |
 | 0x1B946 | u32 paragraph style, 0 = none | `AppliedParagraphStyle` (`n` for none) |
+| 0xCD32 | u16 0 for none, or u16 1 and the UID of a named grid | `AppliedNamedGrid` (named grids, above) |
 
 **Attribute list.** The IDs of page items carry over. `CornerOption` 0
 is `None` and 0x5A16 `InverseRoundedCorner` (1 style). The two gradient

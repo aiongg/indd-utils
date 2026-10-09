@@ -62,6 +62,9 @@ impl Writer<'_> {
             "AppliedTOCStyle",
             toc.map_or("n".into(), Self::toc_style_ref),
         );
+        if let Some(g) = self.named_grid_ref(s.settings.named_grid) {
+            x.attr("AppliedNamedGrid", g);
+        }
         // The values every IDML has on every story (idml-values.md).
         x.attrs_missing(self.observed(tag).iter());
     }

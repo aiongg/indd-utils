@@ -171,6 +171,9 @@ pub mod chunk {
     pub const TOC_STYLE_OF: u32 = 0x11613;
     pub const TOC_STYLE: u32 = 0x11605;
     pub const NAMED_GRID: u32 = 0xCD28;
+    /// The named grid of a story or object style: u16 1, then the named
+    /// grid UID; u16 0 for none.
+    pub const APPLIED_NAMED_GRID: u32 = 0xCD32;
     pub const STRAND_DATA: u32 = 0x261;
     pub const STRAND_RUNS: u32 = 0x262;
     pub const STYLE_INFO: u32 = 0x230;

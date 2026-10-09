@@ -85,6 +85,8 @@ pub struct ObjectStyle {
     pub paragraph_style: Option<u32>,
     /// Anchored object settings (chunk 0x2800).
     pub anchor: Option<AnchorSettings>,
+    /// Chunk 0xCD32: the applied named grid (`Reader::applied_named_grid`).
+    pub named_grid: Option<Option<u32>>,
 }
 
 /// Style groups nested deeper than this are left out, with a warning.
@@ -384,6 +386,7 @@ impl<'a> Reader<'a> {
             anchor: self
                 .chunk(uid, chunk::ANCHOR_SETTINGS)?
                 .map(|d| AnchorSettings::read(self.enc(), &d)),
+            named_grid: self.applied_named_grid(uid)?,
         }))
     }
 }

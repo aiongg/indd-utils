@@ -408,6 +408,9 @@ impl Writer<'_> {
                 attrs.push((name, num(v)));
             }
         }
+        if let Some(g) = self.named_grid_ref(os.named_grid) {
+            attrs.push(("AppliedNamedGrid", g));
+        }
         match os.paragraph_style {
             Some(0) => attrs.push(("AppliedParagraphStyle", "n".into())),
             Some(p) if self.doc.styles.contains_key(&p) => {

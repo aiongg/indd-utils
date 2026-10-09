@@ -389,6 +389,7 @@ impl<'a> Reader<'a> {
                     None => None,
                 };
                 Ok(Some(NamedGrid {
+                    uid,
                     builtin,
                     name,
                     grid,
@@ -401,6 +402,21 @@ impl<'a> Reader<'a> {
             }
         }
         out
+    }
+
+    /// The named grid applied to a story or object style (chunk 0xCD32;
+    /// objects.md, named grids): `Some(None)` for none (no chunk or u16
+    /// 0), `Some(Some(uid))` for a grid, `None` for another layout.
+    pub(super) fn applied_named_grid(&self, uid: u32) -> Result<Option<Option<u32>>, Error> {
+        let Some(d) = self.chunk(uid, chunk::APPLIED_NAMED_GRID)? else {
+            return Ok(Some(None));
+        };
+        let enc = self.enc();
+        Ok(match enc.u16_at(&d, 0) {
+            Some(0) => Some(None),
+            Some(1) => enc.u32_at(&d, 2).map(Some),
+            _ => None,
+        })
     }
 }
 

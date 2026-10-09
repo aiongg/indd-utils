@@ -163,8 +163,6 @@ impl Writer<'_> {
                 ours.write(x);
             }
         };
-        // Named grids. Their grid settings are those all document pages
-        // have (objects.md, named grids).
         // A named grid without settings of its own has those of the
         // document's layout grid (objects.md, named grids).
         let layout_grid = doc
@@ -174,14 +172,9 @@ impl Writer<'_> {
             .find(|(tag, ..)| *tag == "LayoutGridDataInformation")
             .map(|(_, g, _)| g);
         for ng in &doc.named_grids {
-            let name = if ng.builtin {
-                builtin_key(&ng.name)
-            } else {
-                ng.name.clone()
-            };
             x.start("NamedGrid")
-                .attr("Self", format!("NamedGrid/{}", self_name(&name)))
-                .attr("Name", &name);
+                .attr("Self", Self::named_grid_self(ng))
+                .attr("Name", Self::named_grid_name(ng));
             if let Some(g) = ng.grid.as_ref().or(layout_grid) {
                 self.grid_data(&mut x, g);
             }
@@ -360,6 +353,33 @@ impl Writer<'_> {
     }
 
     /// The IDML reference of a TOC style.
+    fn named_grid_name(ng: &crate::model::NamedGrid) -> String {
+        if ng.builtin {
+            builtin_key(&ng.name)
+        } else {
+            ng.name.clone()
+        }
+    }
+
+    fn named_grid_self(ng: &crate::model::NamedGrid) -> String {
+        format!("NamedGrid/{}", self_name(&Self::named_grid_name(ng)))
+    }
+
+    /// `AppliedNamedGrid` of a story or object style: `n` for none, the
+    /// grid's `Self` for a grid of the document, `None` otherwise
+    /// (objects.md, named grids).
+    pub(super) fn named_grid_ref(&self, applied: Option<Option<u32>>) -> Option<String> {
+        match applied? {
+            None => Some("n".into()),
+            Some(uid) => self
+                .doc
+                .named_grids
+                .iter()
+                .find(|g| g.uid == uid)
+                .map(Self::named_grid_self),
+        }
+    }
+
     pub(super) fn toc_style_ref(t: &crate::model::TocStyle) -> String {
         let name = if t.builtin {
             builtin_key(&t.name)

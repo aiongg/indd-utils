@@ -114,6 +114,7 @@ pub struct GridData {
 /// A named grid (class 0xCD12).
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamedGrid {
+    pub uid: u32,
     pub builtin: bool,
     pub name: String,
     /// Its own layout grid settings (chunk 0xCD02), if it has them.

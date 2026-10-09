@@ -95,6 +95,8 @@ pub struct StoryChunks {
     pub layout: Option<(u16, u16)>,
     /// Chunk 0xCD02: the layout grid of a frame grid story.
     pub grid: Option<GridData>,
+    /// Chunk 0xCD32: the applied named grid (`Reader::applied_named_grid`).
+    pub named_grid: Option<Option<u32>>,
 }
 
 /// A footnote: its text runs, at their offsets in the story text, which
@@ -805,6 +807,7 @@ impl<'a> Reader<'a> {
                     Some(d) => Some(GridData::read(&mut self.cursor(&d))?),
                     None => None,
                 },
+                named_grid: self.applied_named_grid(uid)?,
             },
             toc_style: match self
                 .chunk(uid, chunk::STORY_TOC)?
