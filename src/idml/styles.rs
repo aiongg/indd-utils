@@ -161,9 +161,8 @@ impl Writer<'_> {
     }
 
     /// A root cell or table style. The root table style takes the values
-    /// of its attribute list where the observed root values have the
-    /// attribute, and from DOM 11 its text and graphic cell values
-    /// (tables.md).
+    /// of its attribute list, and from DOM 11 its text and graphic cell
+    /// values (tables.md).
     pub(super) fn root_table_style(&self, x: &mut Xml, tag: &str, name: &str) {
         let (attrs, props, children) = self.root_values(tag, &[], &[]);
         x.start(tag)
@@ -181,9 +180,7 @@ impl Writer<'_> {
             && let Some(root) = root
         {
             for (k, v) in self.table_attrs(&root.attrs, true) {
-                if attrs.iter().any(|(a, _)| a == k) {
-                    x.attr(k, v);
-                }
+                x.attr(k, v);
             }
             if self.doc.version.major >= 11 {
                 for &(id, k, kind) in TEXT_CELL_ATTRS.iter().chain(GRAPHIC_CELL_ATTRS) {

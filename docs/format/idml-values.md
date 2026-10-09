@@ -33,61 +33,81 @@ character root styles, attributes in the text attribute table
 (`attributes.md`) are left out of the file, and any attribute the INDD
 supplies is written from the INDD.
 
-The files were generated from the 240 INDD files with an IDML that the
-corpus had then (`SOURCE` in the tool), which are 88 distinct IDML
-files. Their DOM versions are 7 (1 file), 12 (7 files) and 15 to 20 (80
-files). Values that first appear after DOM 7 are written only for
-documents of that InDesign version or later (`MinimumVersion` in the
-file). The corpus has grown since; the later pairs are evidence for the
-values of other elements (below). Regenerating these files from all pairs
-would drop some values that the larger corpus shows to vary between
-documents, such as table style stroke weights. With the 828 distinct
-IDML files of the corpus in 2026-10, 19 values of `[No paragraph
-style]`, 41 of the object style `[None]` and 19 of `[No table style]`
-vary, and DOM 7 files differ from later ones in many values. The files
-also predate most of the text attributes the converter now reads from
-the INDD; the tool leaves those out, so regenerating them would also
-remove values that the INDD supplies only for some styles. Regenerating
-them is a change of its own, with its own measurement.
+The file is generated from the reference IDML of every pair that
+`tools/compare.py` compares (a little-endian INDD whose IDML has the
+same major version, without the privately held samples): 928 pairs in
+the corpus of 2026-10, 794 distinct IDML files, DOM 7 to 21. Values that
+first appear after DOM 7 are written only for documents of that
+InDesign version or later (`MinimumVersion` in the file).
 
 | Root style | Values | Same in | Written for version |
 |---|---|---|---|
-| `[No paragraph style]` | 180 | 88 of 88 files | all |
-| | 14 | 87 of 87 files with DOM 12 or later | 12 and later |
-| | 30 | 80 of 80 files with DOM 15 or later | 15 and later |
-| `[No character style]` | 1 | 88 of 88 | all |
-| | 2 | 87 of 87 (DOM 12 or later) | 12 and later |
-| | 2 | 80 of 80 (DOM 15 or later) | 15 and later |
-| Object style `[None]` | 75 | 88 of 88 | all |
-| | 43 | 87 of 87 (DOM 12 or later) | 12 and later |
-| | 16 | 80 of 80 (DOM 15 or later) | 15 and later |
-| Cell style `[None]` | 1 | 88 of 88 | all |
-| Table style `[No table style]` | 105 | 88 of 88 | all |
-| | 10 | 87 of 87 (DOM 12 or later) | 12 and later |
-
-Among them are the keep settings of `[No paragraph style]`:
-`KeepAllLinesTogether="false"`, `KeepFirstLines="2"`, `KeepLastLines="2"`,
-`KeepWithNext="0"` and `KeepWithPrevious="false"`, in 88 of 88 files.
+| `[No paragraph style]` | 81 | 794 of 794 files | all |
+| | 1 | 785 of 785 files with DOM 8 or later | 8 and later |
+| | 3 | 711 of 711 (DOM 10 or later) | 10 and later |
+| | 4 | 662 of 662 (DOM 11 or later) | 11 and later |
+| | 16 | 512 of 512 (DOM 13 or later) | 13 and later |
+| | 1 | 326 of 326 (DOM 15 or later) | 15 and later |
+| | 1 | 31 of 31 (DOM 21) | 21 |
+| `[No character style]` | 1 | 794 of 794 | all |
+| | 2 | 662 of 662 (DOM 11 or later) | 11 and later |
+| | 1 | 512 of 512 (DOM 13 or later) | 13 and later |
+| | 1 | 326 of 326 (DOM 15 or later) | 15 and later |
+| | 1 | 31 of 31 (DOM 21) | 21 |
+| Object style `[None]` | 65 | 794 of 794 | all |
+| | 9, 22, 1, 4, 7, 4, 4, 8 | all files with DOM 8, 9, 10, 11, 12, 13, 14, 15 or later | from that version |
+| | 9 | 31 of 31 (DOM 21) | 21 |
+| Cell style `[None]` | 1 | 794 of 794 | all |
+| Table style `[No table style]` | 93 | 794 of 794 | all |
+| | 6 | 662 of 662 (DOM 11 or later) | 11 and later |
 
 **Left out because they vary between files:**
 
-- `[No paragraph style]`: `DiacriticPosition`, `KinsokuSet`, `Mojikumi`,
-  `StyleUniqueId`, `TreatIdeographicSpaceAsSpace`, and the eight corner
-  radii of paragraph borders and shading (12 or 1).
+- `[No paragraph style]` (19): `HyphenQuality`, `StyleUniqueId`, the
+  origins and some corner radii of paragraph borders and shading, and
+  the `StyleExportTagMap` child.
 - `[No character style]`: `StyleUniqueId`.
-- Object style `[None]`: `FrameFittingOption/FittingAlignment`,
-  `StoryPreference/StoryDirection`,
-  `TextFramePreference/ColumnRuleStrokeColor` and
-  `TextFramePreference/ColumnRuleStrokeWidth`.
+- Object style `[None]` (40): among them `AppliedNamedGrid`,
+  `BaselineFrameGridColor`, the corner radii, `OpticalMarginSize`,
+  `TextColumnGutter`, `FirstBaselineOffset`, the overprint settings,
+  the flexible layout paddings and gaps, and some export options.
+- `[No table style]` (19): the border, row and column stroke weights,
+  `SpaceBefore`, `SpaceAfter`, the end stroke tints, the text insets,
+  `CaptionPosition`, `CaptionParagraphCount` and
+  `HeaderColumnCellStyle`.
 
-**Left out because the converter reads them from the INDD:** 85
-attributes of `[No paragraph style]`, listed in `attributes.md`. Some of
-these are also the same in every IDML; the INDD value is written. In
-every compared pair the converted root styles have all of them.
+The converter reads many of these from the INDD: the object style
+settings (`objects.md`, object style settings and named grids), the
+baseline frame grid colour (`preferences.md`), the attributes of the
+root table style (`tables.md`) and the paragraph border and shading
+values (`attributes.md`). Over the 803 compared pairs, regenerating the
+file from these pairs, rather than from the 88 distinct IDML files the
+corpus had first, loses no value: every pair has as many values
+reproduced as before, and no extra value. It gains 2,942 values in the
+trustworthy pairs, whose first DOM version is now earlier
+(`IncludeClass`, `EpubAriaRole`, the paragraph border options,
+`ParagraphKashidaWidth`, the shading overprint settings,
+`TransformAttributeOption` and `FlexLayoutAttributeOption` of the
+object styles).
 
-The object, cell and table root styles get only observed values: the
-converter reads no attributes of these styles from the INDD yet. The cell
-and table root styles are written as new elements in
+Two kinds of IDML files are not evidence for the root styles, and the
+pair rule leaves them out: an IDML (DOM 7) beside an INDD of version
+17.2 that has no root styles at all, and a big-endian pair of version 11.2 whose table style lacks
+four region cell style values that every other file has.
+
+**Left out because the converter reads them from the INDD:** 205
+attributes of `[No paragraph style]`, listed in `attributes.md`. Some
+of these are also the same in every IDML; the INDD value is written.
+
+The object styles other than `[None]` and the preferences (below) are
+still generated from the pairs the corpus had first (`SOURCE` in the
+tool): 240 INDD files with 88 distinct IDML files, DOM 7 (1 file), 12
+(7 files) and 15 to 20 (80 files). Regenerating them from all pairs
+would drop values that the larger corpus shows to vary and that the
+converter does not read from the INDD; that is a change of its own,
+with its own measurement.
+
+The cell and table root styles are written as new elements in
 `RootCellStyleGroup` and `RootTableStyleGroup`.
 
 ## Document attributes

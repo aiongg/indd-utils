@@ -434,13 +434,15 @@ attribute list in chunk 0xB667. IDML writes on it:
   10 have none (135 pairs); DOM 11 to 21 all (380 trustworthy pairs).
   Values: insets 4 (373) or 1.417 (7, a template family); the others 0
   and false.
-- in every version, the attributes every root table style has
-  (`idml-values.md`). Some of them differ between documents: 10
+- in every version, every attribute of the list that the table style
+  attribute table maps. Some of them differ between documents: 10
   trustworthy documents have `SpaceBefore`/`SpaceAfter` 2.83, border,
   row and column stroke weights 0.709 and end stroke tints 50 where the
-  others have 4 / −4, 1, 0.25 and 100. All 495 match the INDD value. The
-  converter writes the INDD value of every attribute above that the
-  observed root values have, and leaves out the others.
+  others have 4 / −4, 1, 0.25 and 100. All 495 match the INDD value.
+  Over the 803 pairs of the corpus of 2026-10, writing every mapped
+  attribute of the list reproduces every root table style value that
+  writing only the attributes of the observed root values did, with no
+  extra value.
 
 The alternating-pattern skip counts not listed above and the table-only
 attributes of one table (0xB634/0xB637, `DefaultRowStrokeWeight` and

@@ -2,8 +2,10 @@
 """Find the values that every corpus IDML has on its root styles, on its
 other object styles and in its preferences.
 
-Reads Resources/Styles.xml and Resources/Preferences.xml of every IDML in
-the corpus pairs (distinct files only) and collects each attribute,
+Reads Resources/Styles.xml and Resources/Preferences.xml of the corpus
+IDML files (distinct files only: the pairs compare.py compares for the
+root styles, the pairs under SOURCE for the other object styles and the
+preferences) and collects each attribute,
 Properties child and child element attribute of the root styles and of
 the top-level preference elements. A value is kept when it is the same in
 every IDML from some DOM version on and present in all of them; the
@@ -38,10 +40,15 @@ OUT = ROOT / "src" / "idml" / "root_values.xml"
 PREF_OUT = ROOT / "src" / "idml" / "preference_values.xml"
 OBJECT_OUT = ROOT / "src" / "idml" / "object_style_values.xml"
 
-# The generated files were made from the corpus pairs under this
-# directory, the whole corpus at the time. Later pairs are evidence for
-# tools/element_values.py; regenerating these files from them would drop
-# values that the larger corpus shows to vary (docs/format/idml-values.md).
+# The root styles are collected from the pairs that tools/compare.py
+# compares, without the files whose path under corpus/ starts with one of
+# these (privately held samples).
+EXCLUDE = ("own/",)
+# The object styles other than [None] and the preferences were collected
+# from the corpus pairs under this directory, the whole corpus at the
+# time. Later pairs are evidence for tools/element_values.py;
+# regenerating these files from them would drop values that the larger
+# corpus shows to vary (docs/format/idml-values.md).
 SOURCE = "third-party/"
 
 # Preference attributes the converter reads from the INDD.
@@ -102,14 +109,23 @@ def decoded_names():
     return set(re.findall(r'0x[0-9A-F]+,\s*"(\w+)"', table))
 
 
-def corpus_idmls():
+def corpus_idmls(source=None):
+    """Without `source`, the reference IDML of every pair that
+    tools/compare.py compares: a little-endian INDD whose IDML has the
+    same major version, not in EXCLUDE. With `source`, the IDML of every
+    pair whose path starts with it. Each distinct IDML counts once."""
     lines = (ROOT / "corpus" / "inventory.tsv").read_text().splitlines()
     cols = lines[0].split("\t")
     seen, out, pairs = set(), [], 0
     for line in lines[1:]:
         row = dict(zip(cols, line.split("\t")))
-        path, dom = row["path"], row["idml_dom"]
-        if not dom or not dom[0].isdigit() or not path.startswith(SOURCE):
+        path, order, ver, dom = row["path"], row["order"], row["version"], row["idml_dom"]
+        if source is not None:
+            if not dom or not dom[0].isdigit() or not path.startswith(source):
+                continue
+        elif order != "LE" or not dom or ver.split(".")[0] != dom.split(".")[0]:
+            continue
+        elif path.startswith(EXCLUDE):
             continue
         pairs += 1
         idml = ROOT / "corpus" / (row.get("idml") or str(Path(path).with_suffix(".idml")))
@@ -381,7 +397,11 @@ def main():
             print(f"  {k:4} values, the same in {n} of {n} IDML files with DOM >= {since}")
         for why, names in left_out[tag].items():
             print(f"  {len(names):4} left out ({why}): {', '.join(sorted(names))}")
-    tags, pkept, pleft, porder = analyse_preferences(idmls, doms)
+    pinned_pairs, pinned = corpus_idmls(SOURCE)
+    pinned_doms = [d for d, _ in pinned]
+    print(f"\nPreferences and object styles: {pinned_pairs} pairs under {SOURCE}, "
+          f"{len(pinned)} distinct IDML files")
+    tags, pkept, pleft, porder = analyse_preferences(pinned, pinned_doms)
     print("\nPreferences:")
     total = defaultdict(int)
     for tag in tags:
@@ -394,7 +414,7 @@ def main():
         print(f"  {tag}: {len(pkept[tag])} kept, left out {counts}")
         if pleft[tag].get("refers to a style") or pleft[tag].get("read from the INDD"):
             print(f"      {pleft[tag].get('refers to a style', [])} {pleft[tag].get('read from the INDD', [])}")
-    files, styles, okept, oleft, oorder = analyse_object_styles(idmls, doms)
+    files, styles, okept, oleft, oorder = analyse_object_styles(pinned, pinned_doms)
     print(f"\nObject styles other than [None]: {styles} in {len(files)} IDML files")
     counts = defaultdict(int)
     for _, _, since in okept:
@@ -404,11 +424,11 @@ def main():
     print(f"  {len(oleft)} left out (vary, not in every style, or in fewer than {MIN_FILES} files):")
     print(f"      {', '.join(sorted(oleft))}")
     if "--write" in sys.argv:
-        write_object_styles(okept, oorder, min(doms))
+        write_object_styles(okept, oorder, min(pinned_doms))
         print(f"wrote {OBJECT_OUT.relative_to(ROOT)}")
         write(kept, order, min(doms))
         print(f"\nwrote {OUT.relative_to(ROOT)}")
-        write_preferences(tags, pkept, porder, min(doms))
+        write_preferences(tags, pkept, porder, min(pinned_doms))
         print(f"wrote {PREF_OUT.relative_to(ROOT)}")
 
 

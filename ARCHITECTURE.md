@@ -139,7 +139,7 @@ corpus IDML files alone ([`idml-values.md`](docs/format/idml-values.md)).
 |---|---|---|---|
 | `src/idml/element_values.xml` | `tools/element_values.py` | values of page items, spreads, pages, swatches, styles, document elements and preferences; lists such as trap presets; values keyed on another attribute | `element`, `element_attrs`, `when_written`, `present`, `list`, `keyed` |
 | `src/idml/root_values.xml` | `tools/root_values.py` | values of the five root styles | `root_style` |
-| `src/idml/object_style_values.xml` | `tools/root_values.py` | the object style `[None]` | `object_style` |
+| `src/idml/object_style_values.xml` | `tools/root_values.py` | object styles other than `[None]` | `object_style` |
 | `src/idml/preference_values.xml` | `tools/root_values.py` | the elements of `Resources/Preferences.xml` | `preferences` |
 
 How they work:
@@ -151,8 +151,10 @@ How they work:
 - The files are committed. Regenerate them with `--write` after the
   corpus changes, and review the diff: a value that varies in new
   samples disappears.
-- `root_values.py` is pinned to an earlier part of the corpus (`SOURCE`
-  in the tool); see `idml-values.md` for why.
+- `root_values.py` collects the root styles from the pairs that
+  `compare.py` compares. The object styles other than `[None]` and the
+  preferences are pinned to an earlier part of the corpus (`SOURCE` in
+  the tool); see `idml-values.md` for why.
 
 **Precedence.** A value read from the INDD always wins over an observed
 value. The XML writer (`src/idml/xml.rs`) keeps the attributes of an
