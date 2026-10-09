@@ -31,6 +31,9 @@ pub struct Prefs {
     pub anchor: Option<super::AnchorSettings>,
     /// Page item defaults (class 0x6E07), a page item attribute list.
     pub item_defaults: Option<Attrs>,
+    /// The values of page item attributes that an item does not store
+    /// (class 0x6E02, chunk 0x6E03; attributes.md).
+    pub item_base: Option<Attrs>,
     /// The entries of the two tables around that list: class, UID, UID
     /// (`objects.md`, page item defaults).
     pub item_default_entries: Vec<(u32, u32, u32)>,
@@ -1267,6 +1270,24 @@ impl Reader<'_> {
             None => None,
         };
 
+        // The attributes of items that do not store them (attributes.md,
+        // values an item does not store).
+        let item_base = match self
+            .db
+            .classes()
+            .iter()
+            .find(|(_, c)| *c == class::ITEM_BASE)
+        {
+            Some(&(u, _)) => match self.chunk(u, crate::model::ids::chunk::ITEM_ATTRS)? {
+                Some(d) => self.attrs_or_warn(
+                    || format!("page item attribute base {u}"),
+                    Attrs::parse(self.enc(), &d, List::Item, self.db.recorder()),
+                ),
+                None => None,
+            },
+            None => None,
+        };
+
         // The swatches of chunk 0x6E06 of the page item defaults.
         let mut item_default_swatches = Vec::new();
         if let Some(&(u, _)) = self
@@ -1678,6 +1699,7 @@ impl Reader<'_> {
                 .as_deref()
                 .map(|d| super::AnchorSettings::read(self.enc(), d)),
             item_defaults,
+            item_base,
             item_default_entries,
             item_default_swatches,
             props,

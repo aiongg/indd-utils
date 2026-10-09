@@ -87,9 +87,68 @@ the same tag all equal the style (17,501 text frames, 7,070 rectangles,
 2,074 polygons, 297 ovals, 27 lines); the others are on shapes written
 as another element type. The converter leaves out these attributes, and
 the four corner radii and options, when they equal the style's value
-(numbers to 6 significant digits). `StrokeWeight="1"` on an item with
-`[None]` and no stroke weight of its own (`objects.md`, page item
-settings) differs from `[None]`'s 0 and is still written.
+(numbers to 6 significant digits).
+
+### Values an item does not store
+
+Every document has one object of class 0x6E02 (606 of 606 trustworthy
+pairs). Its chunk 0x6E03 is a page item attribute list with every fill,
+stroke and corner attribute. An item whose own list lacks an attribute
+has the value of this base list, not that of its object style. IDML
+writes that value where it differs from the object style's effective
+value, the same rule as for stored values.
+
+The base lists differ in two ways across the trustworthy pairs, always
+together: 481 documents have `StrokeWeight` 1 and corner radii 12, 125
+have 0.2835 (0.1 mm) and 14.1732 (5 mm). All have `StrokeColor` and
+`FillColor` naming the swatch `None`, `FillTint` −1, `MiterLimit` 4,
+`StrokeType` `Solid`, `StrokeAlignment` `CenterAlignment` and corner
+options `None`.
+
+Evidence: an analysis script looked for the field that tells the
+documents whose items have `StrokeWeight="0.2834645669291339"` apart
+from those whose items have 1, by testing every f64 of every object
+whose class occurs once per document; the `StrokeWeight` of this list
+matched 294 of 295 documents. With the base values and the rule above,
+the converter reproduces, over the rectangles, ovals, polygons, graphic
+lines and text frames of the trustworthy pairs (anchored ones
+included), 8,790 of 8,794 `StrokeColor` values, 54,694 of 54,694
+`StrokeWeight`, 42,500 of 42,504 `MiterLimit` and 6,383 of 6,387
+`CornerRadius`, with no extra value. The values not reproduced are on 4
+text frames without an object style, and on items whose stored value
+the converter does not decode (77 `FillTint`, stored fills such as
+pasted smooth shades, the stroke alignment `OutsideAlignment`, custom
+stroke types). Over all pairs, 4 extra `StrokeWeight` values appear,
+in 3 stale pairs.
+
+Groups are left out: their fill and stroke attributes in IDML were not
+studied (1,844 groups of the trustworthy pairs have a `StrokeWeight`
+that the converter does not write). IDML writes no corner attributes
+for EPS text (class 0x660B; none in 634 elements), so only its other
+attributes follow the rule.
+
+**Category turned off.** When the item's object style (other than the
+root `[None]`) turns a category off, IDML writes the item's values of
+that category even where they equal the style's, stored or from the
+base list:
+
+| Category (ID in chunk 0x1B92E) | Attributes |
+|---|---|
+| `EnableFill` (0x1B933) | `FillColor`, `FillTint` |
+| `EnableStroke` (0x1B934) | `StrokeColor` |
+| `EnableStrokeAndCornerOptions` (0x1B935, 0x1B936) | `StrokeWeight`, `MiterLimit`, `StrokeAlignment`, corner radii and options |
+| both stroke categories | `StrokeType` |
+
+Evidence over the trustworthy pairs: 66 items with styles that turn all
+three off and 2 with styles that turn off both stroke categories have
+every such attribute in IDML, with the stored or base value; 12 items
+whose style turns off only `EnableStrokeAndCornerOptions` have
+`StrokeWeight`, `MiterLimit`, `StrokeAlignment` and the corners, but
+no `StrokeColor` or `StrokeType`. No sample turns off only
+`EnableStroke`, so the category of `StrokeType` is not shown; the
+converter writes it when both are off. The 68 items also have
+`StrokeTint`, `EndCap`, `EndJoin`, `GapColor` and `GapTint`, and the 12
+items `EndCap` and `EndJoin`; their IDs are not identified.
 
 Transparency attributes (IDs 0x108xx and 0x1EBxx) are described in
 `transparency.md`.

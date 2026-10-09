@@ -58,6 +58,23 @@ const STYLE_COMPARED: &[&str] = &[
     "BottomRightCornerOption",
 ];
 
+/// Whether an object style whose category list is `on` turns off the
+/// category of a fill, stroke or corner attribute: `EnableFill` (0x1B933)
+/// for the fill, `EnableStroke` (0x1B934) for the stroke colour,
+/// `EnableStrokeAndCornerOptions` (0x1B935 and 0x1B936) for the other
+/// stroke and corner attributes, both for `StrokeType` (attributes.md,
+/// values an item does not store).
+fn category_off(name: &str, on: &[u32]) -> bool {
+    let off = |id: u32| !on.contains(&id);
+    let corners = off(0x1B935) && off(0x1B936);
+    match name {
+        "FillColor" | "FillTint" => off(0x1B933),
+        "StrokeColor" => off(0x1B934),
+        "StrokeType" => off(0x1B934) && corners,
+        _ => corners,
+    }
+}
+
 /// The category of a `TextFramePreference` attribute: the ID that turns
 /// it on in an object style's category list (objects.md, text frame
 /// preferences).
@@ -478,10 +495,28 @@ impl Writer<'_> {
             x.attr("ContentType", content);
         }
         let applied = item.object_style.and_then(|u| self.style_values(u));
+        // A category that the item's object style (not the root) turns
+        // off: IDML writes the item's values of that category even where
+        // they equal the style's (attributes.md, values an item does not
+        // store).
+        let on = match (&applied, item.object_style) {
+            (Some(a), Some(u))
+                if !self
+                    .doc
+                    .object_styles
+                    .get(&u)
+                    .is_some_and(Self::is_root_object_style) =>
+            {
+                a.enabled.as_deref()
+            }
+            _ => None,
+        };
+        let forced = |name: &str| on.is_some_and(|on| category_off(name, on));
         for (name, v) in self.item_attr_values(&item.attrs) {
             // Fill, stroke and corner values equal to the object style's
             // are left out (attributes.md, page item attributes).
             let same = STYLE_COMPARED.contains(&name)
+                && !forced(name)
                 && applied
                     .as_ref()
                     .and_then(|s| s.item(name))
@@ -490,17 +525,30 @@ impl Writer<'_> {
                 x.attr(name, v);
             }
         }
-        let style = item
-            .object_style
-            .and_then(|u| self.doc.object_styles.get(&u));
-        // An item without a stroke weight of its own and with the object
-        // style [None] has `StrokeWeight="1"` in IDML (objects.md, page
-        // item settings); groups vary.
+        // A fill, stroke or corner attribute that the item does not store
+        // has the value of the document's base list; IDML writes it where
+        // it differs from the object style's (attributes.md, values an
+        // item does not store). Groups vary.
         if tag != "Group"
-            && item.attrs.values.iter().all(|(id, _)| *id != 0x6E65)
-            && style.is_some_and(|os| os.builtin && os.name == "[None]")
+            && let Some(applied) = &applied
+            && let Some(base) = &self.doc.prefs.item_base
         {
-            x.attr("StrokeWeight", "1");
+            let mut rest = base.clone();
+            rest.values.retain(|(id, _)| item.attrs.get(*id).is_none());
+            for (name, v) in self.item_attr_values(&rest) {
+                // IDML writes no corner attributes for EPS text.
+                if tag == "EPSText" && name.contains("Corner") {
+                    continue;
+                }
+                if (STYLE_COMPARED.contains(&name)
+                    || matches!(name, "StrokeType" | "StrokeAlignment"))
+                    && applied
+                        .item(name)
+                        .is_some_and(|s| forced(name) || !applied::same_value(s, &v))
+                {
+                    x.attr(name, v);
+                }
+            }
         }
         if let Some(r) = item.object_style.and_then(|u| self.object_style_ref(u)) {
             x.attr("AppliedObjectStyle", r);

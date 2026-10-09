@@ -76,6 +76,9 @@ pub mod class {
     pub const COLOR_PROFILE: u32 = 0x7D03;
     /// Page item defaults.
     pub const ITEM_DEFAULTS: u32 = 0x6E07;
+    /// The page item attribute list that items take the attributes
+    /// they do not store from (chunk 0x6E03).
+    pub const ITEM_BASE: u32 = 0x6E02;
 }
 
 /// Chunk IDs.
