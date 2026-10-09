@@ -62,6 +62,11 @@ for warning in &conversion.warnings {
 writer. A conversion keeps no global state, so several documents can be
 converted on different threads at once.
 
+`Conversion::previews` holds InDesign's previews of the graphics whose
+file the document does not hold, such as linked images. The package has
+no place for them; an application can show a preview when it cannot read
+the linked file. `convert_into` does not read them.
+
 The library also builds for WebAssembly (`wasm32-unknown-unknown`):
 `indd::convert` needs no file system or other host function, and gives
 the same package as a native build (`tools/check_wasm.sh`).

@@ -249,6 +249,10 @@ pub struct Graphic {
     /// The graphic's file, when the document holds it: an embedded link or
     /// a graphic pasted without a link. IDML writes it as `Contents`.
     pub contents: Option<Vec<u8>>,
+    /// The raw data object of InDesign's screen preview of a graphic whose
+    /// file the document does not hold (chunk 0x170D, then chunk 0x119 of
+    /// the preview object). IDML has no place for it.
+    pub preview: Option<u32>,
     pub text_wrap: Option<TextWrap>,
     /// Contour type code of the text wrap (chunk 0x373D): 5 = SameAsClipping.
     pub contour_type: Option<u32>,
@@ -982,6 +986,10 @@ impl<'a> Reader<'a> {
                 (None, data)
             }
         };
+        let preview = match contents {
+            Some(_) => None,
+            None => self.preview(uid)?,
+        };
         Ok(Some(Graphic {
             uid,
             kind,
@@ -989,6 +997,7 @@ impl<'a> Reader<'a> {
             bounds,
             link,
             contents,
+            preview,
             text_wrap: self.text_wrap(uid)?,
             contour_type: match self.chunk(uid, chunk::CONTOUR_OPTION)? {
                 Some(d) if d.len() >= 4 => Some(self.cursor(&d).u32()?),
@@ -1138,6 +1147,22 @@ impl<'a> Reader<'a> {
             r.object_read(uid);
         }
         self.db.object(uid)
+    }
+
+    /// The raw data object of graphic `uid`'s preview, if it names one.
+    fn preview(&self, uid: u32) -> Result<Option<u32>, Error> {
+        let object = match self.chunk(uid, chunk::GRAPHIC_PREVIEW)? {
+            Some(d) if d.len() >= 4 => self.cursor(&d).u32()?,
+            _ => return Ok(None),
+        };
+        if object == 0 || self.class(object) != Some(class::PREVIEW) {
+            return Ok(None);
+        }
+        let data = match self.chunk(object, chunk::PREVIEW_DATA)? {
+            Some(d) if d.len() >= 4 => self.cursor(&d).u32()?,
+            _ => return Ok(None),
+        };
+        Ok((self.class(data) == Some(class::RAW_DATA)).then_some(data))
     }
 
     /// A link, the URI of its resource and, for an embedded link, the
@@ -1378,5 +1403,52 @@ mod eps_text_tests {
         assert_eq!(&t[72..74], &[0, 1]);
         assert_eq!(t[74 + 100 - 82], 0x55);
         assert!(eps_text_data(enc, &d[..d.len() - 1]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use crate::database::synthetic;
+
+    #[test]
+    fn graphics_without_their_file_name_their_preview() {
+        let uid = |n: u32| n.to_le_bytes().to_vec();
+        let objects = [
+            // Linked: the preview chain ends in a raw data object.
+            (
+                10,
+                class::IMAGE,
+                synthetic::chunks(&[(chunk::GRAPHIC_PREVIEW, uid(11))]),
+            ),
+            (
+                11,
+                class::PREVIEW,
+                synthetic::chunks(&[(chunk::PREVIEW_DATA, uid(12))]),
+            ),
+            (12, class::RAW_DATA, b"preview".to_vec()),
+            // The chunk names something other than a preview object.
+            (
+                13,
+                class::IMAGE,
+                synthetic::chunks(&[(chunk::GRAPHIC_PREVIEW, uid(12))]),
+            ),
+            // The document holds the file: its preview is not needed.
+            (
+                14,
+                class::IMAGE,
+                synthetic::chunks(&[
+                    (chunk::IMAGE_DATA, uid(12)),
+                    (chunk::GRAPHIC_PREVIEW, uid(11)),
+                ]),
+            ),
+        ];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        let preview = |uid| reader.graphic(uid).unwrap().unwrap().preview;
+        assert_eq!(preview(10), Some(12));
+        assert_eq!(preview(13), None);
+        assert_eq!(preview(14), None);
     }
 }

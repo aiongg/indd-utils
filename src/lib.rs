@@ -166,12 +166,28 @@ impl std::fmt::Display for Warning {
     }
 }
 
-/// The result of a conversion: the IDML package and the warnings.
+/// The result of a conversion: the IDML package, the warnings and the
+/// previews of linked graphics.
 #[derive(Debug, Clone)]
 pub struct Conversion {
     /// The IDML package (a ZIP file).
     pub idml: Vec<u8>,
     pub warnings: Vec<Warning>,
+    /// InDesign's previews of the graphics whose file the document does
+    /// not hold (see [`Preview`]).
+    pub previews: Vec<Preview>,
+}
+
+/// InDesign's screen preview of placed graphics whose file the document
+/// does not hold, such as linked images. IDML has no place for it, so it is
+/// not in the package; an application can show it when the linked file is
+/// missing (`docs/format/objects.md`, graphic previews).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Preview {
+    /// The `Self` in the package of each graphic with this preview.
+    pub graphics: Vec<String>,
+    /// The preview file as stored: TIFF, JPEG, PNG or GIF.
+    pub data: Vec<u8>,
 }
 
 /// Convert INDD bytes to an IDML package. `name` is the document name the
@@ -181,8 +197,13 @@ pub struct Conversion {
 /// be converted on several threads at once.
 pub fn convert(indd: &[u8], name: &str) -> Result<Conversion, Error> {
     let mut idml = Vec::new();
-    let warnings = convert_into(indd, name, &mut idml)?;
-    Ok(Conversion { idml, warnings })
+    let mut previews = Vec::new();
+    let warnings = convert_with(indd, name, &mut idml, None, Some(&mut previews))?;
+    Ok(Conversion {
+        idml,
+        warnings,
+        previews,
+    })
 }
 
 /// Convert the INDD file at `path`. The package records the file name as
@@ -197,21 +218,23 @@ pub fn convert_file(path: impl AsRef<std::path::Path>) -> Result<Conversion, Err
 }
 
 /// Convert INDD bytes to an IDML package written to `out`, and return the
-/// warnings. See [`convert`].
+/// warnings. See [`convert`]; previews are not read.
 pub fn convert_into(
     indd: &[u8],
     name: &str,
     out: impl std::io::Write,
 ) -> Result<Vec<Warning>, Error> {
-    convert_with(indd, name, out, None)
+    convert_with(indd, name, out, None, None)
 }
 
-/// [`convert_into`], recording what the conversion reads (for `indd audit`).
+/// [`convert_into`], recording what the conversion reads (for `indd audit`)
+/// and reading the previews of linked graphics into `previews`.
 fn convert_with(
     indd: &[u8],
     name: &str,
     out: impl std::io::Write,
     recorder: Option<audit::Recorder>,
+    previews: Option<&mut Vec<Preview>>,
 ) -> Result<Vec<Warning>, Error> {
     let container = Container::parse(indd)?;
     let mut db = container.database()?;
@@ -225,8 +248,48 @@ fn convert_with(
     }
     let mut warnings = doc.warnings.clone();
     warnings.extend(idml::write(&doc, name, out)?);
+    if let Some(previews) = previews {
+        *previews = read_previews(&db, &doc, &mut warnings);
+    }
     Ok(warnings
         .into_iter()
         .map(|message| Warning { message })
         .collect())
+}
+
+/// The previews of the document's graphics, one per preview file.
+fn read_previews(db: &Database, doc: &model::Document, warnings: &mut Vec<String>) -> Vec<Preview> {
+    let mut graphics: std::collections::BTreeMap<u32, Vec<String>> = Default::default();
+    let mut items: Vec<&model::PageItem> = doc
+        .spreads
+        .iter()
+        .chain(&doc.master_spreads)
+        .flat_map(|s| &s.items)
+        .chain(
+            doc.stories
+                .iter()
+                .flat_map(|s| s.anchors.values().flatten()),
+        )
+        .collect();
+    while let Some(item) = items.pop() {
+        for g in &item.graphics {
+            if let Some(data) = g.preview {
+                graphics
+                    .entry(data)
+                    .or_default()
+                    .push(format!("u{:x}", g.uid));
+            }
+        }
+        items.extend(&item.children);
+    }
+    graphics
+        .into_iter()
+        .filter_map(|(uid, graphics)| match db.object(uid) {
+            Ok(data) => data.map(|data| Preview { graphics, data }),
+            Err(e) => {
+                warnings.push(format!("preview {uid}: left out: {e}"));
+                None
+            }
+        })
+        .collect()
 }

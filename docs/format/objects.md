@@ -1398,7 +1398,10 @@ Placed graphics also have chunk 0x170D, the UID of an object of class
 little-endian files, these objects are TIFF (613), JPEG (411), PNG (307),
 GIF (27) and one other. In the same-version pairs they equal the IDML
 `Contents` for only 3 of 109 embedded or pasted graphics, so they are
-most likely screen previews. The converter does not use them.
+most likely screen previews. The package does not include them: IDML has
+no place for a preview. `indd::convert` returns the previews of graphics
+without `Contents` in `Conversion::previews`, so an application can show
+one when the linked file is missing.
 
 ## Embedded data in IDML
 

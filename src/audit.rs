@@ -175,7 +175,7 @@ pub struct Audit {
 /// Convert `indd` (output discarded) and report what was not read.
 pub fn audit(indd: &[u8], name: &str) -> Result<Audit, Error> {
     let recorder = Recorder::new();
-    let result = crate::convert_with(indd, name, std::io::sink(), Some(recorder.clone()));
+    let result = crate::convert_with(indd, name, std::io::sink(), Some(recorder.clone()), None);
     let log = recorder.take();
 
     let container = Container::parse(indd)?;
