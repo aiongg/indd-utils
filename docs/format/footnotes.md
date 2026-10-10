@@ -75,7 +75,7 @@ all 643 files there are 4 mismatches, all in stale pairs
 | 20 | u16 | 0 in all |
 | 24 | f64 | `SpaceBetween` |
 | 32 | f64 | `Spacer` |
-| 40 | u16 | 0 in all |
+| 40 | u16 | `EosPlacement` (1 `true`): 21 files `true`, 1,364 `false`, all matching (corpus of 2026-10) |
 | 42 | u16 | `ShowPrefixSuffix`: 0 `NoPrefixSuffix` (640), 1 `PrefixSuffixReference` (1), 3 `PrefixSuffixBoth` (2) |
 | 44 | string | `Prefix` |
 | | string | `Suffix` |
@@ -90,6 +90,7 @@ The tail follows the separator: 172 bytes in files from InDesign 7 to 11,
 | Offset | Type | IDML |
 |---|---|---|
 | 0 | u16 | `NoSplitting` |
+| 4 | f64 | `FootnoteMinimumFirstBaselineOffset`: 19.84 in one file, 0 in the 1,384 others with a known tail, all matching (corpus of 2026-10) |
 | 12 | u16, 174-byte tail only | `EnableStraddling` (317 of 317 trustworthy pairs) |
 | R | rule block, 78 bytes | `Rule…` |
 | R + 78 | the same block | `ContinuingRule…` |
@@ -114,14 +115,26 @@ R is 18 for a 174-byte tail and 16 for a 172-byte tail. Each block:
 
 A tail of another length is not read: the converter keeps the observed
 values for the rules and warns. Codes not listed are left out.
-`FootnoteFirstBaselineOffset`, `FootnoteMinimumFirstBaselineOffset`,
-`EosPlacement` and the overprint flags have one value in every sample and
-come from the generated value file (`idml-values.md`).
+`FootnoteFirstBaselineOffset` and the overprint flags have one value in
+every sample and come from the generated value file (`idml-values.md`).
 
 **Without the chunk** (90 files) the IDML has the defaults of the value
 file, `FootnoteTextStyle="ParagraphStyle/$ID/NormalParagraphStyle"`,
 `SeparatorText` tab, and `EnableStraddling="true"` from DOM 12 (67 of 67).
-The converter writes those.
+In the corpus of 2026-10 the 75 files without the chunk (51 trustworthy)
+also have, each in 75 of 75: `StartAt="1"`, `Prefix=""`, `Suffix=""`,
+`FootnoteMarkerStyle="CharacterStyle/$ID/[No character style]"`,
+`SpaceBetween="0"`, `Spacer="0"`,
+`FootnoteMinimumFirstBaselineOffset="0"`, `EosPlacement="false"`,
+`NoSplitting="false"`; for the rule and the continuing rule `…On`
+`true`, `…LineWeight` 1, `…Tint` and `…GapTint` 100, `…LeftIndent` 0,
+`…Width` 72 (rule) and 288 (continuing rule), `…Offset` 0, `…Type`
+`StrokeStyle/$ID/Solid`, `…Color` `Color/Black`, `…GapColor`
+`Swatch/None`; and the properties `FootnoteNumberingStyle` `Arabic`,
+`RestartNumbering` `DontRestart`, `ShowPrefixSuffix` `NoPrefixSuffix`
+and `MarkerPositioning` `SuperscriptMarker`. The value files lost most of
+these when the corpus grew, because files with the chunk vary; the
+converter writes them for files without the chunk.
 
 `SeparatorText` in the value file is the reference `&#9;`; the value file
 reader now decodes numeric character references, so the tab is written

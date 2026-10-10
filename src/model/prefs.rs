@@ -151,6 +151,8 @@ pub struct FootnoteOptions {
     pub marker: (u16, u16),
     pub space_between: f64,
     pub spacer: f64,
+    /// u16 at 40: `EosPlacement`.
+    pub eos_placement: u16,
     /// Prefix and suffix display code.
     pub prefix_suffix: u16,
     pub prefix: String,
@@ -163,6 +165,8 @@ pub struct FootnoteOptions {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FootnoteTail {
     pub no_splitting: bool,
+    /// f64 at 4: `FootnoteMinimumFirstBaselineOffset`.
+    pub minimum_first_baseline: f64,
     /// `EnableStraddling`; only in the 174-byte tail.
     pub straddling: Option<bool>,
     /// The rule and the continuing rule.
@@ -200,7 +204,7 @@ impl FootnoteOptions {
         let ruby = c.u16()?;
         let space_between = c.f64()?;
         let spacer = c.f64()?;
-        c.skip(2)?;
+        let eos_placement = c.u16()?;
         let prefix_suffix = c.u16()?;
         let prefix = counted_string(&mut c)?;
         let suffix = counted_string(&mut c)?;
@@ -236,6 +240,7 @@ impl FootnoteOptions {
             };
             Some(FootnoteTail {
                 no_splitting: enc.u16_at(tail, 0) != Some(0),
+                minimum_first_baseline: enc.f64_at(tail, 4).unwrap_or_default(),
                 straddling: (t == 174).then(|| enc.u16_at(tail, 12) != Some(0)),
                 rules: [rule(rule_at)?, rule(rule_at + 78)?],
             })
@@ -251,6 +256,7 @@ impl FootnoteOptions {
             marker: (superscript, ruby),
             space_between,
             spacer,
+            eos_placement,
             prefix_suffix,
             prefix,
             suffix,
@@ -803,6 +809,26 @@ mod id {
     pub const ZERO_POINT: u32 = 0x54A;
     pub const LAYOUT_ADJUSTMENT: u32 = 0x7006;
     pub const SHOW_TEXT_THREADS: u32 = 0xCA0B;
+    pub const DOCUMENT_GRID_SHOWN: u32 = 0x566;
+    pub const STYLE_PREVIEW: u32 = 0xCAF3;
+    pub const HIGHLIGHT_HJ_VIOLATIONS: u32 = 0xCA62;
+    pub const HIGHLIGHT_CUSTOM_SPACING: u32 = 0xCAD3;
+    pub const HIGHLIGHT_SUBSTITUTED_GLYPHS: u32 = 0xCAD4;
+    pub const SNAP_TO_LAYOUT_GRID: u32 = 0xCD14;
+    pub const SHOW_ALL_LAYOUT_GRIDS: u32 = 0xCD1C;
+    pub const SHOW_ALL_FRAME_GRIDS: u32 = 0xCD1D;
+    pub const SHOW_CHARACTER_COUNT: u32 = 0xCD1E;
+    /// i16 `MojikumiUiSettings`.
+    pub const MOJIKUMI_UI: u32 = 0x42DB;
+    /// u32 1 where the tagged PDF structure follows the articles.
+    pub const ARTICLE_ORDER: u32 = 0x11C69;
+    /// XML import options: u32 count of key and value pairs.
+    pub const XML_IMPORT: u32 = 0x1BC0B;
+    /// Story settings, as the story chunk 0x2EE.
+    pub const STORY: u32 = 0x2EE;
+    /// Text wrap of new page items: the page item chunk 0x3703 without
+    /// the path UID.
+    pub const ITEM_TEXT_WRAP: u32 = 0x3720;
 }
 
 /// Interface colours that preferences without their chunk have
@@ -812,6 +838,26 @@ mod ui {
     pub const MAGENTA: [f64; 3] = [1.0, 0.31, 1.0];
     pub const FIESTA: [f64; 3] = [0.97, 0.35, 0.42];
     pub const GRID_BLUE: [f64; 3] = [0.48, 0.73, 0.85];
+}
+
+/// `CreateLinkToXML` from the XML import options (chunk 0x1BC0B): a u32
+/// count of key and value pairs, each a u32 length in UTF-16 units and
+/// text segments. No pairs is `false`; key `XMediaUI_CreateLink` with
+/// value `1` is `true`. `None` where the pairs cannot be read or lack the
+/// key.
+fn xml_import_link(enc: Encoding, d: &[u8]) -> Option<bool> {
+    let mut c = enc.cursor(d);
+    let n = c.u32().ok()?;
+    for _ in 0..n {
+        let len = c.u32().ok()? as usize;
+        let key = c.segments(len).ok()?;
+        let len = c.u32().ok()? as usize;
+        let value = c.segments(len).ok()?;
+        if key == "XMediaUI_CreateLink" {
+            return Some(value == "1");
+        }
+    }
+    (n == 0).then_some(false)
 }
 
 /// The EPUB identifier of documents without EPUB export options.
@@ -1044,9 +1090,177 @@ impl Reader<'_> {
                 "ShowInvisibles",
             ),
             (id::GRIDS_IN_BACK, true, "GridPreference", "GridsInBack"),
+            (
+                id::DOCUMENT_GRID_SHOWN,
+                false,
+                "GridPreference",
+                "DocumentGridShown",
+            ),
+            (
+                id::STYLE_PREVIEW,
+                false,
+                "TextPreference",
+                "EnableStylePreviewMode",
+            ),
+            (
+                id::SHOW_ALL_FRAME_GRIDS,
+                true,
+                "CjkGridPreference",
+                "ShowAllFrameGrids",
+            ),
+            (
+                id::SHOW_CHARACTER_COUNT,
+                true,
+                "CjkGridPreference",
+                "ShowCharacterCount",
+            ),
         ] {
             if let Some(v) = flag(id, absent)? {
                 set(element, name, v);
+            }
+        }
+        // Flags whose documents without the chunk do not have one value.
+        for (id, element, name) in [
+            (
+                id::HIGHLIGHT_HJ_VIOLATIONS,
+                "TextPreference",
+                "HighlightHjViolations",
+            ),
+            (
+                id::HIGHLIGHT_CUSTOM_SPACING,
+                "TextPreference",
+                "HighlightCustomSpacing",
+            ),
+            (
+                id::HIGHLIGHT_SUBSTITUTED_GLYPHS,
+                "TextPreference",
+                "HighlightSubstitutedGlyphs",
+            ),
+            (
+                id::SNAP_TO_LAYOUT_GRID,
+                "CjkGridPreference",
+                "SnapToLayoutGrid",
+            ),
+            (
+                id::SHOW_ALL_LAYOUT_GRIDS,
+                "CjkGridPreference",
+                "ShowAllLayoutGrids",
+            ),
+        ] {
+            if get(id)?.is_some()
+                && let Some(v) = flag(id, false)?
+            {
+                set(element, name, v);
+            }
+        }
+        match get(id::MOJIKUMI_UI)? {
+            Some(d) => {
+                if let Some(v) = self.enc().u16_at(&d, 0) {
+                    set(
+                        "MojikumiUiPreference",
+                        "MojikumiUiSettings",
+                        (v as i16).to_string(),
+                    );
+                }
+            }
+            None => set(
+                "MojikumiUiPreference",
+                "MojikumiUiSettings",
+                "16383".into(),
+            ),
+        }
+        // Chunk 0x11C69 changes both values; which one it stores is not
+        // known (preferences.md, single-chunk preferences).
+        let articles = match get(id::ARTICLE_ORDER)? {
+            None => Some(false),
+            Some(d) => (self.enc().u32_at(&d, 0) == Some(1)).then_some(true),
+        };
+        if let Some(a) = articles {
+            let order = if a { "UseArticles" } else { "UseXMLStructure" };
+            set("TaggedPDFPreference", "StructureOrder", order.into());
+            set(
+                "DictionaryPreference",
+                "RecomposeWhenChanged",
+                (!a).to_string(),
+            );
+        }
+        if let Some(d) = get(id::XML_IMPORT)?
+            && let Some(link) = xml_import_link(self.enc(), &d)
+        {
+            set("XMLImportPreference", "CreateLinkToXML", link.to_string());
+        }
+        // Story settings of new text frames: u16 at 12 optical margin
+        // alignment, u16 at 14 frame type, f64 at 2 optical margin size.
+        match get(id::STORY)? {
+            Some(d) if d.len() == 16 => {
+                let u = |o: usize| self.enc().u16_at(&d, o);
+                match u(12) {
+                    Some(0) => set("StoryPreference", "OpticalMarginAlignment", "false".into()),
+                    Some(1) => set("StoryPreference", "OpticalMarginAlignment", "true".into()),
+                    _ => {}
+                }
+                match u(14) {
+                    Some(0) => set("StoryPreference", "FrameType", "TextFrameType".into()),
+                    Some(1) => set("StoryPreference", "FrameType", "FrameGridType".into()),
+                    _ => {}
+                }
+                if let Some(size) = self.enc().f64_at(&d, 2) {
+                    set("StoryPreference", "OpticalMarginSize", num(size));
+                }
+            }
+            Some(_) => {}
+            None => {
+                set("StoryPreference", "OpticalMarginAlignment", "false".into());
+                set("StoryPreference", "FrameType", "TextFrameType".into());
+            }
+        }
+        // Text wrap of new page items: u32 mode, four f64 offsets (left,
+        // top, right, bottom), u32 1 where the wrap applies everywhere.
+        let wrap = match get(id::ITEM_TEXT_WRAP)? {
+            Some(d) if d.len() == 40 => {
+                let mut c = self.cursor(&d);
+                let mode = c.u32()?;
+                let offsets = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
+                let everywhere = c.u32()?;
+                Some((Some(mode), offsets, Some(everywhere)))
+            }
+            Some(_) => None,
+            None => Some((Some(0), [0.0; 4], Some(1))),
+        };
+        if let Some((mode, [left, top, right, bottom], everywhere)) = wrap {
+            let mode = match mode {
+                Some(0) => Some("None"),
+                Some(1) => Some("JumpObjectTextWrap"),
+                Some(3) => Some("BoundingBoxTextWrap"),
+                Some(6) => Some("Contour"),
+                _ => None,
+            };
+            if let Some(m) = mode {
+                set("TextWrapPreference", "TextWrapMode", m.into());
+            }
+            match everywhere {
+                Some(0) => set("TextWrapPreference", "ApplyToMasterPageOnly", "true".into()),
+                Some(1) => set("TextWrapPreference", "ApplyToMasterPageOnly", "false".into()),
+                _ => {}
+            }
+            props.push((
+                "TextWrapPreference",
+                "TextWrapOffset",
+                PrefProp::Attrs(vec![
+                    ("Top", num(top)),
+                    ("Left", num(left)),
+                    ("Bottom", num(bottom)),
+                    ("Right", num(right)),
+                ]),
+            ));
+        }
+        // The story orientation of new text frames: byte 116 of the text
+        // preferences.
+        if let Some(d) = get(id::TEXT)? {
+            match d.get(116) {
+                Some(0) => set("StoryPreference", "StoryOrientation", "Horizontal".into()),
+                Some(1) => set("StoryPreference", "StoryOrientation", "Vertical".into()),
+                _ => {}
             }
         }
 
@@ -1155,6 +1369,8 @@ impl Reader<'_> {
             None => {
                 set("TextPreference", "SmartTextReflow", "false".into());
                 set("TextPreference", "LimitToMasterTextFrames", "true".into());
+                set("TextPreference", "DeleteEmptyPages", "false".into());
+                set("TextPreference", "PreserveFacingPageSpreads", "false".into());
             }
         }
 
@@ -1200,6 +1416,28 @@ impl Reader<'_> {
                 format!("{} {}", num(h), num(v)),
             );
             set("PasteboardPreference", "MinimumSpaceAboveAndBelow", num(v));
+        }
+        // From DOM 9 the chunk has 34 bytes, byte 32 the theme colour flag.
+        match get(id::PASTEBOARD)? {
+            Some(d) if d.len() == 34 => match d[32] {
+                0 => set(
+                    "PasteboardPreference",
+                    "MatchPreviewBackgroundToThemeColor",
+                    "false".into(),
+                ),
+                1 => set(
+                    "PasteboardPreference",
+                    "MatchPreviewBackgroundToThemeColor",
+                    "true".into(),
+                ),
+                _ => {}
+            },
+            None if major >= 9 => set(
+                "PasteboardPreference",
+                "MatchPreviewBackgroundToThemeColor",
+                "false".into(),
+            ),
+            _ => {}
         }
         // Text wrap: u8 at 0, 2 and, in 6-byte chunks, 4.
         if let Some(d) = get(id::TEXT_WRAP)?.filter(|d| d.len() >= 3) {
@@ -1341,21 +1579,24 @@ impl Reader<'_> {
 
         // Booklet options: u32, a flagged string (not mapped), 4 bytes,
         // then the four margins.
-        if let Some(d) = get(id::BOOKLET_OPTIONS)? {
-            let mut c = self.cursor(&d);
-            let margins = (|| -> Result<[f64; 4], Error> {
-                c.u32()?;
-                flagged(&mut c)?;
-                c.skip(4)?;
-                Ok([c.f64()?, c.f64()?, c.f64()?, c.f64()?])
-            })();
-            if let Ok(m) = margins {
-                for (name, v) in ["TopMargin", "BottomMargin", "LeftMargin", "RightMargin"]
-                    .into_iter()
-                    .zip(m)
-                {
-                    set("PrintBookletOption", name, num(v));
-                }
+        let booklet = match get(id::BOOKLET_OPTIONS)? {
+            Some(d) => {
+                let mut c = self.cursor(&d);
+                (|| -> Result<[f64; 4], Error> {
+                    c.u32()?;
+                    flagged(&mut c)?;
+                    c.skip(4)?;
+                    Ok([c.f64()?, c.f64()?, c.f64()?, c.f64()?])
+                })()
+            }
+            None => Ok([36.0; 4]),
+        };
+        if let Ok(m) = booklet {
+            for (name, v) in ["TopMargin", "BottomMargin", "LeftMargin", "RightMargin"]
+                .into_iter()
+                .zip(m)
+            {
+                set("PrintBookletOption", name, num(v));
             }
         }
 
@@ -1547,13 +1788,20 @@ impl Reader<'_> {
                 }
             }
         }
-        if let Some(d) = get(id::LAYOUT_ADJUSTMENT)? {
-            if let Some(v) = bool_at(&d, 0) {
-                set("LayoutAdjustmentPreference", "EnableLayoutAdjustment", v);
+        match get(id::LAYOUT_ADJUSTMENT)? {
+            Some(d) => {
+                if let Some(v) = bool_at(&d, 0) {
+                    set("LayoutAdjustmentPreference", "EnableLayoutAdjustment", v);
+                }
+                if let Some(z) = self.enc().f64_at(&d, 12) {
+                    set("LayoutAdjustmentPreference", "SnapZone", num(z));
+                }
             }
-            if let Some(z) = self.enc().f64_at(&d, 12) {
-                set("LayoutAdjustmentPreference", "SnapZone", num(z));
-            }
+            None => set(
+                "LayoutAdjustmentPreference",
+                "EnableLayoutAdjustment",
+                "false".into(),
+            ),
         }
         if (major, version.minor) >= (21, 1) {
             let shown =
@@ -1578,7 +1826,21 @@ impl Reader<'_> {
             }
         }
         // Chapter numbering: u32 format code, u32 source, u32 number, u16.
-        if let Some(d) = get(id::CHAPTER_NUMBER)?.filter(|d| d.len() >= 12) {
+        let chapter = get(id::CHAPTER_NUMBER)?;
+        if chapter.is_none() {
+            props.push((
+                "ChapterNumberPreference",
+                "ChapterNumberFormat",
+                PrefProp::Text("string", "1, 2, 3, 4...".into()),
+            ));
+            set(
+                "ChapterNumberPreference",
+                "ChapterNumberSource",
+                "ContinueFromPreviousDocument".into(),
+            );
+            set("ChapterNumberPreference", "ChapterNumber", "1".into());
+        }
+        if let Some(d) = chapter.filter(|d| d.len() >= 12) {
             let mut c = self.cursor(&d);
             let (format, source, number) = (c.u32()?, c.u32()?, c.u32()?);
             if let Some(f) = chapter_format(format) {
@@ -2053,5 +2315,19 @@ mod tests {
         assert_eq!(num_half_even(-12.5), "-12.5");
         assert_eq!(num_half_even(0.0625), "0.0625");
         assert_eq!(num_half_even(f64::from(16.6_f32)), "16.600000381469727");
+    }
+
+    #[test]
+    fn reads_the_xml_import_link() {
+        let enc = Encoding::default();
+        let mut d = 2u32.to_le_bytes().to_vec();
+        for (k, v) in [("XMediaUI_SparseImport", "0"), ("XMediaUI_CreateLink", "1")] {
+            cstr(&mut d, k);
+            cstr(&mut d, v);
+        }
+        assert_eq!(xml_import_link(enc, &d), Some(true));
+        assert_eq!(xml_import_link(enc, &[0; 4]), Some(false));
+        // A pair cut short.
+        assert_eq!(xml_import_link(enc, &d[..d.len() - 3]), None);
     }
 }

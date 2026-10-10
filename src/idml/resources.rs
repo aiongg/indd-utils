@@ -28,6 +28,11 @@ pub(super) const PREFERENCE_TAGS: &[&str] = &[
     "EPubExportPreference",
     "TransparencyPreference",
     "LayoutAdjustmentPreference",
+    "StoryPreference",
+    "TextWrapPreference",
+    "CjkGridPreference",
+    "MojikumiUiPreference",
+    "XMLImportPreference",
 ];
 
 /// A tree of preference values as a `Node`.
@@ -423,11 +428,73 @@ impl Writer<'_> {
         };
         let attr = |n: &mut Node, k: &str, v: String| n.attrs.push((k.to_string(), v));
         let Some(f) = &self.doc.prefs.footnotes else {
-            // Without the chunk every IDML has these values.
+            // Without the chunk every IDML has these values (footnotes.md,
+            // footnote options).
             if major >= 12 {
                 attr(&mut n, "EnableStraddling", "true".into());
             }
             attr(&mut n, "FootnoteTextStyle", self.style_ref(None, true));
+            for (k, v) in [
+                ("StartAt", "1"),
+                ("Prefix", ""),
+                ("Suffix", ""),
+                (
+                    "FootnoteMarkerStyle",
+                    "CharacterStyle/$ID/[No character style]",
+                ),
+                ("SpaceBetween", "0"),
+                ("Spacer", "0"),
+                ("FootnoteMinimumFirstBaselineOffset", "0"),
+                ("EosPlacement", "false"),
+                ("NoSplitting", "false"),
+            ] {
+                attr(&mut n, k, v.into());
+            }
+            for prefix in ["Rule", "ContinuingRule"] {
+                for (k, v) in [
+                    ("On", "true"),
+                    ("LineWeight", "1"),
+                    ("Tint", "100"),
+                    ("GapTint", "100"),
+                    ("LeftIndent", "0"),
+                    (
+                        "Width",
+                        if prefix == "Rule" { "72" } else { "288" },
+                    ),
+                    ("Offset", "0"),
+                ] {
+                    attr(&mut n, &format!("{prefix}{k}"), v.into());
+                }
+            }
+            let text_prop = |name: String, ty: &str, text: &str| Node {
+                tag: name,
+                attrs: vec![("type".into(), ty.into())],
+                text: Some(text.into()),
+                ..Node::default()
+            };
+            let mut props: Vec<Node> = [
+                ("FootnoteNumberingStyle", "Arabic"),
+                ("RestartNumbering", "DontRestart"),
+                ("ShowPrefixSuffix", "NoPrefixSuffix"),
+                ("MarkerPositioning", "SuperscriptMarker"),
+            ]
+            .into_iter()
+            .map(|(k, v)| text_prop(k.into(), "enumeration", v))
+            .collect();
+            for prefix in ["Rule", "ContinuingRule"] {
+                for (k, v) in [
+                    ("Type", "StrokeStyle/$ID/Solid"),
+                    ("Color", "Color/Black"),
+                    ("GapColor", "Swatch/None"),
+                ] {
+                    props.push(text_prop(format!("{prefix}{k}"), "object", v));
+                }
+            }
+            n.children.push(Node {
+                tag: "Properties".into(),
+                children: props,
+                ..Node::default()
+            });
             return n;
         };
         let bool_text = |b: bool| b.to_string();
@@ -452,6 +519,18 @@ impl Writer<'_> {
         attr(&mut n, "SeparatorText", f.separator.clone());
         attr(&mut n, "SpaceBetween", num(f.space_between));
         attr(&mut n, "Spacer", num(f.spacer));
+        if let Some(t) = &f.tail {
+            attr(
+                &mut n,
+                "FootnoteMinimumFirstBaselineOffset",
+                num(t.minimum_first_baseline),
+            );
+        }
+        match f.eos_placement {
+            0 => attr(&mut n, "EosPlacement", "false".into()),
+            1 => attr(&mut n, "EosPlacement", "true".into()),
+            _ => {}
+        }
         let mut props: Vec<Node> = Vec::new();
         let mut prop = |name: &str, ty: &str, text: String| {
             props.push(Node {
@@ -913,18 +992,47 @@ impl Writer<'_> {
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v)),
             );
-        } else if let Some(japanese) = self.japanese_session() {
-            // Without the chunk, the title and the separator follow the
-            // language of the last session (`preferences.md`, index
-            // options). Other languages have different titles.
+        } else {
+            // Without the chunk every IDML has these values; the title and
+            // the separator follow the language of the last session
+            // (`preferences.md`, index options). Other languages have
+            // different titles.
             let i = ours_of(&mut ours, "IndexOptions");
-            if japanese {
-                ours[i].attrs.push(("Title".into(), "索引".into()));
+            let paragraph = "ParagraphStyle/$ID/[No paragraph style]";
+            let character = "CharacterStyle/$ID/[No character style]";
+            for (k, v) in [
+                ("TitleStyle", paragraph),
+                ("ReplaceExistingIndex", "true"),
+                ("IncludeBookDocuments", "false"),
+                ("IncludeHiddenEntries", "false"),
+                ("IndexFormat", "NestedFormat"),
+                ("IncludeSectionHeadings", "true"),
+                ("IncludeEmptyIndexSections", "false"),
+                ("Level1Style", paragraph),
+                ("Level2Style", paragraph),
+                ("Level3Style", paragraph),
+                ("Level4Style", paragraph),
+                ("SectionHeadingStyle", paragraph),
+                ("PageNumberStyle", character),
+                ("CrossReferenceStyle", character),
+                ("CrossReferenceTopicStyle", character),
+                ("FollowingTopicSeparator", "  "),
+                ("PageRangeSeparator", "^="),
+                ("BetweenPageNumbersSeparator", ", "),
+                ("BeforeCrossReferenceSeparator", ". "),
+                ("EntryEndSeparator", ""),
+            ] {
+                ours[i].attrs.push((k.into(), v.into()));
             }
-            let separator = if japanese { "、" } else { "; " };
-            ours[i]
-                .attrs
-                .push(("BetweenEntriesSeparator".into(), separator.into()));
+            if let Some(japanese) = self.japanese_session() {
+                if japanese {
+                    ours[i].attrs.push(("Title".into(), "索引".into()));
+                }
+                let separator = if japanese { "、" } else { "; " };
+                ours[i]
+                    .attrs
+                    .push(("BetweenEntriesSeparator".into(), separator.into()));
+            }
         }
         ours.push(self.footnote_option());
         if let Some(c) = prefs.baseline_frame_grid_color.and_then(frame_grid_color) {

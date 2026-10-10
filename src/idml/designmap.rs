@@ -132,7 +132,17 @@ impl Writer<'_> {
         // Elements every IDML of the version has, with the values they
         // all have (idml-values.md), in the order of the IDML files.
         let singleton = |x: &mut Xml, tag: &str| {
-            if let Some(n) = values::present(&format!("Document/{tag}"), major) {
+            // Every IDML from 7.5 has the tagged PDF settings, none of 7.0
+            // (preferences.md, tagged PDF).
+            let present = values::present(&format!("Document/{tag}"), major).or_else(|| {
+                (tag == "TaggedPDFPreference" && (major, doc.version.minor) >= (7, 5)).then(|| {
+                    Node {
+                        tag: tag.to_string(),
+                        ..Node::default()
+                    }
+                })
+            });
+            if let Some(n) = present {
                 // Values read from the INDD (`model::prefs`) first.
                 let mut ours = match tag {
                     "EndnoteOption" => self.endnote_option(),

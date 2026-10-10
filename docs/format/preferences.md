@@ -83,6 +83,29 @@ whose IDML has the other value (5 and 12 files), so these two settings
 are stored somewhere else as well in some documents; that place is not
 known.
 
+More u16 flags, over the corpus of 2026-10 (1,460 pairs, 1,251 of them
+trustworthy). Every file with the chunk matches; "absent" gives the
+value of every file without it.
+
+| Chunk | Attribute | With the chunk | Absent |
+|---|---|---|---|
+| 0x566 | `GridPreference` `DocumentGridShown` | 122 of 122 (7 `true`) | `false`, 1,338 of 1,338 |
+| 0xCAF3 | `TextPreference` `EnableStylePreviewMode` | 115 of 115 (11 `true`) | `false`, 1,345 of 1,345 |
+| 0xCD1D | `CjkGridPreference` `ShowAllFrameGrids` | 90 of 90 (45 `true`) | `true`, 1,370 of 1,370 |
+| 0xCD1E | `CjkGridPreference` `ShowCharacterCount` | 103 of 103 (60 `true`) | `true`, 1,357 of 1,357 |
+| 0xCD14 | `CjkGridPreference` `SnapToLayoutGrid` | 1,460 of 1,460 (every file has it) | |
+| 0xCD1C | `CjkGridPreference` `ShowAllLayoutGrids` | 1,460 of 1,460 (every file has it) | |
+| 0xCA62 | `TextPreference` `HighlightHjViolations` | 63 of 63 (4 `true`) | varies |
+| 0xCAD3 | `TextPreference` `HighlightCustomSpacing` | 57 of 57 (1 `true`) | varies |
+| 0xCAD4 | `TextPreference` `HighlightSubstitutedGlyphs` | 57 of 57 (4 `true`) | varies |
+
+Without one of the three highlight chunks, IDML has `false` in all but 4
+or 5 files, which have no highlight chunk at all and every highlight on
+in IDML (or are one collection with other values); no stored value
+separates them, so the converter writes these three only from the chunk.
+`HighlightKeeps` and `HighlightSubstitutedFonts` have no chunk; they are
+left to the value files, which do not have them because they vary.
+
 ## Document setup (`DocumentPreference`)
 
 Chunk 0x533 (146 bytes) also holds the page size, facing pages, intent
@@ -222,7 +245,14 @@ Chunk 0x28BE (14 bytes, 16 from InDesign 18), u8 flags: 4
 `SmartTextReflow`, 6 `LimitToMasterTextFrames`, 8 `DeleteEmptyPages`, 10
 `PreserveFacingPageSpreads`, 12 `SmartTextReflowSync` (16 bytes). 620 of
 620 files with the chunk (283 of 283 for the last). The 34 files without
-it have `SmartTextReflow="false"` and `LimitToMasterTextFrames="true"`.
+it have `SmartTextReflow="false"` and `LimitToMasterTextFrames="true"`;
+in the corpus of 2026-10 the 60 files without it also have
+`DeleteEmptyPages` and `PreserveFacingPageSpreads` `false` (60 of 60).
+
+**Story orientation.** Byte 116 of chunk 0x280, after
+`TextColumnCount`, is `StoryPreference` `StoryOrientation`: 0
+`Horizontal` (1,349 files), 1 `Vertical` (111); 1,460 of 1,460 pairs of
+the corpus of 2026-10, every chunk length.
 
 Chunk 0x3768 (4 or 6 bytes): u8 at 0 `AbutTextToTextWrap`, u8 at 2
 `ZOrderTextWrap`, and in 6-byte chunks u8 at 4
@@ -259,6 +289,60 @@ Chunk 0x5D2: f64 horizontal and vertical margin at 0 and 8, written as
 without it have `-1 72` and 72, except one stale pair. Four u32 UIDs of
 interface colours follow; the IDML colours (`LightGray`, `GridBlue`) are
 not in the table of `objects.md`, so they are not written.
+
+From DOM 9 the chunk has 34 bytes, and byte 32 is
+`MatchPreviewBackgroundToThemeColor` (4 `true`): 199 of 199 files with
+a 34-byte chunk. Without the chunk, IDML from DOM 9 has `false` (1,156
+of 1,156 files of the corpus of 2026-10). The 32-byte chunk of DOM 7 and
+8 has no such byte, and their IDML no attribute.
+
+## Story settings of new frames (`StoryPreference`)
+
+Chunk 0x2EE of the preferences object (16 bytes) has the layout of the
+story chunk 0x2EE (`objects.md`, story settings): u16 at 12
+`OpticalMarginAlignment`, u16 at 14 `FrameType` (0 `TextFrameType`, 1
+`FrameGridType`), f64 at 2 `OpticalMarginSize`. 197 of 197 files with
+the chunk, for each attribute. The u16 at 0 is 0 in all 197, also in
+documents with vertical stories; the orientation is in chunk 0x280
+(above). Without the chunk, IDML has `OpticalMarginAlignment="false"`
+and `FrameType="TextFrameType"` (1,263 of 1,263), but
+`OpticalMarginSize` is 12 in 1,207 files and 9.2126 (13 Q) in 56. No
+stored value was found that separates the 56 (all have a session of a
+Japanese edition in the save history, but so do 326 files with 12), so
+the converter leaves the size out without the chunk.
+
+## Text wrap of new page items (`TextWrapPreference`)
+
+Chunk 0x3720 of the preferences object (40 bytes) is the page item text
+wrap chunk 0x3703 (`objects.md`, text wrap) without the path UID: u32 at
+0 the wrap mode (0 `None`, 1 `JumpObjectTextWrap`, 3
+`BoundingBoxTextWrap`, 6 `Contour`), f64 at 4, 12, 20 and 28 the left,
+top, right and bottom `TextWrapOffset`, and u32 at 36: 1 is
+`ApplyToMasterPageOnly="false"`, 0 is `true`. Every attribute matches in
+the 42 files with the chunk (20 with mode 0 and `true`, 13 with mode 0
+and `false`, 4 bounding box, 4 jump object, 1 contour). The 1,418 files
+without it have `None`, offsets 0 and `false`.
+
+## Other settings in their own chunks
+
+| Chunk | Attribute | Evidence (corpus of 2026-10) |
+|---|---|---|
+| 0x42DB (i16) | `MojikumiUiPreference` `MojikumiUiSettings`, signed decimal (0x8000 is −32768) | 92 of 92 (16384, 16383, 9729, −32768, 32767, 1); without the chunk 16383, 1,368 of 1,368 |
+| 0x11C69 (u32 1) | `TaggedPDFPreference` (designmap) `StructureOrder="UseArticles"` and `DictionaryPreference` `RecomposeWhenChanged="false"` | 2 of 2; without the chunk `UseXMLStructure` (1,448 of 1,448 IDML files that have the element) and `true` (1,458 of 1,458) |
+| 0x1BC0B | `XMLImportPreference` `CreateLinkToXML` | u32 count of key and value pairs, each a u32 length in UTF-16 units and text segments; key `XMediaUI_CreateLink` with value `1` is `true` (1 file, 10 pairs); count 0 is `false` (1,459 of 1,459) |
+
+`StructureOrder` and `RecomposeWhenChanged` differ from the common values
+only in the same two documents (one collection, version 20.5), which are
+also the only files with chunk 0x11C69. Which of the two the chunk
+stores is not known; the converter writes both from it. The other keys
+of chunk 0x1BC0B (`XMediaUI_RunXSLTScriptEnabled`,
+`XMediaUI_PreserveStoryTextStyling` and more) occur only in that one
+file, whose other `XMLImportPreference` values are the common ones, so
+they are not mapped.
+
+**Tagged PDF.** Every IDML from version 7.5 has a `TaggedPDFPreference`
+in designmap.xml (1,450 of 1,450 files), none of version 7.0 (0 of 10);
+the converter writes it from 7.5.
 
 ## Default XML tags (`XMLPreference`)
 
@@ -456,8 +540,9 @@ paper name, not mapped), 4 bytes, then f64 `TopMargin`, `BottomMargin`,
 `LeftMargin`, `RightMargin`, then 34 bytes (`AutoAdjustMargins` and the
 other attributes have one value in every file). The chunk is in 11
 trustworthy pairs (12 of all pairs); the margins match in all of them.
-Without the chunk, IDML has the margins 36 (478 of 478). Left and right
-are equal in every sample, so their order is assumed.
+Without the chunk, IDML has the margins 36 (478 of 478; 1,447 of 1,447
+in the corpus of 2026-10). Left and right are equal in every sample, so
+their order is assumed.
 
 ## Index header setting (`IndexHeaderSetting`)
 
@@ -535,9 +620,19 @@ Evidence: every attribute in 10 of 10 trustworthy pairs (titles in
 several languages, `ReplaceExistingIndex` `false` once,
 `IncludeSectionHeadings` `false` once, user style references).
 
-Without the chunk, IDML has `Title="Index"` in most documents and a
+Without the chunk every IDML of the corpus of 2026-10 (1,392 of 1,392)
+has `TitleStyle`, `Level1Style` to `Level4Style` and
+`SectionHeadingStyle` `ParagraphStyle/$ID/[No paragraph style]`,
+`PageNumberStyle`, `CrossReferenceStyle` and `CrossReferenceTopicStyle`
+`CharacterStyle/$ID/[No character style]`, `ReplaceExistingIndex="true"`,
+`IncludeBookDocuments="false"`, `IncludeHiddenEntries="false"`,
+`IndexFormat="NestedFormat"`, `IncludeSectionHeadings="true"`,
+`IncludeEmptyIndexSections="false"`, and the separators `  ` (two
+spaces, following topic), `^=` (page range), `, ` (between page
+numbers), `. ` (before a cross reference) and the empty end separator.
+The converter writes these. The title is `Index` in most documents and a
 translation in the others (`索引`, `Indice`, `Указатель`, …), and
-`BetweenEntriesSeparator` `; ` or `、`. Both follow the language of the
+`BetweenEntriesSeparator` is `; ` or `、`. Both follow the language of the
 exporting application. The language code of the document's last
 session (`objects.md`, save history) shows a Japanese or Chinese
 edition: the converter writes `Title="索引"` and `、` for code 0x0101,
@@ -555,9 +650,10 @@ trustworthy pairs:
 | 8 | u32 | `ChapterNumber` |
 | 12 | u16 | not identified |
 
-Evidence: 37 of 37. Without the chunk, IDML has the observed values
-(`ChapterNumber="1"`, `ContinueFromPreviousDocument`, `1, 2, 3, 4...`)
-in 452 of 452.
+Evidence: 37 of 37. Without the chunk, IDML has `ChapterNumber="1"`,
+`ContinueFromPreviousDocument` and `1, 2, 3, 4...` in 452 of 452 (1,345
+of 1,345 in the corpus of 2026-10); the converter writes the element
+with these values.
 
 ## Dictionary (`DictionaryPreference`)
 
@@ -631,7 +727,7 @@ in another form, `fonts.md`).
 | 0x555 | colour at 18 | `DocumentPreference` `ColumnGuideColor` | (observed value) | 72 of 72 |
 | 0x5D2 | colours at 20, 24, 28 | `PasteboardPreference` `BleedGuideColor`, `SlugGuideColor`, `PreviewBackgroundColor` | `Fiesta`, `GridBlue`, `LightGray` | 80 of 80; 409 of 409 |
 | 0x54A (18 bytes) | f64 at 0, f64 at 8 | `Document` `ZeroPoint` | `0 0` | 46 of 46; 443 of 443 |
-| 0x7006 (20 bytes) | u8 at 0; f64 at 12 | `LayoutAdjustmentPreference` `EnableLayoutAdjustment`, `SnapZone` | `false` (observed), `SnapZone` not written | 24 of 24 |
+| 0x7006 (20 bytes) | u8 at 0; f64 at 12 | `LayoutAdjustmentPreference` `EnableLayoutAdjustment`, `SnapZone` | `false` (1,377 of 1,377 in the corpus of 2026-10), `SnapZone` below | 24 of 24 |
 | 0xCA0B | u16 1 | `ViewPreference` `ShowTextThreads` `true`, INDD version 21.1 on | `false` | IDML has the attribute only from version 21.1: 26 of 26 (28 of 28 in all pairs) |
 
 Without chunk 0x555, `ColumnGuideColor` keeps its observed value, which
