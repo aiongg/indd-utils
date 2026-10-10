@@ -1051,19 +1051,30 @@ impl Reader<'_> {
         }
 
         // Document setup beyond `DocumentPreferences`.
-        if let Some(d) = get(chunk::DOCUMENT_PREFERENCES)?.filter(|d| d.len() >= 146) {
+        if let Some(d) = get(chunk::DOCUMENT_PREFERENCES)?
+            && let Some(l) = super::settings::SetupLayout::of(d.len())
+        {
             let f = |o: usize| self.cursor(&d[o..]).f64();
             let b = |o: usize| (d[o] != 0).to_string();
-            set("DocumentPreference", "DocumentBleedUniformSize", b(102));
-            set("DocumentPreference", "SlugInsideOrLeftOffset", num(f(104)?));
-            set("DocumentPreference", "SlugTopOffset", num(f(112)?));
+            let s = l.slug;
+            set(
+                "DocumentPreference",
+                "DocumentBleedUniformSize",
+                b(l.bleed_uniform),
+            );
+            set("DocumentPreference", "SlugInsideOrLeftOffset", num(f(s)?));
+            set("DocumentPreference", "SlugTopOffset", num(f(s + 8)?));
             set(
                 "DocumentPreference",
                 "SlugRightOrOutsideOffset",
-                num(f(120)?),
+                num(f(s + 16)?),
             );
-            set("DocumentPreference", "SlugBottomOffset", num(f(128)?));
-            set("DocumentPreference", "DocumentSlugUniformSize", b(136));
+            set("DocumentPreference", "SlugBottomOffset", num(f(s + 24)?));
+            set(
+                "DocumentPreference",
+                "DocumentSlugUniformSize",
+                b(l.slug_uniform),
+            );
         }
 
         // Text preferences and the default text frame columns.

@@ -105,6 +105,30 @@ outside slugs that differ; the order of those pairs follows the order
 the other fields show. Uniform flags: 645 of 645 files (`DocumentBleedUniformSize`
 false in 42, `DocumentSlugUniformSize` true in 3).
 
+**The 126-byte chunk.** Files saved by InDesign 7.0 and 7.5 have a
+126-byte chunk 0x533: 16 bytes before the page size, and the fields
+from the facing pages flag on 20 bytes earlier than in the 146-byte
+chunk:
+
+| Offset | Field | 146-byte offset |
+|---|---|---|
+| 16, 24 | f64 page width, height | 0, 8 |
+| 32 | u8 intent (equal to the u32 at 122) | |
+| 38 | u8 2 facing pages, 1 not | 58 |
+| 44 | u16 page binding | 64 |
+| 50, 58, 66, 74 | f64 bleeds | 70–94 |
+| 82 | u8 `DocumentBleedUniformSize` | 102 |
+| 84, 92, 100, 108 | f64 slugs | 104–128 |
+| 116 | u8 `DocumentSlugUniformSize` | 136 |
+| 122 | u32 intent | 142 |
+
+Evidence: the 11 pairs of the corpus of 2026-10 with this chunk (9
+trustworthy): page size 11 of 11 (5 sizes), intent 11 of 11 (3 web),
+facing pages 11 of 11 (3 facing), binding 0 and `LeftToRight` in 11,
+bleeds 11 of 11 (all four 8.504 in 3, 0 in the others), uniform bleed
+`true` and uniform slug `false` in 11, slugs all 0. As the four bleeds
+are equal in every sample, their order follows the 146-byte chunk.
+
 ## Grids (`GridPreference`)
 
 Chunk 0x55F (36 bytes in all 654 files): f64 at 2 `BaselineDivision`,

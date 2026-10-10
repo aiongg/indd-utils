@@ -74,7 +74,7 @@ not read. The byte after that is 0 in all but 13 strings of each file.
 | Story strands (chunk 0x223) | Every strand has object data | 3.0: the last strand of each story has no object data | Skips strands without data |
 | Ruler guide (chunk 0x3308, `objects.md`) | 52 bytes | 40 bytes, the first 40 bytes of the 52-byte layout | Reads it without the guide type; `GuideType` is left out |
 | Object style text frame settings (chunk 0x1B924) | 222, 162, 142 or 106 bytes | 104 bytes (4.0); the 3.0 file has no object styles | Left out with a warning |
-| Document preferences (chunk 0x533) | 146 bytes or more, except in three InDesign 7.x files | 118 bytes | Left out with a warning |
+| Document preferences (chunk 0x533) | 146 bytes or more, or 126 bytes in InDesign 7.x files (`preferences.md`) | 118 bytes | Left out with a warning |
 | Composite font (chunk 0xCB02) | Starts with the flagged name | 4.0: the same. 3.0: four zero bytes, then the name | Reads the name after the four bytes when it does not parse at 0 and they are 0 |
 | Section page number style (`objects.md`) | 0x4C15 or 0x4C17 | 4.0: 0x4C15. 3.0: 0x4C06 | 3.0: `PageNumberStyle` left out with a warning |
 
@@ -122,9 +122,9 @@ Evidence for each row:
   layout differs from the one in `objects.md` (page width at offset 0):
   offsets 0–15 are zero, and offsets 16 and 24 hold f64 612 and 792.
   Two files with the same page size are not enough to map the fields.
-  Three files from InDesign 7.0 and 7.5 have a 126-byte chunk, also left
-  out with a warning; all other little-endian files that have the chunk
-  have 146 bytes or more.
+  Files from InDesign 7.0 and 7.5 have a 126-byte chunk
+  (`preferences.md`, document setup); all other little-endian files that
+  have the chunk have 146 bytes or more.
 - **Composite fonts.** One composite font in each file
   (`[No composite font]`). In the 4.0 file and in the InDesign 7.0 file
   the chunk starts with the flagged name; in the 3.0 file four zero

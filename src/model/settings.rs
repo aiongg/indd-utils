@@ -41,6 +41,44 @@ pub struct DocumentPreferences {
     pub page_binding: u16,
 }
 
+/// Where the fields of the document setup chunk (0x533) are: the
+/// 146-byte layout (or longer) and the 126-byte layout of InDesign 7.0
+/// and 7.5, which has 16 bytes before the page size and its fields from
+/// the facing pages flag on 20 bytes earlier. See
+/// `docs/format/preferences.md`, document setup.
+pub(super) struct SetupLayout {
+    pub page: usize,
+    pub facing: usize,
+    pub binding: usize,
+    /// Inside, top, outside and bottom bleeds, 8 bytes apart.
+    pub bleed: usize,
+    pub bleed_uniform: usize,
+    /// Inside, top, outside and bottom slugs, 8 bytes apart.
+    pub slug: usize,
+    pub slug_uniform: usize,
+    pub intent: usize,
+}
+
+impl SetupLayout {
+    pub(super) fn of(len: usize) -> Option<SetupLayout> {
+        let (page, shift) = match len {
+            126 => (16, 20),
+            n if n >= 146 => (0, 0),
+            _ => return None,
+        };
+        Some(SetupLayout {
+            page,
+            facing: 58 - shift,
+            binding: 64 - shift,
+            bleed: 70 - shift,
+            bleed_uniform: 102 - shift,
+            slug: 104 - shift,
+            slug_uniform: 136 - shift,
+            intent: 142 - shift,
+        })
+    }
+}
+
 /// A language object (class 0x2D07), chunk 0x2D0F. See
 /// `docs/format/objects.md`, languages.
 #[derive(Debug, Clone, PartialEq)]
@@ -138,27 +176,28 @@ impl<'a> Reader<'a> {
         let Some(d) = self.chunk(uid, chunk::DOCUMENT_PREFERENCES)? else {
             return Ok(None);
         };
-        if d.len() < 146 {
+        let Some(l) = SetupLayout::of(d.len()) else {
             self.warn(format!(
                 "document preferences of {} bytes are not known; left out",
                 d.len()
             ));
             return Ok(None);
-        }
+        };
         let f = |o: usize| self.cursor(&d[o..]).f64();
         let u = |o: usize| self.cursor(&d[o..]).u32();
-        let binding = self.cursor(&d[64..]).u16()?;
+        let binding = self.cursor(&d[l.binding..]).u16()?;
         if binding > 1 {
             self.warn(format!(
                 "document preferences: page binding code {binding} is not known; left out"
             ));
         }
+        let b = l.bleed;
         Ok(Some(DocumentPreferences {
-            page_width: f(0)?,
-            page_height: f(8)?,
-            facing_pages: d[58] == 2,
-            bleed: [f(78)?, f(94)?, f(70)?, f(86)?],
-            intent: u(142)?,
+            page_width: f(l.page)?,
+            page_height: f(l.page + 8)?,
+            facing_pages: d[l.facing] == 2,
+            bleed: [f(b + 8)?, f(b + 24)?, f(b)?, f(b + 16)?],
+            intent: u(l.intent)?,
             page_binding: binding,
         }))
     }
