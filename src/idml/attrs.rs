@@ -9,7 +9,7 @@
 
 use super::*;
 use crate::model::AnchorSettings;
-use crate::model::attrs::{Delimiter, NestedStyle, TabStop};
+use crate::model::attrs::{Delimiter, GrepStyle, LineStyle, NestedStyle, TabStop};
 
 /// Frame fitting attributes of page items and object styles, in the
 /// order IDML writes them (`docs/format/objects.md`).
@@ -350,6 +350,8 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
         false,
     ),
     (0x1B75, "AllNestedStyles", Kind::NestedStyles, true),
+    (0x1BBA, "AllGREPStyles", Kind::GrepStyles, true),
+    (0x1BBB, "AllLineStyles", Kind::LineStyles, true),
     (
         0x42C0,
         "TreatIdeographicSpaceAsSpace",
@@ -1430,6 +1432,11 @@ pub(super) fn delimiter_field(d: &Delimiter) -> Field {
         Delimiter::Dropcap => enumeration("Dropcap"),
         Delimiter::AnyWord => enumeration("AnyWord"),
         Delimiter::AnyCharacter => enumeration("AnyCharacter"),
+        Delimiter::Tabs => enumeration("Tabs"),
+        Delimiter::EndNestedStyle => enumeration("EndNestedStyle"),
+        Delimiter::Digits => enumeration("Digits"),
+        Delimiter::Sentence => enumeration("Sentence"),
+        Delimiter::Repeat => enumeration("Repeat"),
         Delimiter::Character(c) => ("Delimiter", "string", c.clone()),
     }
 }
@@ -1437,9 +1444,24 @@ pub(super) fn delimiter_field(d: &Delimiter) -> Field {
 impl Writer<'_> {
     /// IDML attributes and properties for a text attribute list.
     pub(super) fn text_attrs(&self, attrs: &Attrs) -> (Vec<(&'static str, String)>, Vec<Property>) {
+        self.text_attrs_of(attrs, false)
+    }
+
+    /// Like [`Writer::text_attrs`]; a character style (`character_style`)
+    /// names a composite font by its family name (`docs/format/fonts.md`,
+    /// composite fonts as applied fonts).
+    pub(super) fn text_attrs_of(
+        &self,
+        attrs: &Attrs,
+        character_style: bool,
+    ) -> (Vec<(&'static str, String)>, Vec<Property>) {
         let mut plain = Vec::new();
         let mut props = Vec::new();
         for &(id, name, kind, in_props) in TEXT_ATTRS {
+            let kind = match kind {
+                Kind::Font if character_style => Kind::FamilyName,
+                k => k,
+            };
             // IDML has `MergeConsecutiveParaBorders` from version 13.1
             // (attributes.md).
             if id == 0x1DF1F && !self.saved_by((13, 1)) {
@@ -1497,17 +1519,49 @@ impl Writer<'_> {
             .iter()
             .map(|n| {
                 vec![
-                    (
-                        "AppliedCharacterStyle",
-                        "object",
-                        self.style_ref(Some(n.style).filter(|&u| u != 0), false),
-                    ),
+                    self.applied_character_style(n.style),
                     delimiter_field(&n.delimiter),
                     ("Repetition", "long", n.repetition.to_string()),
                     ("Inclusive", "boolean", n.inclusive.to_string()),
                 ]
             })
             .collect()
+    }
+
+    /// Records of an `AllGREPStyles` list. See `docs/format/attributes.md`.
+    pub(super) fn grep_styles(&self, styles: &[GrepStyle]) -> Vec<Vec<Field>> {
+        styles
+            .iter()
+            .map(|g| {
+                vec![
+                    self.applied_character_style(g.style),
+                    ("GrepExpression", "string", g.expression.clone()),
+                ]
+            })
+            .collect()
+    }
+
+    /// Records of an `AllLineStyles` list. `RepeatLast` is −1 in every
+    /// sample and has no stored field (`docs/format/attributes.md`).
+    pub(super) fn line_styles(&self, styles: &[LineStyle]) -> Vec<Vec<Field>> {
+        styles
+            .iter()
+            .map(|l| {
+                vec![
+                    self.applied_character_style(l.style),
+                    ("LineCount", "long", l.lines.to_string()),
+                    ("RepeatLast", "long", "-1".into()),
+                ]
+            })
+            .collect()
+    }
+
+    fn applied_character_style(&self, uid: u32) -> Field {
+        (
+            "AppliedCharacterStyle",
+            "object",
+            self.style_ref(Some(uid).filter(|&u| u != 0), false),
+        )
     }
 
     /// Page item attributes from an attribute list, as IDML values.
@@ -1812,6 +1866,66 @@ mod tests {
             (0x1BDE, Value::Enum(2)),
         ]));
         assert!(plain.is_empty());
+    }
+
+    #[test]
+    fn writes_composite_fonts_and_grep_styles() {
+        let mut doc = Document::default();
+        doc.fonts.insert(
+            5,
+            crate::model::FontFamily {
+                uid: 5,
+                name: "<5927><6A19>".into(),
+                builtin: false,
+                native_name: String::new(),
+                fonts: Vec::new(),
+                writing_script: 0,
+            },
+        );
+        doc.composite_fonts.push(crate::model::CompositeFont {
+            uid: 9,
+            name: crate::model::Name {
+                builtin: false,
+                name: "\u{5927}\u{6A19}".into(),
+            },
+            entries: Vec::new(),
+        });
+        let w = Writer::for_test(&doc);
+        let grep = |items| Value::StyleList {
+            count: 1,
+            items: Some(crate::model::attrs::StyleItems::Grep(items)),
+        };
+        let mut a = Attrs::default();
+        a.values = vec![
+            (0x1B2B, Value::Ref(5)),
+            (
+                0x1BBA,
+                grep(vec![GrepStyle {
+                    style: 0,
+                    expression: "@|#".into(),
+                }]),
+            ),
+            (
+                0x1BBB,
+                Value::StyleList {
+                    count: 0,
+                    items: Some(crate::model::attrs::StyleItems::Line(Vec::new())),
+                },
+            ),
+        ];
+        let (_, props) = w.text_attrs(&a);
+        let names: Vec<&str> = props.iter().map(|p| p.0).collect();
+        // An empty line style list is left out.
+        assert_eq!(names, ["AppliedFont", "AllGREPStyles"]);
+        assert_eq!(props[0].1, "object");
+        assert!(matches!(&props[0].2, PropValue::Text(t) if t == "CompositeFont/\u{5927}\u{6A19}"));
+        let PropValue::List(items) = &props[1].2 else {
+            panic!("not a list");
+        };
+        assert_eq!(items[0][1], ("GrepExpression", "string", "@|#".into()));
+        // A character style names the composite font by its family name.
+        let (_, props) = w.text_attrs_of(&a, true);
+        assert_eq!(props[0].1, "string");
     }
 
     #[test]

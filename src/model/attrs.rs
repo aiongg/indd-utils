@@ -41,11 +41,10 @@ pub enum Value {
     /// A tab list.
     TabList(Vec<TabStop>),
     /// A list of nested, line or GREP styles: u32 count, then records.
-    /// The records are decoded for nested styles only; `nested` is `None`
-    /// if they cannot be.
+    /// `items` is `None` if the records cannot be decoded.
     StyleList {
         count: u32,
-        nested: Option<Vec<NestedStyle>>,
+        items: Option<StyleItems>,
     },
     /// u32 bullet character type and u32 character value.
     BulletChar {
@@ -70,6 +69,31 @@ pub struct TabStop {
     pub leader: String,
 }
 
+/// The decoded records of a style list.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StyleItems {
+    Nested(Vec<NestedStyle>),
+    Grep(Vec<GrepStyle>),
+    Line(Vec<LineStyle>),
+}
+
+/// A GREP style: the character style it applies (0 for none) to the text
+/// that the expression matches. See `docs/format/attributes.md`, GREP
+/// styles.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GrepStyle {
+    pub style: u32,
+    pub expression: String,
+}
+
+/// A line style: the character style it applies (0 for none) to a number
+/// of lines. See `docs/format/attributes.md`, line styles.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineStyle {
+    pub style: u32,
+    pub lines: u32,
+}
+
 /// A nested style: the character style it applies (0 for none) and up to
 /// where. See `docs/format/attributes.md`, nested styles.
 #[derive(Debug, Clone, PartialEq)]
@@ -89,13 +113,23 @@ pub enum Delimiter {
     AnyWord,
     /// `^?`
     AnyCharacter,
+    /// `^t`
+    Tabs,
+    /// `^p`
+    EndNestedStyle,
+    /// `^9`
+    Digits,
+    /// `^S`
+    Sentence,
+    /// `^L`: repeat the previous styles.
+    Repeat,
     /// A single character.
     Character(String),
 }
 
 /// Delimiter, repetition and inclusiveness of a nested style's delimiter
 /// code: `^c`, or `(d)` / `[d]` followed by an optional count. `None` for
-/// codes without evidence. See `docs/format/attributes.md`.
+/// codes without evidence. See `docs/format/attributes.md`, nested styles.
 pub fn nested_delimiter(code: &str) -> Option<(Delimiter, u32, bool)> {
     if code == "^c" {
         return Some((Delimiter::Dropcap, 1, true));
@@ -114,8 +148,14 @@ pub fn nested_delimiter(code: &str) -> Option<(Delimiter, u32, bool)> {
         count.parse().ok()?
     };
     let delimiter = match inner {
+        "^c" => Delimiter::Dropcap,
         "^w" => Delimiter::AnyWord,
         "^?" => Delimiter::AnyCharacter,
+        "^t" => Delimiter::Tabs,
+        "^p" => Delimiter::EndNestedStyle,
+        "^9" => Delimiter::Digits,
+        "^S" => Delimiter::Sentence,
+        "^L" => Delimiter::Repeat,
         _ if inner.chars().count() == 1 && inner != "^" => Delimiter::Character(inner.to_string()),
         _ => return None,
     };
@@ -310,8 +350,8 @@ enum Layout {
     Text,
     TabList,
     NestedStyles,
-    /// Line or GREP styles: u32 count, then records not decoded.
-    StyleList,
+    GrepStyles,
+    LineStyles,
     BulletChar,
     /// Two u32.
     Words,
@@ -331,7 +371,8 @@ fn text_layout(id: u32) -> Option<Layout> {
         0x422E => Layout::Text,
         0x1B29 => Layout::TabList,
         0x1B75 => Layout::NestedStyles,
-        0x1BBA | 0x1BBB => Layout::StyleList,
+        0x1BBA => Layout::GrepStyles,
+        0x1BBB => Layout::LineStyles,
         0x1A406 => Layout::BulletChar,
         // Stroke types of cell edges, table borders, rows and columns
         // (tables.md).
@@ -373,13 +414,12 @@ fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
         .ok()
         .map(Value::Text),
         Layout::TabList => tab_list(&mut c).map(Value::TabList),
-        Layout::NestedStyles | Layout::StyleList => c.u32().ok().map(|count| Value::StyleList {
-            count,
-            nested: match layout {
-                Layout::NestedStyles => nested_styles(&mut enc.cursor(data)),
-                _ => None,
-            },
-        }),
+        Layout::NestedStyles | Layout::GrepStyles | Layout::LineStyles => {
+            c.u32().ok().map(|count| Value::StyleList {
+                count,
+                items: style_items(layout, &mut enc.cursor(data)),
+            })
+        }
         Layout::BulletChar if data.len() == 8 => (|| {
             Ok::<_, Error>(Value::BulletChar {
                 kind: c.u32()?,
@@ -426,29 +466,55 @@ fn tab_list(c: &mut Cursor) -> Option<Vec<TabStop>> {
     (c.remaining() == 0).then_some(out)
 }
 
-/// Nested styles: u32 count, then per style u32 character style, u32
-/// length and the delimiter code as text segments. `None` unless every
-/// delimiter is known and the styles fill the value exactly.
-fn nested_styles(c: &mut Cursor) -> Option<Vec<NestedStyle>> {
+/// The records of a style list: u32 count, then per record a u32
+/// character style and
+/// - nested styles: u32 length and the delimiter code as text segments;
+/// - GREP styles: u32 length and the expression as text segments;
+/// - line styles: u32 line count.
+///
+/// `None` unless every record can be read (every nested delimiter is
+/// known) and the records fill the value exactly.
+fn style_items(layout: Layout, c: &mut Cursor) -> Option<StyleItems> {
+    fn text(c: &mut Cursor) -> Option<String> {
+        match c.u32().ok()? as usize {
+            0 => Some(String::new()),
+            len => c.segments(len).ok(),
+        }
+    }
     let n = c.u32().ok()?;
-    let mut out = Vec::new();
+    let mut nested = Vec::new();
+    let mut grep = Vec::new();
+    let mut line = Vec::new();
     for _ in 0..n {
         let style = c.u32().ok()?;
-        let len = c.u32().ok()? as usize;
-        let code = if len == 0 {
-            String::new()
-        } else {
-            c.segments(len).ok()?
-        };
-        let (delimiter, repetition, inclusive) = nested_delimiter(&code)?;
-        out.push(NestedStyle {
-            style,
-            delimiter,
-            repetition,
-            inclusive,
-        });
+        match layout {
+            Layout::NestedStyles => {
+                let (delimiter, repetition, inclusive) = nested_delimiter(&text(c)?)?;
+                nested.push(NestedStyle {
+                    style,
+                    delimiter,
+                    repetition,
+                    inclusive,
+                });
+            }
+            Layout::GrepStyles => grep.push(GrepStyle {
+                style,
+                expression: text(c)?,
+            }),
+            _ => line.push(LineStyle {
+                style,
+                lines: c.u32().ok()?,
+            }),
+        }
     }
-    (c.remaining() == 0).then_some(out)
+    if c.remaining() != 0 {
+        return None;
+    }
+    Some(match layout {
+        Layout::NestedStyles => StyleItems::Nested(nested),
+        Layout::GrepStyles => StyleItems::Grep(grep),
+        _ => StyleItems::Line(line),
+    })
 }
 
 /// Page item attributes whose value is a list of opacity gradient stops:
@@ -593,6 +659,9 @@ mod tests {
         assert_eq!(d("(:)"), Some((Delimiter::Character(":".into()), 1, true)));
         assert_eq!(d("(^w)5"), Some((Delimiter::AnyWord, 5, true)));
         assert_eq!(d("(^?)"), Some((Delimiter::AnyCharacter, 1, true)));
+        assert_eq!(d("(^c)"), Some((Delimiter::Dropcap, 1, true)));
+        assert_eq!(d("[^t]"), Some((Delimiter::Tabs, 1, false)));
+        assert_eq!(d("(^L)2"), Some((Delimiter::Repeat, 2, true)));
         assert_eq!(d("(^x)"), None);
         assert_eq!(d("^t"), None);
     }
@@ -614,15 +683,38 @@ mod tests {
             text_value(0x1B75, &b),
             Value::StyleList {
                 count: 1,
-                nested: Some(nested)
+                items: Some(StyleItems::Nested(nested))
             }
         );
-        // GREP styles: only the count is read.
+        // The same record as a GREP style: the code is the expression.
         assert_eq!(
             text_value(0x1BBA, &b),
             Value::StyleList {
                 count: 1,
-                nested: None
+                items: Some(StyleItems::Grep(vec![GrepStyle {
+                    style: 7,
+                    expression: "(^w)2".into()
+                }]))
+            }
+        );
+        // A line style: character style 7 for 3 lines; a byte too many
+        // leaves the records undecoded.
+        let mut l = 1u32.to_le_bytes().to_vec();
+        l.extend(7u32.to_le_bytes());
+        l.extend(3u32.to_le_bytes());
+        assert_eq!(
+            text_value(0x1BBB, &l),
+            Value::StyleList {
+                count: 1,
+                items: Some(StyleItems::Line(vec![LineStyle { style: 7, lines: 3 }]))
+            }
+        );
+        l.push(0);
+        assert_eq!(
+            text_value(0x1BBB, &l),
+            Value::StyleList {
+                count: 1,
+                items: None
             }
         );
     }

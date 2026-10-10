@@ -170,6 +170,23 @@ impl Writer<'_> {
         (idml, base.clone())
     }
 
+    /// The composite font a font family stands for: the one whose name is
+    /// the family's name, with `<hhhh>` escapes decoded
+    /// (`docs/format/fonts.md`, composite fonts as applied fonts).
+    fn composite_font_of(
+        &self,
+        f: &crate::model::font::FontFamily,
+    ) -> Option<&crate::model::CompositeFont> {
+        if self.doc.composite_fonts.is_empty() {
+            return None;
+        }
+        let name = f.unescaped_name();
+        self.doc
+            .composite_fonts
+            .iter()
+            .find(|c| c.name.name == name)
+    }
+
     fn style_ref(&self, uid: Option<u32>, paragraph: bool) -> String {
         let prefix = if paragraph {
             "ParagraphStyle"

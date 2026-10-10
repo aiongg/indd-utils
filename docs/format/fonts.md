@@ -266,3 +266,39 @@ native name (family names, above).
 
 `PlatformName` is `$ID/` in all 4,464 IDML fonts; the converter writes
 that value (`idml-values.md`).
+
+### Composite fonts as applied fonts
+
+A text attribute `AppliedFont` (0x1B2B, `attributes.md`) that names a
+composite font holds the UID of a font family (class 0x3E03) whose name
+is the composite font's name; no `AppliedFont` value is the UID of the
+0xCB02 object. The family name can contain escapes `<hhhh>`, four
+hexadecimal digits of a UTF-16 code unit, for characters outside ASCII
+(such as `<5927><6A19>`). Decoded, the name equals the composite font
+name: in the conversions of the 1,251 trustworthy pairs, families with
+escapes are used in 27 documents, and in 24 their decoded name is one of
+the document's composite fonts. The other escaped names (in 3
+documents) match no composite font and are written as family names, as
+before.
+
+IDML then writes `AppliedFont` as a reference to the composite font,
+`<AppliedFont type="object">CompositeFont/<name></AppliedFont>`, in
+every element but two. Over the trustworthy reference IDMLs, counting
+every `AppliedFont` whose value is a composite font of the document:
+
+| Element | Written as | Values (documents) |
+|---|---|---:|
+| `CharacterStyleRange` | object | 742 (30) |
+| `ParagraphStyle` | object | 139 (27) |
+| `TextDefault` | object | 18 (18) |
+| `CharacterStyle` | string: the name | 48 (11) |
+| `GridDataInformation` | string: the name | 12 (6) |
+
+The converter writes the reference in paragraph styles, text defaults
+and text ranges, and the name in character styles (grid settings do
+not use these attribute lists). Reproduced over the trustworthy pairs:
+`ParagraphStyle` `AppliedFont` 4,803 of 4,804 (4,664 by family name
+alone), `TextDefault` 1,250 of 1,251 (1,232), text ranges 85,587 of
+85,587 (84,909), `CharacterStyle` 1,102 of 1,102 (unchanged). The value
+left in each of the first two is a family name that IDML writes in
+English and the converter in the native script (family names, above).

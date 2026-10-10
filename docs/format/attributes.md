@@ -301,9 +301,9 @@ references, 0x1B28 for point size), so the converter decodes a text value
 by the layout of its attribute. The attributes whose value is not a
 single number have their layout listed in `text_layout`
 (`src/model/attrs.rs`): string values (`FontStyle`) are a flag byte
-followed by an in-object string; tab lists, nested styles, bullet
-characters, points, ruby text and cell edge stroke types are described
-below. Other values are numbers, decoded by length: 8 bytes f64, 4 bytes
+followed by an in-object string; tab lists, nested, GREP and line
+styles, bullet characters, points, ruby text and cell edge stroke types
+are described below. Other values are numbers, decoded by length: 8 bytes f64, 4 bytes
 u32, 2 bytes u16. A value that does not fit its attribute's layout is
 kept undecoded and not written.
 
@@ -346,7 +346,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B27 | `SpaceAfter` | f64 | 42/42 ranges |
 | 0x1B29 | `TabList` (Properties) | list; see below | 110/110 styles |
 | 0x1B2A | `Underline` | 1 = true | 81/81 ranges |
-| 0x1B2B | `AppliedFont` (Properties) | font family UID | 1,071/1,071 ranges, 236/247 styles |
+| 0x1B2B | `AppliedFont` (Properties) | font family UID; a composite font as an object (below) | 1,071/1,071 ranges, 236/247 styles |
 | 0x1B2C | `OTFFigureStyle` | 0 TabularLining (23 runs, 5 styles), 1 ProportionalOldstyle, 2 ProportionalLining, 4 Default | 4/4 ranges, 138/138 styles |
 | 0x1B2E | `MaximumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B2F | `MinimumWordSpacing` | fraction ×100 | 77/77 styles |
@@ -371,7 +371,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B5D | `RuleBelow` | 1 = true | 83/83 styles |
 | 0x1B6A | `ParagraphBreakType` | 0 Anywhere, 1 NextColumn, 2 NextPage, 3 NextFrame, 4 NextOddPage (below) | 11/11 ranges, 78/78 styles |
 | 0x1B6B | `SingleWordJustification` | 0 LeftAlign, 3 FullyJustified | 80/80 styles |
-| 0x1B75 | `AllNestedStyles` (Properties) | list; see below | 14/14 styles |
+| 0x1B75 | `AllNestedStyles` (Properties) | list; see below | 124/124 paragraph styles, 10/10 text defaults (1,251 trustworthy pairs) |
 | 0x1B7E | `Justification` | 0 LeftAlign, 1 CenterAlign, 2 RightAlign, 3 FullyJustified, 4 LeftJustified, 5 CenterJustified, 6 RightJustified, 8 ToBindingSide, 9 AwayFromBindingSide (runs/styles for 3, 6, 8, 9: 34/1, 3/0, 2/1, 7/14) | 70/70 ranges |
 | 0x1B80 | `DropcapDetail` | u32 | 5/5 ranges, 103/103 styles |
 | 0x1B8C | `OTFContextualAlternate` | 1 = true | 220/220 ranges |
@@ -380,6 +380,8 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B94 | `UnderlineWeight` | f64 | 81/81 ranges |
 | 0x1BB7 | `MiterLimit` | f64 | 161/161 ranges |
 | 0x1BB9 | `EndJoin` | 0 MiterEndJoin, 1 RoundEndJoin | 86/86 styles |
+| 0x1BBA | `AllGREPStyles` (Properties) | list; see below | 152/152 paragraph styles, 48/48 text defaults, 320/320 text ranges (1,251 trustworthy pairs) |
+| 0x1BBB | `AllLineStyles` (Properties) | list; see below | 6/6 paragraph styles, 9/9 text ranges (1,251 trustworthy pairs) |
 | 0x1BBD | `SpanColumnType` | 0 SingleColumn, 1 SpanColumns, 2 SplitColumns (69 runs, 10 styles) | 41/41 ranges, 94/94 styles |
 | 0x1BBE | `SpanSplitColumnCount` (Properties) | u16; 1 = All | 12/12 ranges, 78/78 styles |
 | 0x1BBF | `SplitColumnInsideGutter` | f64 | 155/155 ranges |
@@ -514,6 +516,12 @@ stored as text segments (see `objects.md`). The code gives `Delimiter`,
 | digits after `)` or `]` | `Repetition`; no digits = 1 | a sample and its print PDF |
 | `(^w)` | `AnyWord` | a sample and its print PDF |
 | `(^?)` | `AnyCharacter` | a sample and its print PDF |
+| `(^c)` | `Dropcap` | 54 `Dropcap` records in 18 pairs (with `^c`) |
+| `^t` in brackets | `Tabs` | 9 records in 5 pairs (`[^t]`, `(^t)`, `(^t)2` seen) |
+| `^L` in brackets | `Repeat`; the digits are `Repetition` | 41 records in 33 pairs (`(^L)2`, `(^L)4` seen) |
+| `^p` in brackets | `EndNestedStyle` | 2 records in 1 pair |
+| `^9` in brackets | `Digits` | 2 records in 1 pair (`[^9]`, `(^9)`) |
+| `^S` in brackets | `Sentence` | 1 record in 1 pair |
 
 The public pair has only single-character literals and repetition 1. The
 last three rows rest on a sample and its print PDF:
@@ -535,7 +543,43 @@ last three rows rest on a sample and its print PDF:
   words would keep full capitals, and that capital lies within them. So
   `^?` counts characters: `AnyCharacter`.
 
+The last six rows come from the 1,251 trustworthy pairs of the corpus
+after 2026-10. Their reference IDMLs have 265 nested style records in
+72 documents (styles, text defaults and text ranges; the record counts
+above are these). The stored items map one to one onto the IDML
+records, with the bracket giving `Inclusive` and the digits
+`Repetition` as above: the converter reproduces `AllNestedStyles` of
+124 of 124 paragraph styles, 10 of 10 text defaults, 274 of 274 text
+ranges and 7 of 7 `Story/ParagraphStyleRange` elements. Without these
+codes it reproduced 54 paragraph styles and 4 text defaults.
+
 The converter leaves out a list that has any other code.
+
+**GREP styles (0x1BBA).** The layout of nested styles, with a GREP
+expression in place of the delimiter code: u32 count, then for each item
+u32 character style UID (0 for none), u32 length *n* and the expression
+as *n* UTF-16 code units in text segments. IDML writes
+`AllGREPStyles` (`type="list"`), one `ListItem type="record"` per item in
+stored order, with `AppliedCharacterStyle` (object) and `GrepExpression`
+(string). Evidence over the 1,251 trustworthy pairs: every 0x1BBA value
+of the paragraph styles parses and ends exactly after its last item; the
+reference IDMLs have 494 such lists with 1,064 items, all of these two
+fields. The converter reproduces 152 of 152 paragraph styles, 48 of 48
+text defaults, 320 of 320 text ranges (`Story/ParagraphStyleRange` 110,
+`Cell/ParagraphStyleRange` 94), with no extra value. A style's list is
+its own value; IDML does not write an inherited one.
+
+**Line styles (0x1BBB).** u32 count, then 8 bytes per item: u32
+character style UID and u32 line count. IDML writes `AllLineStyles`,
+one record per item: `AppliedCharacterStyle` (object), `LineCount`
+(long) and `RepeatLast` (long). `RepeatLast` is −1 in all 9 list items of
+the trustworthy reference IDMLs (3 documents) and no stored field holds
+it, so the converter writes −1. Reproduced: 6 of 6 paragraph styles and
+9 of 9 text ranges.
+
+**Empty lists.** None of the 1,251 trustworthy reference IDMLs has an
+`AllGREPStyles`, `AllLineStyles` or `AllNestedStyles` element without
+items. The converter writes no GREP or line style list without items.
 
 **Bullet character (0x1A406).** Two u32: the character type (0
 `UnicodeOnly`, 1 `UnicodeWithFont`, 2 `GlyphWithFont`) and the character
@@ -995,6 +1039,8 @@ them out. Over the 489 trustworthy pairs (`measurement.md`):
 | `NextStyle` of the root paragraph style | never (0 of 489) |
 | `AllNestedStyles` of the root paragraph style | never (0 of 489) |
 | `AllNestedStyles` of `TextDefault` | only when the list has items: absent in 485, written in the 4 with items |
+| `AllGREPStyles` and `AllLineStyles` of the root paragraph style | never (0 of 1,251 trustworthy pairs after 2026-10); the root style stores a count of 0 in all 1,251 |
+| `AllGREPStyles` of `TextDefault` | only when the list has items (48 of 48 such lists written, 1,251 trustworthy pairs) |
 | Empty `TabList` of the root paragraph style | DOM 8 on: 482 of 482; DOM 7: 0 of 7 |
 | `TabList` of `TextDefault` | DOM 8 on: in 482 of 482 (459 empty); DOM 7: 0 of 7 |
 
@@ -1072,4 +1118,7 @@ of these pairs aligns:
 converter leaves other codes out.
 
 **Font family names.** `AppliedFont` and `BulletsFont` name a font family
-(class 0x3E03), and IDML writes the family's name. See `fonts.md`.
+(class 0x3E03), and IDML writes the family's name. An `AppliedFont`
+whose family stands for a composite font is written as a reference to
+the composite font, except in character styles. See `fonts.md`,
+composite fonts as applied fonts.

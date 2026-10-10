@@ -856,7 +856,7 @@ impl Writer<'_> {
         let doc = self.doc;
         let paragraph = s.paragraph;
         let name = self.grouped_name(s.uid, &s.name, s.builtin);
-        let (mut plain, mut props) = self.text_attrs(&s.attrs);
+        let (mut plain, mut props) = self.text_attrs_of(&s.attrs, !paragraph);
         if paragraph {
             // The schema allows KerningValue on character styles only.
             plain.retain(|(k, _)| *k != "KerningValue");

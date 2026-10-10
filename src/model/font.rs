@@ -24,6 +24,35 @@ pub struct FontFamily {
     pub writing_script: u32,
 }
 
+impl FontFamily {
+    /// The family name with each `<hhhh>` escape (four hexadecimal digits
+    /// of a UTF-16 code unit) replaced by its character
+    /// (`docs/format/fonts.md`, composite fonts as applied fonts).
+    pub fn unescaped_name(&self) -> String {
+        let mut units = Vec::new();
+        let mut rest = self.name.as_str();
+        while let Some(i) = rest.find('<') {
+            units.extend(rest[..i].encode_utf16());
+            let unit = rest
+                .get(i + 1..i + 6)
+                .filter(|t| t.ends_with('>') && t[..4].bytes().all(|b| b.is_ascii_hexdigit()))
+                .and_then(|t| u16::from_str_radix(&t[..4], 16).ok());
+            match unit {
+                Some(u) => {
+                    units.push(u);
+                    rest = &rest[i + 6..];
+                }
+                None => {
+                    units.push(u16::from(b'<'));
+                    rest = &rest[i + 1..];
+                }
+            }
+        }
+        units.extend(rest.encode_utf16());
+        String::from_utf16_lossy(&units)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Font {
     pub style: String,

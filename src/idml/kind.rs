@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::model::Value;
+use crate::model::attrs::StyleItems;
 
 /// How an attribute value is written in IDML.
 #[derive(Clone, Copy)]
@@ -58,8 +59,11 @@ pub(super) enum Kind {
     SwatchOrText,
     /// A swatch, or 0 for the swatch `None`.
     SwatchOrNone,
-    /// A font family.
+    /// A font family, or the composite font of that name as an object
+    /// (`docs/format/fonts.md`, composite fonts as applied fonts).
     Font,
+    /// A font family, written as its name also for a composite font.
+    FamilyName,
     /// A font family, or 0 for none (`$ID/`).
     FontOrNone,
     /// A numbering list UID.
@@ -87,6 +91,10 @@ pub(super) enum Kind {
     TabList,
     /// A list of nested styles (`AllNestedStyles`).
     NestedStyles,
+    /// A list of GREP styles (`AllGREPStyles`); left out when empty.
+    GrepStyles,
+    /// A list of line styles (`AllLineStyles`); left out when empty.
+    LineStyles,
     /// A bullet character (`BulletChar`).
     BulletChar,
 }
@@ -212,7 +220,16 @@ impl Writer<'_> {
                 .as_u32()
                 .and_then(|u| self.doc.numbering_lists.iter().find(|l| l.uid == u))
                 .map(|l| text("object", format!("NumberingList/{}", self_name(&l.name)))),
-            Kind::Font => v
+            Kind::Font => v.as_u32().and_then(|u| self.doc.fonts.get(&u)).map(|f| {
+                match self.composite_font_of(f) {
+                    Some(c) => text(
+                        "object",
+                        format!("CompositeFont/{}", self_name(&c.name.idml())),
+                    ),
+                    None => text("string", self.family_names(f).0),
+                }
+            }),
+            Kind::FamilyName => v
                 .as_u32()
                 .and_then(|u| self.doc.fonts.get(&u))
                 .map(|f| text("string", self.family_names(f).0)),
@@ -278,8 +295,23 @@ impl Writer<'_> {
             },
             Kind::NestedStyles => match v {
                 Value::StyleList {
-                    nested: Some(n), ..
+                    items: Some(StyleItems::Nested(n)),
+                    ..
                 } => Some(("list", PropValue::List(self.nested_styles(n)))),
+                _ => None,
+            },
+            Kind::GrepStyles => match v {
+                Value::StyleList {
+                    items: Some(StyleItems::Grep(g)),
+                    ..
+                } if !g.is_empty() => Some(("list", PropValue::List(self.grep_styles(g)))),
+                _ => None,
+            },
+            Kind::LineStyles => match v {
+                Value::StyleList {
+                    items: Some(StyleItems::Line(l)),
+                    ..
+                } if !l.is_empty() => Some(("list", PropValue::List(self.line_styles(l)))),
                 _ => None,
             },
             Kind::BulletChar => match *v {
