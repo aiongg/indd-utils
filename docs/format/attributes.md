@@ -287,7 +287,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B55 | `RuleBelowTint` | f64 | 78/78 styles |
 | 0x1B56 | `RuleBelowOffset` | f64 | 78/78 styles |
 | 0x1B5D | `RuleBelow` | 1 = true | 83/83 styles |
-| 0x1B6A | `ParagraphBreakType` | 0 Anywhere, 1 NextColumn, 2 NextPage (115 runs) | 11/11 ranges, 78/78 styles |
+| 0x1B6A | `ParagraphBreakType` | 0 Anywhere, 1 NextColumn, 2 NextPage, 3 NextFrame, 4 NextOddPage (below) | 11/11 ranges, 78/78 styles |
 | 0x1B6B | `SingleWordJustification` | 0 LeftAlign, 3 FullyJustified | 80/80 styles |
 | 0x1B75 | `AllNestedStyles` (Properties) | list; see below | 14/14 styles |
 | 0x1B7E | `Justification` | 0 LeftAlign, 1 CenterAlign, 2 RightAlign, 3 FullyJustified, 4 LeftJustified, 5 CenterJustified, 6 RightJustified, 8 ToBindingSide, 9 AwayFromBindingSide (runs/styles for 3, 6, 8, 9: 34/1, 3/0, 2/1, 7/14) | 70/70 ranges |
@@ -919,8 +919,25 @@ styles:
   other attributes, in one pair);
 - `TreatIdeographicSpaceAsSpace` and `DiacriticPosition`.
 
-`OTFFigureStyle` code 3 and `ParagraphBreakType` code 2 occur only in
-a sample without IDML; the converter leaves them out.
+`OTFFigureStyle` code 3 occurs only in a sample without IDML; the
+converter leaves it out.
+
+**`ParagraphBreakType` (0x1B6A) codes.** The codes are those of
+`StartParagraph`. The evidence is the 112 pairs of the corpus of 2026-10
+whose IDML has a `CharacterStyleRange` with a value other than
+`Anywhere` (no paragraph range has one). In each story the runs with a
+code other than 0 were aligned in order with those ranges; every story
+of these pairs aligns:
+
+| Code | IDML value | Trustworthy pairs | Stale pairs |
+|---|---|---|---|
+| 1 | `NextColumn` | 642 ranges in 74 documents | 80 in 11 |
+| 2 | `NextPage` | 159 in 19 | 16 in 8 |
+| 3 | `NextFrame` | 76 in 19 | 0 |
+| 4 | `NextOddPage` | 5 in 1 (version 20.1) | 0 |
+
+`NextEvenPage` occurs in no IDML. Its code is not known, and the
+converter leaves other codes out.
 
 **Font family names.** `AppliedFont` and `BulletsFont` name a font family
 (class 0x3E03), and IDML writes the family's name. See `fonts.md`.

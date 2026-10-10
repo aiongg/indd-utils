@@ -292,7 +292,13 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x1B6A,
         "ParagraphBreakType",
-        Kind::Enum(&[(0, "Anywhere"), (1, "NextColumn"), (2, "NextPage")]),
+        Kind::Enum(&[
+            (0, "Anywhere"),
+            (1, "NextColumn"),
+            (2, "NextPage"),
+            (3, "NextFrame"),
+            (4, "NextOddPage"),
+        ]),
         false,
     ),
     (
