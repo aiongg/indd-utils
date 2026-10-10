@@ -125,7 +125,7 @@ A **value** is one of these, in the reference IDML:
 
 | Value | Counted once per | Reproduced when |
 |---|---|---|
-| Element presence | Element with `Self`; the first child without `Self` of each tag, if it has attributes (counted as `Parent/Child`); in a child without attributes, its children with attributes (`Parent/Child/Grandchild`); each preference element | The output has an element with the same tag and `Self` (of the parent, for children) |
+| Element presence | Element with `Self`; the first child without `Self` of each tag, if it has attributes (counted as `Parent/Child`); in a child without attributes, its children with attributes (`Parent/Child/Grandchild`), and the `ContourOption` of a `TextWrapPreference` (the only other such grandchild outside stories); each preference element, and the `ContourOption` of its `TextWrapPreference` | The output has an element with the same tag and `Self` (of the parent, for children) |
 | Attribute | Attribute other than `Self` | The output's attribute is equal, with numbers compared to 6 significant digits |
 | `<Properties>` child | Child of `Properties` (`P.Name`) | Equal text and attributes; a structured child (`PathGeometry`, lists) is compared as a whole. Text that is only a line feed and tabs counts as empty: InDesign writes some empty elements open and closed on two lines (`XMLImportPreference/Properties/TransformParameters`) |
 | Story text | Story | The text, with paragraph breaks, is identical |

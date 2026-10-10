@@ -446,6 +446,7 @@ def load(path):
                         continue
                     if len(ch.attrib):
                         elements.setdefault((f"{el.tag}/{ch.tag}", s), ch)
+                        nested_options(elements, f"{el.tag}/{ch.tag}", s, ch)
                     else:
                         # A container without attributes (TransparencySetting):
                         # compare its children as "<parent>/<child>/<grandchild>".
@@ -455,11 +456,23 @@ def load(path):
         if name == "Resources/Preferences.xml":
             for el in root:
                 elements.setdefault((el.tag, "Preferences"), el)
+                nested_options(elements, el.tag, "Preferences", el)
         if name.startswith("Stories/"):
             for st in root.iter("Story"):
                 stories[st.get("Self")] = story_text(st)
                 ranges[st.get("Self")] = text_ranges(st)
     return elements, stories, ranges
+
+
+# Children of a child element with attributes that are compared as
+# "<parent>/<child>/<grandchild>" (docs/measurement.md, what is compared).
+NESTED = {("TextWrapPreference", "ContourOption")}
+
+
+def nested_options(elements, tag, s, el):
+    for g in el:
+        if (el.tag, g.tag) in NESTED and len(g.attrib):
+            elements.setdefault((f"{tag}/{g.tag}", s), g)
 
 
 def story_text(story):
