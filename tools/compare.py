@@ -165,35 +165,94 @@ def warning_kind(msg):
 
 
 XMP_NS = {"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-          "xmp": "http://ns.adobe.com/xap/1.0/"}
+          "xmp": "http://ns.adobe.com/xap/1.0/",
+          "xmpMM": "http://ns.adobe.com/xap/1.0/mm/",
+          "stRef": "http://ns.adobe.com/xap/1.0/sType/ResourceRef#",
+          "stEvt": "http://ns.adobe.com/xap/1.0/sType/ResourceEvent#"}
 # A pair is stale if the INDD was saved more than this long after the
-# IDML's metadata date (docs/measurement.md).
+# IDML's metadata date (docs/measurement.md). A PDF is a different save if
+# its date and the INDD's are further apart than this.
 STALE_AFTER = timedelta(hours=1)
+
+
+def xmp_descriptions(packet):
+    """The rdf:Description elements of the document in an XMP packet."""
+    if not packet:
+        return []
+    start = packet.find(b"<x:xmpmeta")
+    end = packet.rfind(b"</x:xmpmeta>")
+    if start < 0 or end < 0:
+        return []
+    try:
+        meta = ET.fromstring(packet[start:end + len(b"</x:xmpmeta>")])
+    except ET.ParseError:
+        return []
+    return meta.findall("rdf:RDF/rdf:Description", XMP_NS)
+
+
+def xmp_value(el, name):
+    """A simple XMP property of an element, written as an attribute or as a
+    child element (`name` is "prefix:Local")."""
+    prefix, local = name.split(":")
+    key = "{%s}%s" % (XMP_NS[prefix], local)
+    text = el.get(key) or el.findtext(key)
+    return text.strip() if text else None
 
 
 def modify_date(packet):
     """xmp:ModifyDate of the document in an XMP packet, or None."""
-    if not packet:
-        return None
-    start = packet.find(b"<x:xmpmeta")
-    end = packet.rfind(b"</x:xmpmeta>")
-    if start < 0 or end < 0:
-        return None
-    try:
-        meta = ET.fromstring(packet[start:end + len(b"</x:xmpmeta>")])
-    except ET.ParseError:
-        return None
-    key = "{%s}ModifyDate" % XMP_NS["xmp"]
-    for desc in meta.findall("rdf:RDF/rdf:Description", XMP_NS):
-        text = desc.get(key) or desc.findtext(key)
+    for desc in xmp_descriptions(packet):
+        text = xmp_value(desc, "xmp:ModifyDate")
         if text:
             try:
-                d = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+                d = datetime.fromisoformat(text.replace("Z", "+00:00"))
             except ValueError:
                 return None
             # Without a time zone, compare clock times.
             return d.replace(tzinfo=d.tzinfo or timezone.utc)
     return None
+
+
+def xmp_instances(packet):
+    """(xmpMM:InstanceID, instance ID of xmpMM:DerivedFrom, instance IDs of
+    the xmpMM:History events in order) of the document in an XMP packet.
+    Missing values are None; the history is a list."""
+    instance = derived = None
+    history = []
+    for desc in xmp_descriptions(packet):
+        instance = instance or xmp_value(desc, "xmpMM:InstanceID")
+        df = desc.find("xmpMM:DerivedFrom", XMP_NS)
+        if df is not None and derived is None:
+            derived = xmp_value(df, "stRef:instanceID")
+        h = desc.find("xmpMM:History", XMP_NS)
+        if h is not None:
+            history += [xmp_value(li, "stEvt:instanceID")
+                        for li in h.iter("{%s}li" % XMP_NS["rdf"])]
+    return instance, derived, [i for i in history if i]
+
+
+def pdf_stale_reasons(indd_xmp, pdf_xmp, pdf_pages, idml_pages, pdf_creator):
+    """Why a PDF beside an INDD may not show the same save as the INDD
+    (empty if there is no sign of that). `indd_xmp` and `pdf_xmp` are XMP
+    packets; `pdf_creator` is the PDF's Creator entry. See
+    docs/measurement.md, "Same-save PDFs", for the evidence."""
+    out = []
+    instance, _, history = xmp_instances(indd_xmp)
+    derived = xmp_instances(pdf_xmp)[1]
+    if derived is None:
+        out.append("PDF names no source instance")
+    elif derived != instance and derived not in history:
+        out.append("PDF source instance not in the INDD history")
+    indd_date, pdf_date = modify_date(indd_xmp), modify_date(pdf_xmp)
+    if indd_date is None or pdf_date is None:
+        out.append("no ModifyDate")
+    elif abs(pdf_date - indd_date) > STALE_AFTER:
+        out.append("PDF and INDD saved over an hour apart")
+    if pdf_pages is None or idml_pages is None or pdf_pages != idml_pages:
+        out.append("page count differs")
+    if not (pdf_creator or "").startswith("Adobe InDesign"):
+        out.append("PDF not written by InDesign")
+    return out
 
 
 def idml_modify_date(idml):
