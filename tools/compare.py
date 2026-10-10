@@ -466,12 +466,12 @@ def load(path):
 
 # Children of a child element with attributes that are compared as
 # "<parent>/<child>/<grandchild>" (docs/measurement.md, what is compared).
-NESTED = {("TextWrapPreference", "ContourOption")}
+NESTED_OPTIONS = {("TextWrapPreference", "ContourOption")}
 
 
 def nested_options(elements, tag, s, el):
     for g in el:
-        if (el.tag, g.tag) in NESTED and len(g.attrib):
+        if (el.tag, g.tag) in NESTED_OPTIONS and len(g.attrib):
             elements.setdefault((f"{tag}/{g.tag}", s), g)
 
 
