@@ -121,7 +121,7 @@ impl Kind {
 
 /// Built-in kinsoku and mojikumi tables observed in the corpus
 /// (`docs/format/attributes.md`): table name and IDML enumeration value.
-const BUILTIN_CJK_TABLES: [(&str, &str); 9] = [
+const BUILTIN_CJK_TABLES: [(&str, &str); 11] = [
     ("kHardKinsokuName", "HardKinsoku"),
     ("kSoftKinsokuName", "SoftKinsoku"),
     ("kKoreanKinsokuName", "KoreanKinsoku"),
@@ -132,6 +132,8 @@ const BUILTIN_CJK_TABLES: [(&str, &str); 9] = [
         "kMojikumiDefaultName2",
         "OneEmIndentLineEndUkeOneHalfEmEnum",
     ),
+    ("kMojikumiDefaultName10", "LineEndAllOneEmEnum"),
+    ("kMojikumiDefaultName14", "LineEndPeriodOneEmEnum"),
     ("kMojikumiDefaultName15", "TradChineseDefault"),
     ("kMojikumiDefaultName16", "SimpChineseDefault"),
 ];

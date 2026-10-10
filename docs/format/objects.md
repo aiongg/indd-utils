@@ -3071,7 +3071,7 @@ byte (0 in all of them) and the name, as for the other tables. Chunk
 | u32 *n* | entry count |
 | *n* × 34 bytes | entries, below |
 | u32, u32 | not identified |
-| u16 | `BasedOnMojikumiSet`: 0 `Nothing`; *n* > 0 the built-in table `kMojikumiDefaultName<n>` (attributes.md): 1 `LineEndAllOneHalfEmEnum`, 16 `SimpChineseDefault` |
+| u16 | `BasedOnMojikumiSet`: 0 `Nothing`; *n* > 0 the built-in table `kMojikumiDefaultName<n>` (attributes.md): 1 `LineEndAllOneHalfEmEnum`, 10 `LineEndAllOneEmEnum`, 16 `SimpChineseDefault` |
 
 Each entry is one IDML `OverrideMojikumiAkiType`:
 
@@ -3094,11 +3094,19 @@ file order, with the attributes in the order `TargetMojikumiClass`,
 Evidence, in the corpus of 2026-10: 185 tables in 66 pairs. The entry
 count matches in 185 of 185 tables, all eight fields of the entries in
 file order in 62,439 of 62,439 entries, and `BasedOnMojikumiSet` in 185
-of 185 (code 1: 151 tables, 0: 33, 16: 1). `Self` is `MojikumiTable/`
-and the name in all 187 custom tables of the corpus IDML files. The
-layout parses in all 835 objects of the corpus; codes 3, 6, 9 and 11
-also occur (232 objects, none with an IDML), and the converter leaves
-`BasedOnMojikumiSet` out for them. A chunk whose length is not 22 + 34
+of 185 (code 1: 151 tables, 0: 33, 16: 1). Seven more trustworthy pairs
+(three of version 10.0, four of 10.0 and 10.1 whose IDML is from 10.2) have one table
+with code 10 each, and IDML `LineEndAllOneEmEnum` in 7 of 7. `Self` is
+`MojikumiTable/` and the name in all 187 custom tables of the corpus
+IDML files. The layout parses in all 835 objects of the corpus; codes
+3, 6, 9 and 11 also occur (232 objects, none with an IDML), and code 5
+in a sample without an IDML. The built-in tables of these codes occur
+in no IDML, so the converter leaves `BasedOnMojikumiSet` out for them.
+The code is not the position of the value in the schema's
+`MojikumiTableDefaults` list by any rule the corpus proves: the proven
+codes 0, 1, 2, 10, 14, 15 and 16 are at their positions, but codes of
+other enumerations are not (12 of the 50 text attribute enumerations
+the converter maps differ from the schema order). A chunk whose length is not 22 + 34
 *n*, or a flag other than 0 or 1, leaves the table out with a warning.
 In the 66 pairs, the tables of classes 0x4206 and 0x4203 are listed
 together in UID order, after all kinsoku tables.

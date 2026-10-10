@@ -56,6 +56,7 @@ Status values:
 | u16 0 and u16 1 after `SeparatorStyle` | TOC entry, chunk 0x11605 | – | open: never varies | one may be `SortAlphabet` (`false` in all 255 entries) | `objects.md`, table of contents styles |
 | u16 after `Level` | TOC entry, chunk 0x11605 | – | open: no pair | 0 in every paired entry, 1 in some entries of files without a pair | `objects.md`, table of contents styles |
 | Value 2 of 0x1B09 with no IDML attribute | text attribute | 2 | open: no field found | `NextPageNumber` stored where IDML writes no attribute | `attributes.md`, page number type |
+| `BasedOnMojikumiSet` codes 3, 5, 6, 9, 11 | custom mojikumi tables, chunk 0x420A | 22 | open: no pair | the built-in tables `kMojikumiDefaultName<n>` of these codes occur in no IDML; code 5 also in a sample without an IDML; left out | `objects.md`, custom mojikumi tables |
 | Several alternate glyph features | text attribute 0x42AE | 0 | open: no sample | every run stores one feature; the IDML form of more than one is not shown, so such values are left out | `attributes.md`, alternate glyphs |
 | `ResultText` of other text variables | `TextVariableInstance` | 200 | open: not stored | page numbers, dates and cross-reference page numbers depend on the layout or the export time; the last page number shows `1` in every sample | `text-variables.md` |
 | Saving edition rule exceptions | tints, users, endnote and index titles | 9 | not needed | the IDML was exported by another edition than the one that saved the INDD (one trustworthy document, 8 stale pairs) | `objects.md`, saving edition |

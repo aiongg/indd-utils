@@ -520,7 +520,11 @@ object `KinsokuTable/<name>` (38). The corpus of 2026-10 adds three
 built-in tables, each from the `TextDefault` of every trustworthy pair
 that uses it: `kTradChineseKinsokuName` `TraditionalChineseKinsoku` (90
 documents), `kMojikumiDefaultName15` `TradChineseDefault` (80) and
-`kMojikumiDefaultName2` `OneEmIndentLineEndUkeOneHalfEmEnum` (1). With
+`kMojikumiDefaultName2` `OneEmIndentLineEndUkeOneHalfEmEnum` (1). One
+paragraph range of one trustworthy pair (12.1) applies
+`kMojikumiDefaultName14`, `LineEndPeriodOneEmEnum`; the base table of
+custom tables adds `kMojikumiDefaultName10`, `LineEndAllOneEmEnum`
+(`objects.md`, custom mojikumi tables). With
 them the converter reproduces 1,251 of 1,251 `TextDefault` `KinsokuSet`
 and `Mojikumi` values, 1,430 of 1,430 `KinsokuSet` and 1,532 of 1,532
 `Mojikumi` values of paragraph styles. Other built-in tables are not
