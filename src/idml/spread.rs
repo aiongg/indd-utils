@@ -56,21 +56,31 @@ const STYLE_COMPARED: &[&str] = &[
     "TopRightCornerOption",
     "BottomLeftCornerOption",
     "BottomRightCornerOption",
+    "StrokeType",
+    "StrokeAlignment",
+    "StrokeTint",
+    "GapColor",
+    "GapTint",
+    "EndCap",
+    "EndJoin",
+    "LeftLineEnd",
+    "RightLineEnd",
+    "ArrowHeadAlignment",
 ];
 
 /// Whether an object style whose category list is `on` turns off the
 /// category of a fill, stroke or corner attribute: `EnableFill` (0x1B933)
 /// for the fill, `EnableStroke` (0x1B934) for the stroke colour,
 /// `EnableStrokeAndCornerOptions` (0x1B935 and 0x1B936) for the other
-/// stroke and corner attributes, both for `StrokeType` (attributes.md,
-/// values an item does not store).
+/// stroke and corner attributes, both for the stroke type, tint and gap
+/// (attributes.md, values an item does not store).
 fn category_off(name: &str, on: &[u32]) -> bool {
     let off = |id: u32| !on.contains(&id);
     let corners = off(0x1B935) && off(0x1B936);
     match name {
         "FillColor" | "FillTint" => off(0x1B933),
         "StrokeColor" => off(0x1B934),
-        "StrokeType" => off(0x1B934) && corners,
+        "StrokeType" | "StrokeTint" | "GapColor" | "GapTint" => off(0x1B934) && corners,
         _ => corners,
     }
 }
@@ -623,11 +633,22 @@ impl Writer<'_> {
             _ => None,
         };
         let forced = |name: &str| on.is_some_and(|on| category_off(name, on));
+        // A stored tint of 100 is written as −1 but differs from a style
+        // value of −1 (attributes.md, strokes).
+        let full_tint = |name: &str| {
+            let id = match name {
+                "StrokeTint" => 0x6E66,
+                "GapTint" => 0x6E8A,
+                _ => return false,
+            };
+            item.attrs.get(id).and_then(Value::as_f64) == Some(100.0)
+        };
         for (name, v) in self.item_attr_values(&item.attrs) {
             // Fill, stroke and corner values equal to the object style's
             // are left out (attributes.md, page item attributes).
             let same = STYLE_COMPARED.contains(&name)
                 && !forced(name)
+                && !full_tint(name)
                 && applied
                     .as_ref()
                     .and_then(|s| s.item(name))
@@ -638,10 +659,11 @@ impl Writer<'_> {
         }
         // A fill, stroke or corner attribute that the item does not store
         // has the value of the document's base list; IDML writes it where
-        // it differs from the object style's (attributes.md, values an
-        // item does not store). Groups vary.
+        // it differs from the object style's, and always for an item
+        // without an object style (attributes.md, values an item does not
+        // store). Groups vary.
         if tag != "Group"
-            && let Some(applied) = &applied
+            && (applied.is_some() || item.object_style.is_none())
             && let Some(base) = &self.doc.prefs.item_base
         {
             let mut rest = base.clone();
@@ -651,19 +673,24 @@ impl Writer<'_> {
                 if tag == "EPSText" && name.contains("Corner") {
                     continue;
                 }
-                if (STYLE_COMPARED.contains(&name)
-                    || matches!(name, "StrokeType" | "StrokeAlignment"))
-                    && applied
+                let write = match &applied {
+                    Some(a) => a
                         .item(name)
-                        .is_some_and(|s| forced(name) || !applied::same_value(s, &v))
-                {
+                        .is_some_and(|s| forced(name) || !applied::same_value(s, &v)),
+                    None => true,
+                };
+                if STYLE_COMPARED.contains(&name) && write {
                     x.attr(name, v);
                 }
             }
         }
-        if let Some(r) = item.object_style.and_then(|u| self.object_style_ref(u)) {
-            x.attr("AppliedObjectStyle", r);
-        }
+        // An item without an object style refers to none, `n`
+        // (attributes.md, values an item does not store).
+        let style_ref = item.object_style.and_then(|u| self.object_style_ref(u));
+        x.attr(
+            "AppliedObjectStyle",
+            style_ref.unwrap_or_else(|| "n".into()),
+        );
         // Only items directly on a spread have `ItemLayer` (objects.md,
         // page item settings).
         if let Some(layer) = item.layer.filter(|_| !nested) {

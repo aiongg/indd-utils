@@ -475,11 +475,7 @@ impl Writer<'_> {
                 attr(&mut n, &format!("{name}LeftIndent"), num(r.left_indent));
                 attr(&mut n, &format!("{name}Width"), num(r.width));
                 attr(&mut n, &format!("{name}Offset"), num(r.offset));
-                if let Some((_, s)) = STROKE_TYPES
-                    .iter()
-                    .chain(TABLE_STROKE_TYPES)
-                    .find(|(k, _)| *k == r.stroke)
-                {
+                if let Some((_, s)) = STROKE_TYPES.iter().find(|(k, _)| *k == r.stroke) {
                     prop(
                         &format!("{name}Type"),
                         "object",

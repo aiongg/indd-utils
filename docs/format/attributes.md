@@ -50,8 +50,9 @@ list and absent from the IDML.
 | 0x5520 | `GradientFillStart` (point) | all non-zero (30) |
 | 0x5525 | `GradientStrokeLength` (assumed; equal to fill in all samples) | 30 |
 | 0x5526 | `GradientStrokeStart` (assumed; equal to fill in all samples) | 30 |
-| 0x6E6E | `StrokeType` (built-in stroke style code, below) | 51 of 51 items, 576 of 576 object styles |
-| 0x6E8C | `StrokeAlignment`: 0 `CenterAlignment`, 1 `InsideAlignment` (below) | 1 item, 576 object styles |
+| 0x6E6E | `StrokeType` (built-in stroke style code, below) | 51 of 51 items, 576 of 576 object styles; strokes, below |
+| 0x6E8C | `StrokeAlignment`: 0 `CenterAlignment`, 1 `InsideAlignment`, 2 `OutsideAlignment` (below) | strokes, below |
+| 0x6E66, 0x6E89, 0x6E8A, 0x6E6B, 0x6E6C, 0x6E71, 0x6E72, 0x6E84 | `StrokeTint`, `GapColor`, `GapTint`, `EndCap`, `EndJoin`, `LeftLineEnd`, `RightLineEnd`, `ArrowHeadAlignment` | strokes, below |
 
 **Corners.** The top-left corner uses the same IDs as `CornerRadius`
 and `CornerOption`. The corner option codes are 0 `None`, 0x5A15
@@ -70,7 +71,8 @@ root `[None]`'s (`StrokeWeight="0"`, `FillTint="-1"`, `FillColor` and
 `StrokeColor` `Swatch/None`, `CornerRadius="12"`, `MiterLimit="4"`,
 `CornerOption="None"`; `idml-values.md`). Over the 489 trustworthy pairs,
 the converter wrote these values where the IDML has none, and every one
-of them equals the style's effective value:
+of them equals the style's effective value (the stroke attributes of
+the strokes section follow the same rule):
 
 | Attribute | Written though the IDML has none | IDML writes it though equal |
 |---|---:|---:|
@@ -114,11 +116,11 @@ the converter reproduces, over the rectangles, ovals, polygons, graphic
 lines and text frames of the trustworthy pairs (anchored ones
 included), 8,790 of 8,794 `StrokeColor` values, 54,694 of 54,694
 `StrokeWeight`, 42,500 of 42,504 `MiterLimit` and 6,383 of 6,387
-`CornerRadius`, with no extra value. The values not reproduced are on 4
-text frames without an object style, and on items whose stored value
-the converter does not decode (77 `FillTint`, stored fills such as
-pasted smooth shades, the stroke alignment `OutsideAlignment`, custom
-stroke types). Over all pairs, 4 extra `StrokeWeight` values appear,
+`CornerRadius`, with no extra value. The values not reproduced in that
+measurement were on 4 text frames without an object style (no object
+style, below) and on items with stored values not decoded then (77
+`FillTint`, stored fills such as pasted smooth shades, the stroke
+alignment `OutsideAlignment` and stroke types; strokes, below). Over all pairs, 4 extra `StrokeWeight` values appear,
 in 3 stale pairs.
 
 Groups are left out: their fill and stroke attributes in IDML were not
@@ -136,8 +138,8 @@ base list:
 |---|---|
 | `EnableFill` (0x1B933) | `FillColor`, `FillTint` |
 | `EnableStroke` (0x1B934) | `StrokeColor` |
-| `EnableStrokeAndCornerOptions` (0x1B935, 0x1B936) | `StrokeWeight`, `MiterLimit`, `StrokeAlignment`, corner radii and options |
-| both stroke categories | `StrokeType` |
+| `EnableStrokeAndCornerOptions` (0x1B935, 0x1B936) | `StrokeWeight`, `MiterLimit`, `StrokeAlignment`, `EndCap`, `EndJoin`, the line ends, `ArrowHeadAlignment`, corner radii and options |
+| both stroke categories | `StrokeType`, `StrokeTint`, `GapColor`, `GapTint` |
 
 Evidence over the trustworthy pairs: 66 items with styles that turn all
 three off and 2 with styles that turn off both stroke categories have
@@ -148,7 +150,15 @@ no `StrokeColor` or `StrokeType`. No sample turns off only
 `EnableStroke`, so the category of `StrokeType` is not shown; the
 converter writes it when both are off. The 68 items also have
 `StrokeTint`, `EndCap`, `EndJoin`, `GapColor` and `GapTint`, and the 12
-items `EndCap` and `EndJoin`; their IDs are not identified.
+items `EndCap` and `EndJoin` but not `StrokeTint`, `GapColor` or
+`GapTint`, which gives the categories of the table (the line ends and
+`ArrowHeadAlignment` follow the 12 items in the corpus after 2026-10).
+
+**No object style.** An item without an applied object style has
+`AppliedObjectStyle="n"` in IDML, and IDML writes every fill, stroke
+and corner attribute of the item, stored or from the base list: 60 of
+60 such items (35 rectangles, 25 text frames) of the trustworthy pairs
+after 2026-10, every attribute equal.
 
 Transparency attributes (IDs 0x108xx and 0x1EBxx) are described in
 `transparency.md`.
@@ -163,65 +173,115 @@ corpus pairs have 576 object styles whose name matches an IDML
 `ObjectStyle`.
 
 **Stroke type (0x6E6E).** The record has three values: a reference (type
-0x117), a code (type 0x6E64, 4 bytes) and the usual 6-byte value. The
-reference is 0 in every sample and the code names a built-in stroke
-style. IDML writes `StrokeType` as `StrokeStyle/$ID/<name>`.
+0x117), a code (type 0x6E64, 4 bytes) and the usual 6-byte value. With
+reference 0 the code names a built-in stroke style. IDML writes
+`StrokeType` as `StrokeStyle/$ID/<name>`.
 
 | Code | IDML stroke style | Evidence |
 |---|---|---|
 | 0x5A29 | `Solid` | 574 object styles in 135 files |
-| 0x5A38 | `Canned Dashed 3x2` | 2 items in 1 file |
-| 0x5A39 | `Canned Dotted` | 46 items in 13 files |
-| 0xB004 | `ThinThin` | 2 object styles in 1 file, and 2 items in the same file that have no IDML `StrokeType` and use one of those styles |
-| 0xB01A | `Triple_Stroke` | 1 item |
+| 0x5A2A | `Dashed` | 2,326 items in 40 files |
+| 0x5A37 | `Canned Dashed 4x4` | 52 items in 20 files |
+| 0x5A38 | `Canned Dashed 3x2` | 160 items in 45 files |
+| 0x5A39 | `Canned Dotted` | 345 items in 30 files |
+| 0x5A3A | `Wavy` | 4 items in 1 file |
+| 0x5A3B | `Straight Hash` | 109 items in 43 files |
+| 0x5A3C | `Right Slant Hash` | 2 items in 1 file |
+| 0x5A3E | `White Diamond` | 33 items in 18 files |
+| 0x5A3F | `Japanese Dots` | 913 items in 29 files; cells (`tables.md`) |
+| 0xB004 | `ThinThin` | 31 items in 3 files |
+| 0xB005 | `ThinThick` | 10 items in 3 files |
+| 0xB006 | `ThickThin` | 44 items in 12 files; object styles |
+| 0xB007 | `ThickThick` | 35 items in 13 files; cells |
+| 0xB009 | `ThickThinThick` | 1 item |
+| 0xB01A | `Triple_Stroke` | 5 items in 3 files |
 
-No item or style has the same code with a different IDML value. The
-converter writes `StrokeType` for these codes when the reference is 0.
-Custom stroke styles (a non-zero reference) do not occur in the corpus;
-every corpus IDML lists only the 18 built-in stroke styles.
+Item counts are over the items of the 1,251 trustworthy pairs of the
+corpus after 2026-10 with reference 0, IDML value against stored code.
+No code has two IDML values. The codes are the same in every list that
+names a stroke style (items, object styles, cells, tables, paragraph
+rules, underlines and strike-throughs), so the converter uses one table.
+Custom stroke styles (a non-zero reference, 17 items in 2 files, for
+example `DashedStrokeStyle/Rounded`) are left out. Codes 0x5A3D and
+0xB008 occur only in files without a trustworthy IDML.
 
-**Stroke alignment (0x6E8C).** All 576 object styles have 0 and
-`StrokeAlignment="CenterAlignment"`. One text frame in the pairs has 1
-and `InsideAlignment`. Its INDD list has four 0x6E attributes, and its
-IDML differs from its object style in four stroke attributes:
-0x6E64 `StrokeColor`, 0x6E65 `StrokeWeight` and 0x6E6E `StrokeType` are
-identified above, which leaves 0x6E8C for `StrokeAlignment`. The code for
-`OutsideAlignment` is not known; the converter leaves out other codes.
+**Stroke alignment (0x6E8C).** 0 `CenterAlignment`, 1 `InsideAlignment`
+(3,238 items in 44 files), 2 `OutsideAlignment` (196 items in 50 files).
+Object styles use 0x1BB8 with the same codes.
 
-**More stroke attributes of object styles.** The corpus after 2026-10
-shows other values for these attributes. Object styles other than
-`[None]` were matched by `Self` with their IDML style over the 1,251
-trustworthy pairs (4,305 styles; every one has the IDs below except
-0x6E84):
+**More stroke attributes.** Object styles other than `[None]` were
+matched by `Self` with their IDML style over the 1,251 trustworthy
+pairs (4,305 styles; every one has the IDs below except 0x6E84), and
+page items by `Self` with their IDML element:
 
-| ID | IDML attribute | Values | Matches |
+| ID | IDML attribute | Values | Object styles |
 |---|---|---|---|
-| 0x6E66 | `StrokeTint` | f64 | 4,305 of 4,305; 69 styles other than −1 (25 to 75) |
+| 0x6E66 | `StrokeTint` | f64; 100 is written as −1 | 4,305 of 4,305; 69 styles other than −1 (25 to 75) |
 | 0x6E89 | `GapColor` | swatch UID | 4,305 of 4,305; 23 `Color/Paper` |
-| 0x6E6B | `EndCap` | 0 `ButtEndCap`, 1 `RoundEndCap` | 4,305 of 4,305; 3 round |
-| 0x6E6C | `EndJoin` | 0 `MiterEndJoin`, 1 `RoundEndJoin` | 4,305 of 4,305; 5 round |
+| 0x6E8A | `GapTint` | f64; 100 is written as −1 | two styles with 100 have −1 in IDML |
+| 0x6E6B | `EndCap` | 0 `ButtEndCap`, 1 `RoundEndCap`, 2 `ProjectingEndCap` | 4,305 of 4,305; 3 round |
+| 0x6E6C | `EndJoin` | 0 `MiterEndJoin`, 1 `RoundEndJoin`, 2 `BevelEndJoin` | 4,305 of 4,305; 5 round |
 | 0x6E71 | `LeftLineEnd` | line end code (below) | 4,305 of 4,305; 9 other than `None` |
 | 0x6E72 | `RightLineEnd` | line end code | 4,305 of 4,305; 14 other than `None` |
 | 0x6E84 | `ArrowHeadAlignment` | 0 `InsidePath`, 1 `OutsidePath` | in the 3,349 styles whose IDML has the attribute, 3,349 of 3,349; one style has 1 |
 
-Line end codes: 0 `None`, 0x5A06 `TriangleWideArrowHead` (10 styles),
-0x5A08 `CurvedArrowHead` (4), 0x5A09 `CircleArrowHead` (2), 0x5A0A
-`CircleSolidArrowHead` (7). One line in the pairs before 2026-10 has
-0x6E71 = 0x5A08 and 0x6E72 = 0x5A0D with `LeftLineEnd="CurvedArrowHead"`
-and `RightLineEnd="BarArrowHead"`, which gives 0x5A0D `BarArrowHead`.
-`ArrowHeadAlignment` code 1 rests on one style; that style's line ends
-are mapped by their own IDs, which leaves 0x6E84.
+Line end codes (u32): 0 `None`, 0x5A03 `SimpleArrowHead` (1 item),
+0x5A04 `SimpleWideArrowHead` (110 items in 5 files), 0x5A05
+`TriangleArrowHead` (44 in 8), 0x5A06 `TriangleWideArrowHead`, 0x5A07
+`BarbedArrowHead` (64 in 6), 0x5A08 `CurvedArrowHead`, 0x5A09
+`CircleArrowHead`, 0x5A0A `CircleSolidArrowHead` and 0x5A0D
+`BarArrowHead`. `EndCap` 2 occurs on 4 items in 3 files, `EndJoin` 2 on
+6 items in 1 file. One line in the pairs before 2026-10 has 0x6E71 =
+0x5A08 and 0x6E72 = 0x5A0D with `LeftLineEnd="CurvedArrowHead"` and
+`RightLineEnd="BarArrowHead"`, which gives 0x5A0D. `ArrowHeadAlignment`
+code 1 rests on one style; that style's line ends are mapped by their
+own IDs, which leaves 0x6E84.
 
-The converter writes these on object styles. Page items have the same
-IDs, but when IDML writes them on an item is not established; the
-converter does not write them there.
+**On page items** IDML writes these attributes, the stroke type and the
+stroke alignment by the rule of the fill and stroke colour: the value
+the item stores (or that of the base list) where it differs from the
+applied object style's effective value, every value where the style
+turns the category off, and every value without a style (above). Groups
+never store these IDs, and IDML writes values on groups whose source is
+not shown (664 groups with `StrokeTint`, 40 with `LeftLineEnd`), so the
+converter writes none on groups.
 
-**Not identified.** `GapTint` (−1 in IDML) is not 0x6E8A: two styles
-with 100 there have −1 in IDML. `LeftArrowHeadScale` and
-`RightArrowHeadScale` are 100 in every style, as are 0x6E95 and 0x6E96.
-0x6E67, 0x6E6A, 0x6E78 and 0x6E8B are 0 in every style, 0x6E73 in all
-but 2. `StrokeCornerAdjustment` and `StrokeDashAndGap` do not occur in
-the corpus IDML files.
+A tint is compared as stored: an item that stores 100 differs from a
+style value of −1, and IDML writes it as −1. 4,508 items in 192 files
+store `StrokeTint` 100 and have `StrokeTint="-1"` in IDML; no IDML item
+has `StrokeTint="100"`. Items that store −1, or the style's own value,
+have no attribute; one polygon that stores 100 has none either.
+`GapTint` behaves the same (11 items in 2 files store 100).
+
+Over the rectangles, ovals, polygons, graphic lines and text frames of
+the trustworthy pairs the converter reproduces these values; the one
+extra value is a polygon of a 19.0 document that stores `StrokeTint`
+100 and has no attribute in IDML:
+
+| Attribute | Values |
+|---|---:|
+| `StrokeTint` | 5,874 of 5,874 |
+| `EndCap` | 8,538 of 8,538 |
+| `EndJoin` | 8,220 of 8,220 |
+| `GapColor` | 435 of 435 |
+| `GapTint` | 181 of 181 |
+| `LeftLineEnd` | 453 of 453 |
+| `RightLineEnd` | 435 of 435 |
+| `ArrowHeadAlignment` | 139 of 139 |
+| `StrokeType` | 4,230 of 4,235 (5 custom stroke styles) |
+| `StrokeAlignment` | 3,572 of 3,572 |
+
+The values of `PageItemDefault` come from the page item defaults list
+with the same table (`preferences.md`).
+
+**Not identified.** `LeftArrowHeadScale` and `RightArrowHeadScale` are
+100 in every object style and in every `PageItemDefault` but one, as are
+0x6E95 and 0x6E96, so the two IDs cannot be told apart; the converter
+writes them from the value files on object styles only. 0x6E78 is 0 in
+every style, 0x6E73 in all but 2. 0x6E67, 0x6E6A and 0x6E8B are the
+overprint flags (`objects.md`, object style settings).
+`StrokeCornerAdjustment` and `StrokeDashAndGap` do not occur in the
+corpus IDML files.
 
 ## Text attribute lists
 

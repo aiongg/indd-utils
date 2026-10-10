@@ -324,8 +324,8 @@ cells whose edge positions have no priority have none in IDML.
 (`attributes.md`); 0x1040C is `n`, no stroke type. Code 0x5A3F is
 `StrokeStyle/$ID/Japanese Dots` (13,409 edges in cell sets and cell
 styles, 3 files) and 0xB007 `ThickThick` (one table border, all four
-sides). These two are used for cells and tables only: page item stroke
-types are not checked against them.
+sides). Page items use the same codes (`attributes.md`, strokes), and
+the converter reads every list with one table of codes.
 
 ## Cell and table styles
 

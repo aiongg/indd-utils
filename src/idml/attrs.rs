@@ -131,19 +131,26 @@ pub(super) const CORNER_OPTIONS: &[(u32, &str)] = &[
     (0x5A19, "FancyCorner"),
 ];
 
-/// Codes of built-in stroke styles. See `docs/format/attributes.md`.
+/// Codes of built-in stroke styles, the same in page item, object style,
+/// text, cell and table lists. See `docs/format/attributes.md`.
 pub(super) const STROKE_TYPES: &[(u32, &str)] = &[
     (0x5A29, "Solid"),
+    (0x5A2A, "Dashed"),
+    (0x5A37, "Canned Dashed 4x4"),
     (0x5A38, "Canned Dashed 3x2"),
     (0x5A39, "Canned Dotted"),
+    (0x5A3A, "Wavy"),
+    (0x5A3B, "Straight Hash"),
+    (0x5A3C, "Right Slant Hash"),
+    (0x5A3E, "White Diamond"),
+    (0x5A3F, "Japanese Dots"),
     (0xB004, "ThinThin"),
+    (0xB005, "ThinThick"),
+    (0xB006, "ThickThin"),
+    (0xB007, "ThickThick"),
+    (0xB009, "ThickThinThick"),
     (0xB01A, "Triple_Stroke"),
 ];
-
-/// Codes of built-in stroke styles seen only in cells and tables, in
-/// addition to `STROKE_TYPES`. See `docs/format/tables.md`.
-pub(super) const TABLE_STROKE_TYPES: &[(u32, &str)] =
-    &[(0x5A3F, "Japanese Dots"), (0xB007, "ThickThick")];
 
 /// The stroke styles every corpus IDML lists in `Graphic.xml`, in order.
 /// See `docs/format/idml-values.md`.
@@ -890,35 +897,32 @@ pub(super) const ITEM_ATTRS: &[(u32, &str, Kind)] = &[
     (
         0x6E8C,
         "StrokeAlignment",
-        Kind::Enum(&[(0, "CenterAlignment"), (1, "InsideAlignment")]),
+        Kind::Enum(&[
+            (0, "CenterAlignment"),
+            (1, "InsideAlignment"),
+            (2, "OutsideAlignment"),
+        ]),
     ),
-];
-
-/// Line end codes of 0x6E71 and 0x6E72 (attributes.md, line ends).
-const LINE_ENDS: &[(u32, &str)] = &[
-    (0, "None"),
-    (0x5A06, "TriangleWideArrowHead"),
-    (0x5A08, "CurvedArrowHead"),
-    (0x5A09, "CircleArrowHead"),
-    (0x5A0A, "CircleSolidArrowHead"),
-    (0x5A0D, "BarArrowHead"),
-];
-
-/// Stroke attributes of object style lists that the converter writes on
-/// object styles only; when IDML writes them on page items is not known
-/// (attributes.md, strokes).
-pub(super) const STYLE_STROKE_ATTRS: &[(u32, &str, Kind)] = &[
-    (0x6E66, "StrokeTint", Kind::Number),
+    (0x6E66, "StrokeTint", Kind::Tint),
     (0x6E89, "GapColor", Kind::Swatch),
+    (0x6E8A, "GapTint", Kind::Tint),
     (
         0x6E6B,
         "EndCap",
-        Kind::Enum(&[(0, "ButtEndCap"), (1, "RoundEndCap")]),
+        Kind::Enum(&[
+            (0, "ButtEndCap"),
+            (1, "RoundEndCap"),
+            (2, "ProjectingEndCap"),
+        ]),
     ),
     (
         0x6E6C,
         "EndJoin",
-        Kind::Enum(&[(0, "MiterEndJoin"), (1, "RoundEndJoin")]),
+        Kind::Enum(&[
+            (0, "MiterEndJoin"),
+            (1, "RoundEndJoin"),
+            (2, "BevelEndJoin"),
+        ]),
     ),
     (0x6E71, "LeftLineEnd", Kind::Enum(LINE_ENDS)),
     (0x6E72, "RightLineEnd", Kind::Enum(LINE_ENDS)),
@@ -927,6 +931,20 @@ pub(super) const STYLE_STROKE_ATTRS: &[(u32, &str, Kind)] = &[
         "ArrowHeadAlignment",
         Kind::Enum(&[(0, "InsidePath"), (1, "OutsidePath")]),
     ),
+];
+
+/// Line end codes of 0x6E71 and 0x6E72 (attributes.md, line ends).
+const LINE_ENDS: &[(u32, &str)] = &[
+    (0, "None"),
+    (0x5A03, "SimpleArrowHead"),
+    (0x5A04, "SimpleWideArrowHead"),
+    (0x5A05, "TriangleArrowHead"),
+    (0x5A06, "TriangleWideArrowHead"),
+    (0x5A07, "BarbedArrowHead"),
+    (0x5A08, "CurvedArrowHead"),
+    (0x5A09, "CircleArrowHead"),
+    (0x5A0A, "CircleSolidArrowHead"),
+    (0x5A0D, "BarArrowHead"),
 ];
 
 /// Gradient attributes every page item has: attribute-list ID (0 for

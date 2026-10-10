@@ -31,6 +31,8 @@ pub(super) enum Kind {
     NonZero,
     /// A cell edge stroke or gap tint: −1 is written as 100.
     EdgeTint,
+    /// A page item or object style tint: 100 is written as −1.
+    Tint,
     /// The given value is written as the enumeration value, others as
     /// numbers of the given IDML type.
     NumberOr(f64, &'static str, &'static str),
@@ -142,6 +144,7 @@ impl Writer<'_> {
             Kind::EdgeTint => {
                 number().map(|f| text("unit", num(if f == -1.0 { 100.0 } else { f })))
             }
+            Kind::Tint => number().map(|f| text("unit", num(if f == 100.0 { -1.0 } else { f }))),
             Kind::NonZero => v
                 .as_u32()
                 .filter(|&u| u != 0)
@@ -185,7 +188,6 @@ impl Writer<'_> {
                 Value::Words(CELL_NO_STROKE_TYPE, 0) => Some(text("object", "n".into())),
                 Value::Words(code, 0) => STROKE_TYPES
                     .iter()
-                    .chain(TABLE_STROKE_TYPES)
                     .find(|(k, _)| *k == code)
                     .map(|(_, n)| text("object", format!("StrokeStyle/$ID/{n}"))),
                 _ => None,

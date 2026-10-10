@@ -52,12 +52,35 @@ writes are not explained.
 
 ## Object transparency (`TransparencySetting`)
 
+The drop shadow rows of 0x1081B, 0x1081C, 0x1081E, 0x1081F and 0x1084A
+come from the items of the 1,251 trustworthy pairs of the corpus after
+2026-10 that have a `DropShadowSetting` in IDML, groups included: each
+ID is the only one whose value equals the IDML value in every item
+where both exist (after resolving the value through the object style,
+as below). In the item list 0x1081F is the drop shadow's blend mode; in
+the document preference list the same number is `BlendingSpace`, a
+separate list. With the write rule below, the converter reproduces over
+the trustworthy pairs 580 of 580 `XOffset` and `YOffset` values, 397 of
+397 `Opacity`, 62 of 62 `BlendMode` and 3 of 3 `Spread`, with no extra
+value.
+
+**Comparison with the style.** IDML writes an item's value when it
+differs from the style's in any digit: one 15.0 document has 23 text
+frames with `YOffset` 7.000000133081193 and a style value of 7, and
+IDML writes all 23. Comparing the full text of the values changes
+nothing else in the transparency settings of the trustworthy pairs.
+
 | ID | IDML | Encoding | On the item |
 |---|---|---|---|
 | 0x10816 | `BlendingSetting/Opacity` | f64, percent | 57 items in 4 files (40, 49, 50, 57, 69, 70) |
 | 0x10817 | `BlendingSetting/BlendMode` | i32 code (below) | 56 items in 4 files |
 | 0x1081A | `DropShadowSetting/Mode` | i32: 0 `None`, 1 `Drop` | 8 items with 1 in 2 files |
+| 0x1081F | `DropShadowSetting/BlendMode` | i32 code (below): 0 `Normal`, 4 `SoftLight` seen | 89 of 89 items in 16 files |
+| 0x1081E | `DropShadowSetting/Opacity` | f64, percent | 424 of 424 items in 78 files |
+| 0x1081B | `DropShadowSetting/XOffset` | f64 | 649 of 649 items in 88 files |
+| 0x1081C | `DropShadowSetting/YOffset` | f64 | 649 of 649; 256 of these items have X ≠ Y |
 | 0x10820 | `DropShadowSetting/Size` | f64 | 6 items, two values; 406 of 406 rectangles and text frames over the 654 pairs of the later corpus |
+| 0x1084A | `DropShadowSetting/Spread` | f64, percent | 28 of 28 items in 9 files |
 | 0x1084D | `InnerShadowSetting/Applied` | u16: 1 true, 0 false | 10 items with 1 |
 | 0x1084E | `InnerShadowSetting/EffectColor` | swatch UID | 10 items (below) |
 | 0x10852 | `InnerShadowSetting/Distance` | f64 | 10 items with 0 |
@@ -174,9 +197,10 @@ settings), 170 of 170.
 
 ## Not converted
 
-- `DropShadowSetting/XOffset` and `YOffset`: attributes 0x1081B and
-  0x1081C hold the offsets, but every item and style has the same value in
-  both, so which is which is not known.
+- Drop shadow `EffectColor` (probably 0x10837: all 11 items whose IDML
+  writes it store that ID, but most stored values are not written and
+  the style values were not resolved), `Noise`, `KnockedOut` and
+  `UseGlobalLight`.
 - Stroke, fill and content blending (opacity and blend mode) and the
   other effects (feather, outer and inner glow, bevel and emboss, satin,
   directional feather): no item or style in the pairs has a value other

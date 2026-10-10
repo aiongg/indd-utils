@@ -397,7 +397,6 @@ impl Writer<'_> {
             node.children.insert(0, e);
         }
         let mut attrs = self.item_attr_values(&os.attrs);
-        attrs.extend(self.attr_values(&os.attrs, STYLE_STROKE_ATTRS));
         for (id, name) in [
             (0x551E, "GradientFillAngle"),
             (0x5524, "GradientStrokeAngle"),

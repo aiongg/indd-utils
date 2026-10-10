@@ -1,6 +1,6 @@
 //! Transparency settings of page items. See `docs/format/transparency.md`.
 
-use super::applied::{StyleValues, same_value};
+use super::applied::StyleValues;
 use super::kind::Kind;
 use super::xml::Xml;
 use super::{Writer, num};
@@ -76,11 +76,46 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         Kind::Enum(&[(0, "None"), (1, "Drop")]),
     ),
     (
+        0x1081F,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "BlendMode",
+        Kind::Enum(BLEND_MODES),
+    ),
+    (
+        0x1081E,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "Opacity",
+        Kind::Range(0.0, 100.0),
+    ),
+    (
+        0x1081B,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "XOffset",
+        Kind::Range(-1000.0, 1000.0),
+    ),
+    (
+        0x1081C,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "YOffset",
+        Kind::Range(-1000.0, 1000.0),
+    ),
+    (
         0x10820,
         "TransparencySetting",
         "DropShadowSetting",
         "Size",
         Kind::Range(0.0, 1000.0),
+    ),
+    (
+        0x1084A,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "Spread",
+        Kind::Range(0.0, 100.0),
     ),
     (
         0x1084D,
@@ -329,10 +364,9 @@ fn stops(raw: &[[f64; 3]]) -> Option<Vec<Stop>> {
     )
 }
 
-/// Write the transparency settings found in a page item's attribute list.
 /// IDML writes only the values that differ from the object style `style`
-/// (all values without a style), and an effect element only when one of
-/// its values or its opacity stops differ. `item` is the item's `Self`,
+/// in any digit (all values without a style), and an effect element only
+/// when one of its values or its opacity stops differ. `item` is the item's `Self`,
 /// which names the opacity stops. Returns the values left out because
 /// they are outside the schema's range, as (effect, attribute, value).
 pub(super) fn write(
@@ -370,7 +404,7 @@ pub(super) fn write(
                         let same = style.is_some_and(|s| {
                             s.transparency(id)
                                 .and_then(|sv| w.value_text(kind, sv))
-                                .is_some_and(|st| same_value(&st, &t))
+                                .is_some_and(|st| st == t)
                         });
                         if !same {
                             values.push((name, t));
