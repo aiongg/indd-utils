@@ -1391,12 +1391,17 @@ pub(super) fn tab_list(stops: &[TabStop]) -> Option<Vec<Vec<Field>>> {
         .map(|t| {
             let alignment = match t.alignment {
                 0 => "LeftAlign",
+                1 => "CenterAlign",
                 2 => "RightAlign",
+                3 => "CharacterAlign",
                 _ => return None,
             };
+            // Only stops aligned on a character store one; IDML writes `.`
+            // for the others (attributes.md, tab stops).
+            let character = t.character.clone().unwrap_or_else(|| ".".into());
             Some(vec![
                 ("Alignment", "enumeration", alignment.to_string()),
-                ("AlignmentCharacter", "string", ".".to_string()),
+                ("AlignmentCharacter", "string", character),
                 ("Leader", "string", t.leader.clone()),
                 ("Position", "unit", num(t.position)),
             ])
@@ -1752,6 +1757,7 @@ mod tests {
         let stop = |position, alignment, leader: &str| crate::model::attrs::TabStop {
             position,
             alignment,
+            character: None,
             leader: leader.into(),
         };
         let stops = tab_list(&[stop(12.0, 0, ""), stop(237.5, 2, ".")]).unwrap();
@@ -1761,7 +1767,7 @@ mod tests {
         assert_eq!(stops[1][2].2, ".");
         assert_eq!(stops[1][3].2, "237.5");
         // Unknown alignment code.
-        assert!(tab_list(&[stop(12.0, 1, "")]).is_none());
+        assert!(tab_list(&[stop(12.0, 4, "")]).is_none());
     }
 
     #[test]

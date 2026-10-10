@@ -63,8 +63,10 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TabStop {
     pub position: f64,
-    /// 0 left, 2 right; other codes have no evidence.
+    /// 0 left, 1 centre, 2 right, 3 on a character.
     pub alignment: u16,
+    /// The character of a stop aligned on one (code 3).
+    pub character: Option<String>,
     pub leader: String,
 }
 
@@ -395,7 +397,8 @@ fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
     value.unwrap_or_else(|| Value::Other(t, data.to_vec()))
 }
 
-/// A tab list: u16 count, then per stop f64 position, u16 alignment, u16
+/// A tab list: u16 count, then per stop f64 position, u16 alignment (for
+/// code 3 followed by the alignment character as a UTF-16 unit), u16
 /// leader length and the leader in UTF-16 code units. `None` unless the
 /// stops fill the value exactly.
 fn tab_list(c: &mut Cursor) -> Option<Vec<TabStop>> {
@@ -404,6 +407,10 @@ fn tab_list(c: &mut Cursor) -> Option<Vec<TabStop>> {
     for _ in 0..n {
         let position = c.f64().ok()?;
         let alignment = c.u16().ok()?;
+        let character = match alignment {
+            3 => Some(String::from_utf16_lossy(&[c.u16().ok()?])),
+            _ => None,
+        };
         let len = c.u16().ok()? as usize;
         let units = (0..len)
             .map(|_| c.u16())
@@ -412,6 +419,7 @@ fn tab_list(c: &mut Cursor) -> Option<Vec<TabStop>> {
         out.push(TabStop {
             position,
             alignment,
+            character,
             leader: String::from_utf16_lossy(&units),
         });
     }
@@ -566,6 +574,15 @@ mod tests {
         assert_eq!(text_value(0x1B29, &[0, 0]), Value::TabList(Vec::new()));
         // A stop cut short.
         assert!(matches!(text_value(0x1B29, &b[..20]), Value::Other(..)));
+        // A stop aligned on a comma stores the character after the code.
+        let mut c = 1u16.to_le_bytes().to_vec();
+        c.extend(337f64.to_le_bytes());
+        c.extend([3, 0, b',', 0, 1, 0, b'.', 0]);
+        let Value::TabList(stops) = text_value(0x1B29, &c) else {
+            panic!("not a tab list");
+        };
+        assert_eq!(stops[0].character.as_deref(), Some(","));
+        assert_eq!(stops[0].leader, ".");
     }
 
     #[test]

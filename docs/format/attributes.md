@@ -486,13 +486,20 @@ included) and 4 ranges with the attribute match, with 5 different
 languages.
 
 **Tab stops (0x1B29).** u16 count, then for each stop: f64 position, u16
-alignment (0 LeftAlign, 2 RightAlign; no other code occurs), u16 leader
-length and the leader in UTF-16 code units. IDML writes each stop as a
-`ListItem` with `Alignment`, `AlignmentCharacter`, `Leader` and
-`Position`. `AlignmentCharacter` is `.` in every IDML tab stop, and the
-INDD record has no field for it, so the converter writes `.`. An empty
-list is a count of 0. The converter leaves out a list with another
-alignment code.
+alignment (0 `LeftAlign`, 1 `CenterAlign`, 2 `RightAlign`, 3
+`CharacterAlign`), for code 3 the alignment character as one UTF-16
+unit, u16 leader length and the leader in UTF-16 code units. IDML writes
+each stop as a `ListItem` with `Alignment`, `AlignmentCharacter`,
+`Leader` and `Position`. A stop with another code stores no character,
+and IDML writes `.` for it in every sample. An empty list is a count of
+0. The converter leaves out a list with another alignment code.
+
+Evidence, corpus of 2026-10, the stops of paragraph styles matched by
+`Self` and of story paragraph ranges: 79 `CenterAlign` stops (59 in
+trustworthy pairs) and 36 `CharacterAlign` stops (34; 27 with `,`, 9
+with `.`) match in alignment, character, leader and position. Before
+code 3 was read, a list with such a stop was not read at all: the
+character made the record longer than the stops.
 
 **Nested styles (0x1B75).** u32 count, then for each item: u32 character
 style UID, u32 length, and a delimiter code of that many characters
