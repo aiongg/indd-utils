@@ -1728,7 +1728,17 @@ mod tests {
     fn writes_anchored_object_settings_field_by_field() {
         let mut d = vec![0u8; 62];
         d[0..8].copy_from_slice(&(-3.5f64).to_le_bytes());
-        for (o, v) in [(40, 1u16), (42, 2), (44, 6), (46, 2), (48, 0), (50, 1), (52, 1), (54, 1), (56, 0)] {
+        for (o, v) in [
+            (40, 1u16),
+            (42, 2),
+            (44, 6),
+            (46, 2),
+            (48, 0),
+            (50, 1),
+            (52, 1),
+            (54, 1),
+            (56, 0),
+        ] {
             d[o..o + 2].copy_from_slice(&v.to_le_bytes());
         }
         let a = crate::model::AnchorSettings::read(crate::object::Encoding::default(), &d);
@@ -1739,7 +1749,10 @@ mod tests {
                 .map(|(_, v)| v)
         };
         assert_eq!(get("AnchoredPosition").as_deref(), Some("Anchored"));
-        assert_eq!(get("HorizontalReferencePoint").as_deref(), Some("PageMargins"));
+        assert_eq!(
+            get("HorizontalReferencePoint").as_deref(),
+            Some("PageMargins")
+        );
         assert_eq!(get("VerticalReferencePoint").as_deref(), Some("Capheight"));
         assert_eq!(get("AnchorPoint").as_deref(), Some("LeftCenterAnchor"));
         assert_eq!(get("HorizontalAlignment").as_deref(), Some("RightAlign"));
@@ -1748,7 +1761,8 @@ mod tests {
         assert_eq!(get("PinPosition").as_deref(), Some("false"));
         assert_eq!(get("AnchorYoffset").as_deref(), Some("-3.5"));
         // A short chunk gives the fields it has.
-        let short = crate::model::AnchorSettings::read(crate::object::Encoding::default(), &d[..44]);
+        let short =
+            crate::model::AnchorSettings::read(crate::object::Encoding::default(), &d[..44]);
         assert_eq!(anchored_settings(&short).len(), 4);
     }
 

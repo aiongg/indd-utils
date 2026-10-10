@@ -1395,11 +1395,7 @@ impl Reader<'_> {
                     );
                 }
             }
-            None => set(
-                "MojikumiUiPreference",
-                "MojikumiUiSettings",
-                "16383".into(),
-            ),
+            None => set("MojikumiUiPreference", "MojikumiUiSettings", "16383".into()),
         }
         // Chunk 0x11C69 changes both values; which one it stores is not
         // known (preferences.md, single-chunk preferences).
@@ -1472,7 +1468,11 @@ impl Reader<'_> {
             }
             match everywhere {
                 Some(0) => set("TextWrapPreference", "ApplyToMasterPageOnly", "true".into()),
-                Some(1) => set("TextWrapPreference", "ApplyToMasterPageOnly", "false".into()),
+                Some(1) => set(
+                    "TextWrapPreference",
+                    "ApplyToMasterPageOnly",
+                    "false".into(),
+                ),
                 _ => {}
             }
             props.push((
@@ -1605,7 +1605,11 @@ impl Reader<'_> {
                 set("TextPreference", "SmartTextReflow", "false".into());
                 set("TextPreference", "LimitToMasterTextFrames", "true".into());
                 set("TextPreference", "DeleteEmptyPages", "false".into());
-                set("TextPreference", "PreserveFacingPageSpreads", "false".into());
+                set(
+                    "TextPreference",
+                    "PreserveFacingPageSpreads",
+                    "false".into(),
+                );
             }
         }
 

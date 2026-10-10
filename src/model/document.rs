@@ -215,11 +215,15 @@ impl<'a> Reader<'a> {
         // The name of the first assignment: a flag byte and a string at the
         // start of chunk 0x1BE1B (objects.md, assignments).
         let assignment_name = match assignments.first() {
-            Some(&u) => self.chunk(u, chunk::ASSIGNMENT_NAME).ok().flatten().and_then(|d| {
-                let mut c = self.cursor(&d);
-                c.flag().ok()?;
-                c.string().ok()
-            }),
+            Some(&u) => self
+                .chunk(u, chunk::ASSIGNMENT_NAME)
+                .ok()
+                .flatten()
+                .and_then(|d| {
+                    let mut c = self.cursor(&d);
+                    c.flag().ok()?;
+                    c.string().ok()
+                }),
             None => None,
         };
         let users_script = self.users_script(DOC);

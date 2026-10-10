@@ -223,7 +223,12 @@ impl Writer<'_> {
             if !m.group {
                 x.attr(
                     "InkPercentages",
-                    list(m.percentages.iter().map(|p| format!("{}", p * 100.0)).collect()),
+                    list(
+                        m.percentages
+                            .iter()
+                            .map(|p| format!("{}", p * 100.0))
+                            .collect(),
+                    ),
                 );
                 let base = m
                     .base
@@ -233,15 +238,29 @@ impl Writer<'_> {
             }
             x.attr(
                 "InkNameList",
-                list(inks.iter().map(|i| i.name.idml().replace(' ', "%20")).collect()),
+                list(
+                    inks.iter()
+                        .map(|i| i.name.idml().replace(' ', "%20"))
+                        .collect(),
+                ),
             )
             .attr(
                 "MixedInkSpotColorNameList",
-                list(spots.iter().map(|c| c.idml_name().replace(' ', "%20")).collect()),
+                list(
+                    spots
+                        .iter()
+                        .map(|c| c.idml_name().replace(' ', "%20"))
+                        .collect(),
+                ),
             )
             .attr(
                 "MixedInkSpotColorList",
-                list(spots.iter().map(|c| c.reference().replace(' ', "%20")).collect()),
+                list(
+                    spots
+                        .iter()
+                        .map(|c| c.reference().replace(' ', "%20"))
+                        .collect(),
+                ),
             )
             .attr("Name", &m.name)
             .attr("ColorEditable", m.editable.to_string())
@@ -541,10 +560,7 @@ impl Writer<'_> {
                     ("Tint", "100"),
                     ("GapTint", "100"),
                     ("LeftIndent", "0"),
-                    (
-                        "Width",
-                        if prefix == "Rule" { "72" } else { "288" },
-                    ),
+                    ("Width", if prefix == "Rule" { "72" } else { "288" }),
                     ("Offset", "0"),
                 ] {
                     attr(&mut n, &format!("{prefix}{k}"), v.into());

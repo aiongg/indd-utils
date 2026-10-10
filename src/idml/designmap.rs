@@ -104,7 +104,8 @@ const NO_SPELLING_VENDOR: &[&str] = &[
 /// Quotes that every IDML has for a language without chunk 0x2D26, where
 /// the value files lack them because languages with the chunk differ
 /// (idml-values.md, language quotes).
-const QUOTES_WITHOUT_CHUNK: &[(&str, &str, &str)] = &[("Romanian", "\u{201A}\u{2019}", "\u{201E}\u{201D}")];
+const QUOTES_WITHOUT_CHUNK: &[(&str, &str, &str)] =
+    &[("Romanian", "\u{201A}\u{2019}", "\u{201E}\u{201D}")];
 
 impl Writer<'_> {
     /// Values of designmap settings that follow the InDesign that saved the
@@ -128,9 +129,13 @@ impl Writer<'_> {
                 out
             }
             "AdjustLayoutPreference" => {
-                let early_14 = last == (14, 0) && matches!(self.doc.last_session_patch, Some(0 | 1));
+                let early_14 =
+                    last == (14, 0) && matches!(self.doc.last_session_patch, Some(0 | 1));
                 vec![
-                    ("EnableAdjustLayout", if early_14 { "true" } else { "false" }),
+                    (
+                        "EnableAdjustLayout",
+                        if early_14 { "true" } else { "false" },
+                    ),
                     ("AllowFontSizeAndLeadingAdjustment", "false"),
                     ("EnableAutoAdjustMargins", "false"),
                 ]
@@ -599,7 +604,8 @@ impl Writer<'_> {
             } else if let Some((_, single, double)) =
                 QUOTES_WITHOUT_CHUNK.iter().find(|(n, ..)| *n == l.name)
             {
-                x.attr("SingleQuotes", *single).attr("DoubleQuotes", *double);
+                x.attr("SingleQuotes", *single)
+                    .attr("DoubleQuotes", *double);
             }
             x.attr("PrimaryLanguageName", name(&l.primary))
                 .attr("SublanguageName", name(&l.sub))

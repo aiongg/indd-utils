@@ -275,7 +275,11 @@ impl MixedInk {
     /// The IDML reference: `MixedInk/<name>` or `MixedInkGroup/<name>`,
     /// escaped as colour names.
     pub fn reference(&self) -> String {
-        let kind = if self.group { "MixedInkGroup" } else { "MixedInk" };
+        let kind = if self.group {
+            "MixedInkGroup"
+        } else {
+            "MixedInk"
+        };
         format!(
             "{kind}/{}",
             self.name

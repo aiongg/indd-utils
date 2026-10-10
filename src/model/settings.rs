@@ -315,7 +315,8 @@ impl<'a> Reader<'a> {
     /// u32). `None` when the chunk is missing or empty or does not parse.
     /// See `docs/format/objects.md`, save history.
     pub(super) fn last_session(&self, doc: u32) -> Option<(u16, String)> {
-        self.last_record(doc).map(|(_, code, version)| (code, version))
+        self.last_record(doc)
+            .map(|(_, code, version)| (code, version))
     }
 
     /// The platform (the second u16) of the last record of the save
