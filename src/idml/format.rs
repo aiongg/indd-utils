@@ -141,6 +141,24 @@ pub(super) fn prop_node(p: &Property) -> Node {
                 });
             }
         }
+        PropValue::Lists(lists) => {
+            for list in lists {
+                n.children.push(Node {
+                    tag: "ListItem".into(),
+                    attrs: vec![("type".into(), "list".into())],
+                    children: list
+                        .iter()
+                        .map(|(t, text)| Node {
+                            tag: "ListItem".into(),
+                            attrs: vec![("type".into(), t.to_string())],
+                            text: Some(text.clone()),
+                            children: Vec::new(),
+                        })
+                        .collect(),
+                    text: None,
+                });
+            }
+        }
     }
     n
 }
@@ -382,6 +400,15 @@ impl Writer<'_> {
                         x.start("ListItem").attr("type", "record");
                         for (field, ty, text) in item {
                             x.start(field).attr("type", *ty).text(text).end();
+                        }
+                        x.end();
+                    }
+                }
+                PropValue::Lists(lists) => {
+                    for list in lists {
+                        x.start("ListItem").attr("type", "list");
+                        for (ty, text) in list {
+                            x.start("ListItem").attr("type", *ty).text(text).end();
                         }
                         x.end();
                     }

@@ -56,6 +56,9 @@ pub enum Value {
     Dashes(Vec<f64>, u16),
     /// A custom glyph: its name (the glyph ID that follows is not used).
     Glyph(String),
+    /// OpenType features chosen for single glyphs: four-character feature
+    /// tag and the number of the alternate (attribute 0x42AE).
+    Features(Vec<(String, u32)>),
     /// Opacity gradient stops: location (0–1), absolute position of the
     /// midpoint to the next stop (0–1), opacity in percent.
     Stops(Vec<[f64; 3]>),
@@ -364,6 +367,8 @@ enum Layout {
     RefOrCode,
     /// u16 length, that many bytes of a glyph name, u32 glyph ID.
     Glyph,
+    /// u16 count, then per feature four tag bytes and a u32 number.
+    Features,
 }
 
 fn text_layout(id: u32) -> Option<Layout> {
@@ -382,6 +387,7 @@ fn text_layout(id: u32) -> Option<Layout> {
         0x1BBB => Layout::LineStyles,
         0x1A406 => Layout::BulletChar,
         0x1B5E => Layout::Glyph,
+        0x42AE => Layout::Features,
         // Stroke types of cell edges, table borders, rows and columns
         // (tables.md).
         0xB64D | 0xB64E | 0xB64F | 0xB650 | 0xB655 | 0xB658 | 0xB65B | 0xB65E | 0xB688 | 0xB689
@@ -451,8 +457,27 @@ fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
             String::from_utf8(name).ok()
         })()
         .map(Value::Glyph),
+        Layout::Features => features(&mut c).map(Value::Features),
     };
     value.unwrap_or_else(|| Value::Other(t, data.to_vec()))
+}
+
+/// The features of attribute 0x42AE (`docs/format/attributes.md`,
+/// alternate glyphs): the tag bytes are in reading order in either byte
+/// order. `None` unless every tag is printable ASCII and the features
+/// fill the value exactly.
+fn features(c: &mut Cursor) -> Option<Vec<(String, u32)>> {
+    let n = c.u16().ok()? as usize;
+    let mut out = Vec::with_capacity(n.min(c.remaining() / 8));
+    for _ in 0..n {
+        let tag = c.bytes(4).ok()?;
+        if !tag.iter().all(|b| (0x20..0x7F).contains(b)) {
+            return None;
+        }
+        let tag = String::from_utf8(tag.to_vec()).ok()?;
+        out.push((tag, c.u32().ok()?));
+    }
+    (c.remaining() == 0).then_some(out)
 }
 
 /// A tab list: u16 count, then per stop f64 position, u16 alignment (for
@@ -635,6 +660,39 @@ mod tests {
         );
         assert!(matches!(
             decode_text(enc, 0x1B5E, 0x1B26, &g[..6]),
+            Value::Other(..)
+        ));
+    }
+
+    #[test]
+    fn decodes_alternate_glyph_features_in_both_byte_orders() {
+        use crate::header::{ByteOrder, Version};
+        let le = Encoding::default();
+        let mut d = 1u16.to_le_bytes().to_vec();
+        d.extend_from_slice(b"aalt");
+        d.extend_from_slice(&2u32.to_le_bytes());
+        let aalt = Value::Features(vec![("aalt".into(), 2)]);
+        assert_eq!(decode_text(le, 0x42AE, 0x42DF, &d), aalt);
+        let be = Encoding::new(ByteOrder::Big, Version { major: 4, minor: 0 });
+        let mut b = 1u16.to_be_bytes().to_vec();
+        b.extend_from_slice(b"aalt");
+        b.extend_from_slice(&2u32.to_be_bytes());
+        assert_eq!(decode_text(be, 0x42AE, 0x42DF, &b), aalt);
+        // A style stores an empty list.
+        assert_eq!(
+            decode_text(le, 0x42AE, 0x42DF, &[0, 0]),
+            Value::Features(Vec::new())
+        );
+        // A count larger than the data, or a tag that is not text.
+        d[0] = 2;
+        assert!(matches!(
+            decode_text(le, 0x42AE, 0x42DF, &d),
+            Value::Other(..)
+        ));
+        d[0] = 1;
+        d[2] = 0;
+        assert!(matches!(
+            decode_text(le, 0x42AE, 0x42DF, &d),
             Value::Other(..)
         ));
     }

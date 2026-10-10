@@ -74,6 +74,9 @@ pub(super) enum Kind {
     String,
     /// A glyph name, written as `$ID/<name>`; left out when empty.
     GlyphName,
+    /// One OpenType feature of a single glyph, written as a list of the
+    /// tag (`$ID/<tag>`) and the number; other counts are left out.
+    Features,
     /// Dash and gap lengths, separated by spaces.
     Dashes,
     /// The corner adjustment of a dash list: 3 `DashesAndGaps`.
@@ -274,6 +277,16 @@ impl Writer<'_> {
                 Value::Glyph(name) if !name.is_empty() => {
                     Some(text("string", format!("$ID/{name}")))
                 }
+                _ => None,
+            },
+            Kind::Features => match v {
+                Value::Features(f) if f.len() == 1 => Some((
+                    "list",
+                    PropValue::Lists(vec![vec![
+                        ("string", format!("$ID/{}", f[0].0)),
+                        ("long", f[0].1.to_string()),
+                    ]]),
+                )),
                 _ => None,
             },
             Kind::StringOrNothing => v.as_string().map(|s| {

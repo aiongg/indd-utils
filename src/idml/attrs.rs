@@ -315,6 +315,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (0x1B29, "TabList", Kind::TabList, true),
     (0x1B2A, "Underline", Kind::Equals(1), false),
     (0x1B2B, "AppliedFont", Kind::Font, true),
+    (0x42AE, "OpenTypeFeatures", Kind::Features, true),
     (
         0x1B2C,
         "OTFFigureStyle",
@@ -964,6 +965,9 @@ pub(super) enum PropValue {
     Text(String),
     /// Records, each written as a `ListItem` (type `list`).
     List(Vec<Vec<Field>>),
+    /// Lists, each written as a `ListItem` of type `list` holding one
+    /// `ListItem` per value (type, text).
+    Lists(Vec<Vec<(&'static str, String)>>),
     /// An empty element with these attributes and no `type`.
     Attributes(Vec<(&'static str, String)>),
 }
@@ -2041,6 +2045,29 @@ mod tests {
         let names: Vec<&str> = props.iter().map(|p| p.0).collect();
         assert_eq!(names, ["RubyFontStyle"]);
         assert!(matches!(&props[0].2, PropValue::Text(t) if t == "Nothing"));
+    }
+
+    #[test]
+    fn writes_one_alternate_glyph_feature() {
+        let doc = Document::default();
+        let w = Writer::for_test(&doc);
+        let mut a = Attrs::default();
+        a.values = vec![(0x42AE, Value::Features(vec![("nalt".into(), 8)]))];
+        let (_, props) = w.text_attrs(&a);
+        assert_eq!(props.len(), 1);
+        assert_eq!((props[0].0, props[0].1), ("OpenTypeFeatures", "list"));
+        let PropValue::Lists(lists) = &props[0].2 else {
+            panic!("not a list of lists");
+        };
+        assert_eq!(
+            lists,
+            &[vec![("string", "$ID/nalt".into()), ("long", "8".into())]]
+        );
+        // An empty list (as styles store) and several features are left out.
+        for f in [vec![], vec![("aalt".into(), 1), ("ss01".into(), 1)]] {
+            a.values = vec![(0x42AE, Value::Features(f))];
+            assert!(w.text_attrs(&a).1.is_empty());
+        }
     }
 
     #[test]

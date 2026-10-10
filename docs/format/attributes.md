@@ -1035,6 +1035,37 @@ The converter leaves out records with an empty name. It reproduces 1,499
 of 1,499 values in the trustworthy pairs, with no extra value. The glyph
 ID is not used.
 
+**Alternate glyphs (0x42AE).** A glyph chosen from the alternates of an
+OpenType feature (for example in the Glyphs panel) is stored on its run
+as attribute 0x42AE, value type 0x42DF: u16 count *n*, then per feature
+four bytes of the feature tag in reading order and a u32 number, in the
+file's byte order. IDML writes `Properties/OpenTypeFeatures` (type
+`list`) on the character range, after `AppliedFont`: one `ListItem` of
+type `list` per feature, holding a `ListItem` of type `string` with
+`$ID/` and the tag and a `ListItem` of type `long` with the number:
+
+```xml
+<OpenTypeFeatures type="list">
+  <ListItem type="list">
+    <ListItem type="string">$ID/aalt</ListItem>
+    <ListItem type="long">1</ListItem>
+  </ListItem>
+</OpenTypeFeatures>
+```
+
+Evidence, in the corpus of 2026-10: 127 of 127 runs in the trustworthy
+pairs (27 files) have the IDML value at the same story offset, with 11
+tags (`ss01` to `ss07`, `aalt`, `ccmp`, `liga`, `nalt`) and numbers 1,
+2 and 8; no IDML range has `OpenTypeFeatures` without the attribute.
+Every run in the corpus stores one feature (*n* = 1). The tag order in
+both byte orders comes from 7 big-endian files (29 runs, no IDML): the
+count and number are big-endian there, the tag bytes are not reversed.
+Styles store the attribute with *n* = 0 (2,230 styles of the paired
+files); no IDML style has `OpenTypeFeatures`, and the converter writes
+nothing for them. The IDML form of several features is not shown, so
+the converter leaves out values with *n* other than 1, and values whose
+tag is not printable ASCII or that do not fill the value exactly.
+
 ### Ruby, kenten and warichu
 
 These attributes are in story runs (character and paragraph runs, chunk
