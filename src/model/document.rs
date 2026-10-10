@@ -56,6 +56,8 @@ pub struct Document {
     pub styles: BTreeMap<u32, Style>,
     pub toc_styles: Vec<TocStyle>,
     pub colors: Vec<Color>,
+    /// Mixed inks and mixed ink groups, in UID order.
+    pub mixed_inks: Vec<MixedInk>,
     /// Tint swatches, with their IDML reference and name.
     pub tints: Vec<(Tint, String, String)>,
     pub gradients: Vec<Gradient>,
@@ -115,6 +117,7 @@ pub type XmlTag = (String, Option<[f64; 3]>);
 struct ClassObjects {
     styles: BTreeMap<u32, Style>,
     colors: Vec<Color>,
+    mixed_inks: Vec<MixedInk>,
     tints: Vec<Tint>,
     gradients: Vec<Gradient>,
     swatches: BTreeMap<u32, String>,
@@ -257,6 +260,7 @@ impl<'a> Reader<'a> {
             stories,
             styles: objects.styles,
             colors: objects.colors,
+            mixed_inks: objects.mixed_inks,
             tints,
             gradients: objects.gradients,
             swatches: objects.swatches,
@@ -527,6 +531,23 @@ impl<'a> Reader<'a> {
     fn color_object(&self, out: &mut ClassObjects, uid: u32) -> Result<(), Error> {
         let obj = self.object(uid)?;
         if let Some(c) = Color::read(uid, &obj)? {
+            // A member of a mixed ink group takes its inks from the group.
+            let group = match obj.chunk(color::chunk::TINT_BASE) {
+                Some(d) if c.space == color::Space::Other(9) => {
+                    let g = self.cursor(d).u32()?;
+                    if g != uid && self.class(g) == Some(color::class::COLOR) {
+                        Some(self.object(g)?)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            if let Some(m) = MixedInk::read(&c, &obj, group.as_deref())? {
+                out.swatches.insert(uid, m.reference());
+                out.mixed_inks.push(m);
+                return Ok(());
+            }
             if c.model_name().is_none() {
                 self.warn(format!(
                     "colour {uid}: colour model code {} is not known; left out",

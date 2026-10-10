@@ -180,6 +180,77 @@ impl Writer<'_> {
             x.attrs_missing(self.observed("Ink").iter());
             x.end();
         }
+        // Mixed ink groups, then mixed inks sorted by name in code point
+        // order (objects.md, mixed inks).
+        let mut mixed: Vec<_> = self.doc.mixed_inks.iter().collect();
+        mixed.sort_by(|a, b| (!a.group, &a.name).cmp(&(!b.group, &b.name)));
+        let list = |items: Vec<String>| items.join(" ");
+        for m in mixed {
+            let source = m
+                .base
+                .and_then(|g| self.doc.mixed_inks.iter().find(|n| n.uid == g))
+                .unwrap_or(m);
+            let inks: Vec<&crate::model::Ink> = source
+                .inks
+                .iter()
+                .filter_map(|u| self.doc.inks.iter().find(|i| i.uid == *u))
+                .collect();
+            let spots: Vec<&crate::model::Color> = source
+                .spots
+                .iter()
+                .filter_map(|u| self.doc.colors.iter().find(|c| c.uid == *u))
+                .collect();
+            if inks.len() != source.inks.len() || spots.len() != source.spots.len() {
+                continue;
+            }
+            let reference = m.reference();
+            x.start(if m.group { "MixedInkGroup" } else { "MixedInk" })
+                .attr("Self", &reference)
+                .attr("Model", "Mixedinkmodel");
+            if !m.group {
+                x.attr("Space", "MixedInk");
+            }
+            x.attr(
+                "InkList",
+                list(
+                    inks.iter()
+                        .map(|i| format!("Ink/{}", self_name(&i.name.idml()).replace(' ', "%20")))
+                        .collect(),
+                ),
+            );
+            if !m.group {
+                x.attr(
+                    "InkPercentages",
+                    list(m.percentages.iter().map(|p| format!("{}", p * 100.0)).collect()),
+                );
+                let base = m
+                    .base
+                    .and_then(|g| self.doc.swatches.get(&g).cloned())
+                    .unwrap_or_else(|| "n".into());
+                x.attr("BaseColor", base);
+            }
+            x.attr(
+                "InkNameList",
+                list(inks.iter().map(|i| i.name.idml().replace(' ', "%20")).collect()),
+            )
+            .attr(
+                "MixedInkSpotColorNameList",
+                list(spots.iter().map(|c| c.idml_name().replace(' ', "%20")).collect()),
+            )
+            .attr(
+                "MixedInkSpotColorList",
+                list(spots.iter().map(|c| c.reference().replace(' ', "%20")).collect()),
+            )
+            .attr("Name", &m.name)
+            .attr("ColorEditable", m.editable.to_string())
+            .attr("ColorRemovable", m.removable.to_string())
+            .attr("Visible", m.visible.to_string());
+            if let Some(id) = m.creator {
+                x.attr("SwatchCreatorID", id.to_string());
+            }
+            group_ref(&mut x, &reference);
+            x.end();
+        }
         // The pasted smooth shades, in UID order: the document's constant
         // shade, and each axial shade that something refers to or the
         // page item defaults name. Each has the values every IDML has on
@@ -251,6 +322,17 @@ impl Writer<'_> {
                 .attr("BaseColor", base)
                 .attr("Name", name)
                 .attr("ColorOverride", t.override_name());
+            // The alternate colour of the base colour (objects.md, tints).
+            if let Some((space, values)) = self
+                .doc
+                .colors
+                .iter()
+                .find(|c| c.uid == t.base)
+                .and_then(|c| c.idml_alternate())
+            {
+                x.attr("AlternateSpace", space)
+                    .attr("AlternateColorValue", nums(&values));
+            }
             group_ref(&mut x, reference);
             x.attrs_missing(self.observed("Tint").iter());
             x.end();

@@ -2874,11 +2874,42 @@ out, with a warning, for any other code.
 
 **Code 3: mixed inks.** The corpus after 2026-10 has 47 colours with
 code 3 in 27 files, 16 of them pairs (InDesign 12.1 to 17.0, typeset in
-Korean). Their IDML has no `Color` element for them; it lists
-`MixedInk` elements in `Resources/Graphic.xml` (`Model="Mixedinkmodel"`,
-`Space="MixedInk"`, `InkList`, `InkPercentages`, `BaseColor` and the
-spot colour lists). The fields of the ink list are not decoded, so the
-converter writes neither element for these colours.
+Korean). Their IDML has no `Color` element for them; it lists `MixedInk`
+and `MixedInkGroup` elements in `Resources/Graphic.xml`. A colour object
+with model code 3 is a mixed ink:
+
+| Chunk | Layout | IDML |
+|---|---|---|
+| 0x1F09 | u32 3, u32 *n*, *n* ink UIDs (class 0x1F07) | `InkList` (`Ink/` and each ink's `Self` name), `InkNameList` (the ink names, `$ID/` for built-in ones) |
+| 0x1F01 | u32 9 (colour space), u16 *n*, *n* f64 fractions | `InkPercentages`: each fraction × 100 in the shortest form that reads back (`30.000000000000004` where 0.3 × 100 gives it) |
+| 0x102D | u32 *m*, *m* colour UIDs (the spot colours) | `MixedInkSpotColorList` (`Color/` and the name), `MixedInkSpotColorNameList` (the names) |
+| 0x1F10 | as for colours | `Name`, `ColorEditable`, `ColorRemovable`, `Visible`, `SwatchCreatorID` |
+
+In these lists a space of a name is written `%20`. A **mixed ink
+group** is a code 3 colour that also has chunk 0x1F24 (f64 −1, u32 5);
+its percentages are 0. IDML writes it as `MixedInkGroup` with `Self`,
+`Model="Mixedinkmodel"`, the four lists, `Name`, the three flags,
+`SwatchCreatorID` and `SwatchColorGroupReference`. The **members** of a
+group are colour objects with colour space 9 in chunk 0x1F01, their own
+percentages and name, chunk 0x117 the group's UID, and no chunk 0x1F09 or
+0x102D: they take the ink and spot lists from the group and have
+`BaseColor="MixedInkGroup/<group name>"`. Other mixed inks have
+`BaseColor="n"`.
+
+`MixedInk` writes `Self`, `Model="Mixedinkmodel"`, `Space="MixedInk"`,
+`InkList`, `InkPercentages`, `BaseColor`, `InkNameList`,
+`MixedInkSpotColorNameList`, `MixedInkSpotColorList`, `Name`,
+`ColorEditable`, `ColorRemovable`, `Visible`, `SwatchCreatorID` and
+`SwatchColorGroupReference`, in this order. `Self` is `MixedInk/` or
+`MixedInkGroup/` and the name, escaped as colour names. In `Graphic.xml`
+the groups follow the inks, then the mixed inks sorted by `Name` in code
+point order (`… 1`, `… 10`, `… 11`, `… 2`; 16 of 16 files, UID order
+fails in 3). Fill colours and colour group swatches refer to them by
+`Self`.
+
+Evidence: the 16 trustworthy pairs (DOM 12.1 to 17.0): 30 mixed inks
+without a group, 48 group members and 3 groups; every attribute above
+matches 81 of 81. No tint has a mixed ink as its base colour.
 
 **Tints** are objects of the same class without chunks 0x1F10 and
 0x1F01. Chunk 0x117 is the UID of the base colour, and chunk 0x1F24 holds
@@ -2895,6 +2926,11 @@ in 24 files, all with this layout and a named base colour. The pairs have
 `TintValue`, `BaseColor`, `Name` and `ColorOverride`. Their 19 references
 (`FillColor` of 15 page items, `StrokeColor` of 3, one gradient stop)
 match too.
+
+A tint's `AlternateSpace` and `AlternateColorValue` are those of its
+base colour (`NoAlternateColor` and an empty list where the colour has
+none): 260 of 260 IDML tints of the corpus of 2026-10 (204 in
+trustworthy pairs; 9 with `LAB`).
 
 Tints have no flags chunk, so `ColorEditable`, `ColorRemovable` and
 `Visible` (true in all 3 IDML tints) are not written. Brackets are known

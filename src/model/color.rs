@@ -12,6 +12,8 @@ pub mod class {
 }
 
 pub mod chunk {
+    /// Spot colours of a mixed ink: u32 count, then colour UIDs.
+    pub const MIXED_INK_SPOTS: u32 = 0x102D;
     pub const COLOR_VALUE: u32 = 0x1F01;
     pub const COLOR_MODEL: u32 = 0x1F09;
     pub const COLOR_NAME: u32 = 0x1F10;
@@ -197,6 +199,90 @@ fn override_name(code: u32) -> &'static str {
         3 => "Specialregistration",
         4 => "Hiddenreserved",
         _ => "Normal",
+    }
+}
+
+/// A mixed ink (a colour of model code 3, or a member of a mixed ink
+/// group: colour space 9 and chunk 0x117) or a mixed ink group (model code
+/// 3 with chunk 0x1F24). See `docs/format/objects.md`, mixed inks.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MixedInk {
+    pub uid: u32,
+    pub name: String,
+    pub group: bool,
+    /// The group of a member.
+    pub base: Option<u32>,
+    /// Ink UIDs (chunk 0x1F09 after u32 3: count and UIDs), of the group
+    /// for a member.
+    pub inks: Vec<u32>,
+    /// The fraction of each ink (chunk 0x1F01, colour space 9).
+    pub percentages: Vec<f64>,
+    /// Spot colour UIDs (chunk 0x102D), of the group for a member.
+    pub spots: Vec<u32>,
+    pub editable: bool,
+    pub removable: bool,
+    pub visible: bool,
+    pub creator: Option<u32>,
+}
+
+impl MixedInk {
+    /// The mixed ink of a colour read as `color`; `group` is the object of
+    /// a member's group. `None` if `color` is not a mixed ink.
+    pub fn read(
+        color: &Color,
+        obj: &crate::Object,
+        group: Option<&crate::Object>,
+    ) -> Result<Option<MixedInk>, Error> {
+        let enc = obj.encoding;
+        let base = match obj.chunk(chunk::TINT_BASE) {
+            Some(d) if color.space == Space::Other(9) => Some(enc.cursor(d).u32()?),
+            _ => None,
+        };
+        if color.model != 3 && base.is_none() {
+            return Ok(None);
+        }
+        let source = if base.is_some() { group } else { Some(obj) };
+        let Some(source) = source else {
+            return Ok(None);
+        };
+        let Some(model) = source.chunk(chunk::COLOR_MODEL) else {
+            return Ok(None);
+        };
+        let mut c = enc.cursor(model);
+        if c.u32()? != 3 {
+            return Ok(None);
+        }
+        let inks = c.u32_list()?;
+        let spots = match source.chunk(chunk::MIXED_INK_SPOTS) {
+            Some(d) => enc.cursor(d).u32_list()?,
+            None => Vec::new(),
+        };
+        Ok(Some(MixedInk {
+            uid: color.uid,
+            name: color.name.clone(),
+            group: base.is_none() && obj.chunk(chunk::COLOR_OVERRIDE).is_some(),
+            base,
+            inks,
+            percentages: color.values.clone(),
+            spots,
+            editable: color.editable,
+            removable: color.removable,
+            visible: color.visible,
+            creator: color.creator,
+        }))
+    }
+
+    /// The IDML reference: `MixedInk/<name>` or `MixedInkGroup/<name>`,
+    /// escaped as colour names.
+    pub fn reference(&self) -> String {
+        let kind = if self.group { "MixedInkGroup" } else { "MixedInk" };
+        format!(
+            "{kind}/{}",
+            self.name
+                .replace('%', "%25")
+                .replace(':', "%3a")
+                .replace('\r', "%0d")
+        )
     }
 }
 
