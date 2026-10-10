@@ -34,7 +34,27 @@ length and data. Two parts are used:
 | 0x1032 | u32 start marker ID, u32 end marker ID; 0xFFFFFFFF = none |
 
 All 510 nodes have part 0xBF0D of exactly this size, and the 22 bytes are
-the same in all of them. The own key names the story whose store holds
+the same in all of them.
+
+**Attributes.** The 22 bytes end with a u32 attribute count, 0 in the
+nodes above. A node with attributes has them after the count, before
+the parent key:
+
+```
+u32 name length (UTF-16 units), name as text segments
+u16 (not identified)
+u32 value length, value as text segments
+```
+
+IDML writes each as `<XMLAttribute Self="<element Self>XMLAttributen<name>"
+Name="…" Value="…"/>`, the first children of its `XMLElement`. Over the
+pairs of the corpus of 2026-10, the nodes of 30 pairs have attributes,
+every such node parses to the end of its part with this layout, and in
+every pair the converter's `XMLAttribute` elements have the same
+multisets of `Self` and of (`Name`, `Value`) as the IDML's (28 trustworthy pairs, 71
+attributes; 12,247 attributes in the 2 stale pairs). Without the layout
+the converter left the whole XML structure of these stories out
+("XML node of unknown layout", 108 stories). The own key names the story whose store holds
 the node (510 of 510). In the InDesign 3.0 and 4.0 files the 22 bytes
 are 4 and 20 bytes (`big-endian.md`).
 
@@ -139,9 +159,8 @@ same places.
 
 ## Not converted
 
-- No node type other than the document node and elements occurs, so
-  XML attributes, comments, processing instructions and DTDs are not
-  known.
+- No node type other than the document node and elements is decoded:
+  XML comments, processing instructions and DTDs are not known.
 - No sample has an element whose markers are in different paragraphs.
   The converter leaves such an element out, with a warning, and does not
   write its markers.

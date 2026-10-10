@@ -76,6 +76,17 @@ impl Writer<'_> {
         if let Some(c) = e.content {
             x.attr("XMLContent", uref(Some(c)));
         }
+        // The attributes come first in the element (xml.md, attributes).
+        for (name, value) in &e.attributes {
+            x.empty(
+                "XMLAttribute",
+                &[
+                    ("Self", format!("{}XMLAttributen{name}", e.name)),
+                    ("Name", name.clone()),
+                    ("Value", value.clone()),
+                ],
+            );
+        }
     }
 
     pub(super) fn story(&self, s: &Story) -> String {
@@ -1023,6 +1034,7 @@ mod tests {
             content,
             story_content,
             block,
+            attributes: Vec::new(),
         };
         let (a, b, c, d) = ((9, 2), (9, 5), (9, 6), (9, 7));
         let markers = [

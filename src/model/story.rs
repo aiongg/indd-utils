@@ -202,6 +202,8 @@ pub struct XmlElement {
     /// Written between character ranges rather than inside one: the
     /// element holds an element whose content is a story.
     pub block: bool,
+    /// Attribute names and values, in stored order.
+    pub attributes: Vec<(String, String)>,
 }
 
 /// The UTF-16 offset of each character of `text`, where a surrogate pair is
@@ -994,6 +996,7 @@ impl<'a> Reader<'a> {
                     content,
                     story_content,
                     block: false,
+                    attributes: node.attributes.clone(),
                 },
             );
         }
