@@ -30,7 +30,115 @@ pub(super) fn index_header_type(group: &str, variant: u16) -> Option<&'static st
     })
 }
 
+/// Languages whose hyphenation vendor is never stored in the corpus: IDML
+/// writes `$ID/` for their empty vendor (objects.md, languages).
+const NO_HYPHENATION_VENDOR: &[&str] = &[
+    "Albanian",
+    "Arabic",
+    "Byelorussian",
+    "Chinese: Hong Kong",
+    "Chinese: Simplified",
+    "Chinese: Taiwan",
+    "Chinese: Traditional",
+    "Icelandic",
+    "Japanese",
+    "Korean",
+    "Neutral",
+    "Vietnamese",
+    "cy_GB",
+    "en_US+Medical",
+    "eu_ES",
+    "fo_FO",
+    "fy_NL",
+    "ga_IE",
+    "gl_ES",
+    "gv_GB",
+    "ko_KR",
+    "la_VA",
+    "lb_LU",
+    "mk_MK",
+    "mn_MN",
+    "ms_MY",
+    "ne_NE",
+    "oc_FR",
+    "sr_RS",
+    "sr_RS-Cyr",
+    "sr_RS-Lat",
+    "tk_TM",
+    "uz_UZ",
+];
+
+/// Languages whose spelling vendor is never stored in the corpus.
+const NO_SPELLING_VENDOR: &[&str] = &[
+    "Albanian",
+    "Byelorussian",
+    "Chinese: Hong Kong",
+    "Chinese: Simplified",
+    "Chinese: Taiwan",
+    "Chinese: Traditional",
+    "Icelandic",
+    "Japanese",
+    "Korean",
+    "Neutral",
+    "cy_GB",
+    "eu_ES",
+    "fo_FO",
+    "fy_NL",
+    "ga_IE",
+    "gl_ES",
+    "gv_GB",
+    "la_VA",
+    "lb_LU",
+    "mk_MK",
+    "mn_MN",
+    "ms_MY",
+    "ne_NE",
+    "oc_FR",
+    "sr_RS",
+    "sr_RS-Cyr",
+    "sr_RS-Lat",
+    "tk_TM",
+    "uz_UZ",
+];
+
+/// Quotes that every IDML has for a language without chunk 0x2D26, where
+/// the value files lack them because languages with the chunk differ
+/// (idml-values.md, language quotes).
+const QUOTES_WITHOUT_CHUNK: &[(&str, &str, &str)] = &[("Romanian", "\u{201A}\u{2019}", "\u{201E}\u{201D}")];
+
 impl Writer<'_> {
+    /// Values of designmap settings that follow the InDesign that saved the
+    /// document last, as the save history gives it (`preferences.md`,
+    /// values of the exporting edition). They apply where the INDD gives
+    /// none.
+    fn exporter_values(&self, tag: &str) -> Vec<(&'static str, &'static str)> {
+        let header = (self.doc.version.major, self.doc.version.minor);
+        let last = self.doc.last_session_version.unwrap_or(header);
+        match tag {
+            "PublishExportPreference" => {
+                let mut out = Vec::new();
+                if last == (11, 0) {
+                    out.push(("ImageExportResolution", "Ppi72"));
+                } else if last >= (11, 1) {
+                    out.push(("ImageExportResolution", "Ppi96"));
+                }
+                if last >= (11, 2) {
+                    out.push(("PublishPdf", "false"));
+                }
+                out
+            }
+            "AdjustLayoutPreference" => {
+                let early_14 = last == (14, 0) && matches!(self.doc.last_session_patch, Some(0 | 1));
+                vec![
+                    ("EnableAdjustLayout", if early_14 { "true" } else { "false" }),
+                    ("AllowFontSizeAndLeadingAdjustment", "false"),
+                    ("EnableAutoAdjustMargins", "false"),
+                ]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     pub(super) fn designmap(&self, name: &str) -> String {
         let doc = self.doc;
         let mut x = Xml::new();
@@ -154,6 +262,11 @@ impl Writer<'_> {
                 });
                 for v in doc.prefs.values.iter().filter(|v| v.element == tag) {
                     ours.attrs.push((v.name.to_string(), v.value.clone()));
+                }
+                for (k, v) in self.exporter_values(tag) {
+                    if !ours.attrs.iter().any(|(a, _)| a == k) {
+                        ours.attrs.push((k.to_string(), v.to_string()));
+                    }
                 }
                 let colors: Vec<Node> = doc
                     .prefs
@@ -473,22 +586,39 @@ impl Writer<'_> {
             x.start("Language")
                 .attr("Self", format!("Language/{}", self_name(&full)))
                 .attr("Name", &full);
-            if let Some(q) = values::keyed("Language", &full) {
+            // The quotes stored with the language, else those every IDML
+            // has for its name (objects.md, languages).
+            if let Some((single, double)) = &l.quotes {
+                x.attr("SingleQuotes", single).attr("DoubleQuotes", double);
+            } else if let Some(q) = values::keyed("Language", &full) {
                 for k in ["SingleQuotes", "DoubleQuotes"] {
                     if let Some(v) = q.attr(k) {
                         x.attr(k, v);
                     }
                 }
+            } else if let Some((_, single, double)) =
+                QUOTES_WITHOUT_CHUNK.iter().find(|(n, ..)| *n == l.name)
+            {
+                x.attr("SingleQuotes", *single).attr("DoubleQuotes", *double);
             }
             x.attr("PrimaryLanguageName", name(&l.primary))
                 .attr("SublanguageName", name(&l.sub))
                 .attr("Id", l.id.to_string());
             if let Some([(sf, spelling), (hf, hyphenation)]) = &l.vendors {
-                if *hf == 1 {
-                    x.attr("HyphenationVendor", hyphenation);
+                let vendor = |flag: u8, text: &str, without: &[&str]| match flag {
+                    1 => Some(text.to_string()),
+                    0 if text.is_empty() && without.contains(&l.name.as_str()) => {
+                        Some("$ID/".to_string())
+                    }
+                    3 => Some("$ID/".to_string()),
+                    10 => Some(builtin_key(text)),
+                    _ => None,
+                };
+                if let Some(v) = vendor(*hf, hyphenation, NO_HYPHENATION_VENDOR) {
+                    x.attr("HyphenationVendor", v);
                 }
-                if *sf == 1 {
-                    x.attr("SpellingVendor", spelling);
+                if let Some(v) = vendor(*sf, spelling, NO_SPELLING_VENDOR) {
+                    x.attr("SpellingVendor", v);
                 }
             }
             x.end();

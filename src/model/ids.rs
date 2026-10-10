@@ -206,6 +206,10 @@ pub mod chunk {
     /// Style export settings: tag maps, then u16 flags.
     pub const STYLE_EXPORT: u32 = 0x28F0;
     pub const LANGUAGE_NAME: u32 = 0x2D0F;
+    /// The quotes of a language.
+    pub const LANGUAGE_QUOTES: u32 = 0x2D26;
+    /// The name of an assignment, then two strings.
+    pub const ASSIGNMENT_NAME: u32 = 0x1BE1B;
     pub const ANCHOR_CHILDREN: u32 = 0x2C8;
     /// Anchored object settings, of an anchor or an object style.
     pub const ANCHOR_SETTINGS: u32 = 0x2800;

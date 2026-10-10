@@ -28,6 +28,10 @@ pub struct Document {
     /// Major and minor version of the application of the last session in
     /// the save history (`16.1.0.20` gives 16, 1).
     pub last_session_version: Option<(u32, u32)>,
+    /// The third number of that version (`16.1.0.20` gives 0).
+    pub last_session_patch: Option<u32>,
+    /// The platform of the last session: 0 or 3.
+    pub last_session_platform: Option<u16>,
     /// The document's label (chunk 0x1630B): key and value, as IDML
     /// writes them.
     pub label: Vec<(String, String)>,
@@ -47,6 +51,9 @@ pub struct Document {
     pub axial_shades: Vec<AxialShade>,
     /// Assignment objects (class 0x1BE01), in UID order.
     pub assignments: Vec<u32>,
+    /// The name of the first assignment, in the language of the edition
+    /// that made the document.
+    pub assignment_name: Option<String>,
     /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
     /// a built-in key, and the name), in UID order.
     pub named_grids: Vec<NamedGrid>,
@@ -205,13 +212,27 @@ impl<'a> Reader<'a> {
                 .insert(a.uid, format!("PastedSmoothShade/u{:x}", a.uid));
         }
         let assignments = self.assignments();
+        // The name of the first assignment: a flag byte and a string at the
+        // start of chunk 0x1BE1B (objects.md, assignments).
+        let assignment_name = match assignments.first() {
+            Some(&u) => self.chunk(u, chunk::ASSIGNMENT_NAME).ok().flatten().and_then(|d| {
+                let mut c = self.cursor(&d);
+                c.flag().ok()?;
+                c.string().ok()
+            }),
+            None => None,
+        };
         let users_script = self.users_script(DOC);
         let last_session = self.last_session(DOC);
+        let last_session_platform = self.last_session_platform(DOC);
         let last_session_code = last_session.as_ref().map(|(c, _)| *c);
-        let last_session_version = last_session.and_then(|(_, v)| {
-            let mut it = v.split('.').map(|n| n.parse::<u32>().ok());
-            Some((it.next()??, it.next()??))
-        });
+        let session_number = |i: usize| {
+            last_session
+                .as_ref()
+                .and_then(|(_, v)| v.split('.').nth(i)?.parse::<u32>().ok())
+        };
+        let last_session_version = session_number(0).zip(session_number(1));
+        let last_session_patch = session_number(2);
         let numbering_lists = self.numbering_lists().unwrap_or_else(|e| {
             self.warn(format!("numbering lists left out: {e}"));
             Vec::new()
@@ -274,6 +295,7 @@ impl<'a> Reader<'a> {
             constant_shade,
             axial_shades,
             assignments,
+            assignment_name,
             style_groups: objects.style_groups,
             object_styles: objects.object_styles,
             cell_styles: objects.cell_styles,
@@ -282,6 +304,8 @@ impl<'a> Reader<'a> {
             users_script,
             last_session_code,
             last_session_version,
+            last_session_patch,
+            last_session_platform,
             label,
             numbering_lists,
             sections,

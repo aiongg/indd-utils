@@ -234,8 +234,11 @@ stored data, not a decoded field. Over the 803 pairs of the corpus of
 | No chunk 0x2834 (offset 168 is 0 in all) | 125 | `LightBlue` |
 
 No stored field was found that holds the colour when the u32 is 0. Both
-the colour and offset 168 appear to be defaults of the edition that
-created the document. Every object style's `BaselineFrameGridColor`
+the colour and offset 168 appear to be defaults of an edition. In the
+corpus of 2026-10 offset 168 is 1 exactly when the first session of the
+save history is of a Japanese or Chinese edition, while the IDML colour
+follows the last one; the converter uses the rule of the exporting
+edition (below) where the u32 is 0. Every object style's `BaselineFrameGridColor`
 equals the preference's in 803 of 803 pairs (3,515 object styles), so
 the converter writes this colour in the preference and in every object
 style. A UID that is not an interface colour, or another byte at 168,
@@ -632,11 +635,8 @@ spaces, following topic), `^=` (page range), `, ` (between page
 numbers), `. ` (before a cross reference) and the empty end separator.
 The converter writes these. The title is `Index` in most documents and a
 translation in the others (`索引`, `Indice`, `Указатель`, …), and
-`BetweenEntriesSeparator` is `; ` or `、`. Both follow the language of the
-exporting application. The language code of the document's last
-session (`objects.md`, save history) shows a Japanese or Chinese
-edition: the converter writes `Title="索引"` and `、` for code 0x0101,
-and `; ` (no title) for other codes, whose titles vary.
+`BetweenEntriesSeparator` is `; ` or `、`. Both follow the edition
+(values of the exporting edition, below).
 
 ## Chapter numbering (`ChapterNumberPreference`)
 
@@ -663,23 +663,136 @@ pairs). With it, `Composition` is `UseDocument` in 16 of 21; the other 5
 (DOM 14 and 15) have `Both` with the same bytes. The converter writes
 `UseDocument` when the chunk is there.
 
-## EPUB export (`EPubExportPreference`)
+## EPUB, HTML and Publish Online export
 
-From DOM 8. Chunk 0x21A1A of the preferences object, in 13 of the 482
-trustworthy pairs with DOM 8 or later:
+From DOM 8 for EPUB and HTML, DOM 10 for fixed layout EPUB, DOM 11 for
+Publish Online (designmap.xml). Each has a chunk of the preferences
+object that only some documents have; values are from the corpus of
+2026-10 (1,460 pairs, 1,251 trustworthy). A "string" here is a flag
+byte and an in-object string; for `TocStyleName`, `ParagraphStyleName`
+and `CoverPage`, flag 1 means `$ID/` before the text.
 
-- u32 at 0: `Version`, 0 `Epub2`, 1 `Epub3` (13 of 13).
-- `Id` is the in-object string in the chunk that starts with
-  `urn:uuid:` (13 of 13). The rest of the chunk is not decoded; its
-  length varies.
+**`EPubExportPreference`, chunk 0x21A1A** (39 files, 37 trustworthy),
+read in order:
 
-Without the chunk (469 of 469):
+| Field | IDML |
+|---|---|
+| u32 | `Version`: 0 `Epub2`, 1 `Epub3` |
+| u32 | `ExportOrder`: 1 `LayoutOrder`, 2 `ArticlePanelOrder` |
+| u32 | `EpubCover`: 0 `None`, 1 `FirstPage`, 2 `ExternalImage` |
+| string | `CoverImageFile` |
+| u16 | 1 in all (not mapped) |
+| string | `TocStyleName`; `UseTocStyle` is `true` exactly when its text is not empty (11 `true`, 28 `false`) |
+| u16 | `BreakDocument` |
+| string | `ParagraphStyleName` |
+| 46 bytes | not mapped |
+| string | `EpubPublisher` |
+| string | `Id` |
+| 50 bytes (52 in the DOM 8 file, which has 2 more first) | u16 at 0: G (below); u16 at 2: `ImageExportResolution` in ppi (72 `Ppi72`, 150 `Ppi150`); u16 at 6: `CustomImageSizeOption` (0 `SizeFixed`, 1 `SizeRelativeToTextFlow`) |
+| string | empty in all |
+| 20 bytes (INDD 8 to 10, 18 files), 22 (13.x, 4) or 26 (17 on, 17) | u16 at 10 (at 14 in the 26-byte block): `EmbedFont` |
+| 6 strings, not in the DOM 8 file | `EpubTitle`, `EpubCreator`, `EpubDate`, `EpubDescription`, `EpubRights`, `EpubSubject` |
 
-- `Id` is `urn:uuid:29d919dd-24f5-4384-be78-b447c9dc299b` and
-  `TocStyleName` is `$ID/`.
-- `Version` is `Epub2` for INDD files up to version 18.0 and `Epub3`
-  from 18.1 (the 5 DOM 18.0 pairs whose INDD is 18.0 have `Epub2`, the
-  13 whose INDD is 18.1 to 18.4 have `Epub3`).
+G = 1 gives `PreserveLayoutAppearence="true"`,
+`FootnotePlacement="FootnoteAfterStory"` and `UseExistingImageOnExport`
+and `UseOriginalImageOnExport` `false`; G = 0 gives `false`,
+`FootnoteInsidePopup`, `true` and `true`. The four change together in
+all 39 files (one collection of 10 has 0), so they are written as a
+group, for these codes only. Which length the two blocks have is not
+stored; the converter reads the layout that ends exactly at the chunk's
+end (one of the six combinations does in all 39 files). Every attribute
+matches in 39 of 39 files. A chunk that no combination reads to its end
+gives only `Version` and `Id` (the string that starts with `urn:uuid:`).
+The u16 at 0 of the 20- to 26-byte block is 5 in all files, as is IDML
+`Level`; it is not mapped.
+
+**`HTMLExportPreference`, chunk 0x21A19** (7 files, all trustworthy):
+u32 at 4 `ExportOrder` (as above), u16 at 48
+`ViewDocumentAfterExport`, u16 at 54 `PreserveLayoutAppearence`; after
+byte 98: a string, 6 bytes (10 in the file of InDesign 17), two
+strings, a u16 and the u16 `PreserveLocalOverride`. 7 of 7 each. The
+second of the two strings is `.jpg` in all 7, as is IDML
+`ImageExtension`; it is not mapped.
+
+**`EPubFixedLayoutExportPreference`, chunk 0x21A25** (18 files, all
+trustworthy), in order: u32 `EpubCover`; string `CoverImageFile`; u16;
+string `TocStyleName`; u16; string `EpubPublisher`; string `Id`; 16
+bytes; a string (empty in all); 12 bytes; the six metadata strings
+above, then a string empty in all (IDML `EpubPageRange` is empty in
+all, so it is not mapped); 12 bytes with u32 at 8
+`EpubNavigationStyles` (0 `NoNavigation`, 2 `TocStyleNavigation`, 3
+`BookmarksNavigation`). 18 of 18 for each attribute; the parse ends at
+the chunk's end in all 18.
+
+**`PublishExportPreference`, chunk 0x21A20** (9 files, all
+trustworthy), in order: u32 0, u32 1; strings `PublishFileName`,
+`PublishDescription`, `PublishPageRange`; 16 bytes; a string (empty in
+all); 7 bytes; a string (empty in all); 5 bytes; string `CoverPage`
+(flag 1 and empty text: `$ID/`). 9 of 9; the parse ends at the chunk's
+end. `ImageExportResolution` follows the exporting edition (below).
+
+**Without the chunk** every file of the corpus of 2026-10 has these
+values (all pairs; trustworthy in brackets):
+
+| Element | Values | Files |
+|---|---|---|
+| `EPubExportPreference` | `Id` `urn:uuid:29d919dd-24f5-4384-be78-b447c9dc299b`, `TocStyleName` `$ID/`, `UseTocStyle` and `BreakDocument` `false`, `ExportOrder` `LayoutOrder`, `EpubCover` `FirstPage`, `CoverImageFile` and `EpubPublisher` empty, `ParagraphStyleName` `$ID/NormalParagraphStyle`, `PreserveLayoutAppearence` and `EmbedFont` `true`, `ImageExportResolution` `Ppi150` | 1,411 (1,205) |
+| | `Version` `Epub2` before INDD 18.1, `Epub3` from 18.1 | 1,411 (1,205) |
+| | `CustomImageSizeOption` `SizeFixed` before INDD 21.1, `SizeRelativeToTextFlow` from 21.1 | 1,410 of 1,411 (1,205 of 1,205); the other is a stale pair |
+| | `FootnotePlacement` `FootnoteAfterStory`, `UseOriginalImageOnExport` `false`: IDML has them from INDD 9.2 | 1,306 (1,112) |
+| | the six metadata strings empty, `UseExistingImageOnExport` `false`: IDML has them from INDD 10.0 | 1,302 (1,108) |
+| `HTMLExportPreference` | `ExportOrder` `LayoutOrder`, `ViewDocumentAfterExport` `true`, `PreserveLayoutAppearence` `false`, `PreserveLocalOverride` `true` | 1,443 (1,235) |
+| `EPubFixedLayoutExportPreference` | `EpubCover` `FirstPage`, `CoverImageFile`, `EpubPublisher` and the six metadata strings empty, `TocStyleName` `$ID/`, `Id` as for EPUB, `EpubNavigationStyles` `NoNavigation` | 1,322 (1,127) |
+| `PublishExportPreference` | `PublishFileName`, `PublishDescription`, `PublishPageRange` empty, `CoverPage` `$ID/` | 1,211 (1,023) |
+
+The version boundaries are those of the INDD header: no IDML of an
+earlier version has these attributes, every IDML from that version on
+has them.
+
+## Adjust layout (`AdjustLayoutPreference` in designmap.xml)
+
+From DOM 14. Chunk 0x7020 of the preferences object (26 bytes, 83
+files): u16 at 0 `EnableAdjustLayout`, at 4
+`AllowFontSizeAndLeadingAdjustment`, at 24 `EnableAutoAdjustMargins`;
+83 of 83 each (36, 2 and 1 `true`). The u16 at 2 and 6 and the f64 at 8
+and 16 have one value in every file (1, 0, 6, 324), as have the IDML
+attributes next to them; they are not mapped. Without the chunk (634
+files, 547 trustworthy) the last two are `false` in every file, and
+`EnableAdjustLayout` follows the save history (below).
+
+## Values of the exporting edition
+
+Some values have no field in the INDD: IDML writes the defaults of the
+InDesign that exported it. The converter takes that application from
+the save history (`objects.md`, save history) or from the name of the
+document's assignment, which is in the language of the edition that
+made the document (`objects.md`, assignments). These rules have
+exceptions where a document was exported by another installation than
+the one that saved it last; the counts give them. Over the corpus of
+2026-10, trustworthy pairs (all pairs in brackets):
+
+| Value | Rule | Matches |
+|---|---|---|
+| `BaselineFrameGridColor` (preference and object styles) where chunk 0x2834 names no colour | `Charcoal` when the last session's language code is 0x0101, else `LightBlue` | 1,112 of 1,209 (1,318 of 1,416); the byte-168 rule matched 892. 96 exceptions are two collections of one Korean publisher (code 0x0101, IDML `LightBlue`) |
+| `DocumentPreference` `ColumnGuideColor` without chunk 0x555 | `Lavender` for code 0x0101, else `Violet` | 822 of 845 (965 of 989); 22 exceptions in the same collections |
+| `PublishExportPreference` `ImageExportResolution`, `PublishPdf` | by the last session's version: 11.0 `Ppi72` and no `PublishPdf`; 11.1 `Ppi96` and no `PublishPdf`; 11.2 and later `Ppi96` and `PublishPdf="false"` | 1,021 of 1,023 trustworthy pairs from 11.0 (the two exceptions have an IDML of another release than the last session); by the header version 5 more fail, among them 3 files of header 11.4 last saved by 11.0 |
+| `AdjustLayoutPreference` `EnableAdjustLayout` without chunk 0x7020 | `true` when the last session's version string starts with 14.0.0 or 14.0.1, else `false` | 634 of 634 files from version 14 without the chunk (547 trustworthy) |
+| `IndexOptions` `Title` and `BetweenEntriesSeparator` without chunk 0x13010 | by the assignment name: Japanese `索引` and `、`; Chinese `索引` and `; `; Korean `색인` and `; `; English, French, German, Dutch `Index` and `; `; Italian `Indice` and `; `; other languages `; ` and no title; English with a last session of code 0x0101 `; ` and no title | title 1,096 of 1,155 written (59 English documents exported by a Korean or Italian edition), 30 left out; separator 1,183 of 1,185 |
+| `LayoutAdjustmentPreference` `SnapZone` without chunk 0x7006 | `0.70866141732283` (0.25 mm) when the horizontal ruler unit is millimetres or centimetres or the assignment name is not English, else `2` | 1,172 of 1,183 (1,358 of 1,377); the exceptions are English documents in picas, points, inches or pixels |
+| `DOMVersion` of every part | by the last session's version (`idml-values.md`, DOM version) | 1,164 of 1,251 |
+| `KeyboardShortcut` of a style with a digit key | by the platform of the last session (`objects.md`, styles) | 3,154 of 3,154 character and 6,927 of 6,928 paragraph styles |
+
+The assignment names are `Unassigned InCopy Content` (English, 648
+files), `할당되지 않은 InCopy 내용` (Korean, 433), `アサインされていない
+InCopy の内容` (Japanese, 155), `未指定的 InCopy 內容` and `未指定的
+InCopy 内容` (Chinese, 93), `Contenu InCopy non affecté` (French, 67),
+`Nicht zugewiesener InCopy-Inhalt` (German, 44), `Niet toegewezen
+InCopy-inhoud` (Dutch, 10), `Contenuto InCopy non assegnato` (Italian,
+3) and four others in one to four files (Russian, Spanish, Czech,
+Portuguese), whose titles are not written. Korean editions write the
+code 0x0101 as Japanese and Chinese ones do, so the code alone does not
+give the title: 369 of 369 documents with the Korean name have `색인`,
+with either code.
 
 ## Default styles, grids and other settings
 
@@ -730,6 +843,5 @@ in another form, `fonts.md`).
 | 0x7006 (20 bytes) | u8 at 0; f64 at 12 | `LayoutAdjustmentPreference` `EnableLayoutAdjustment`, `SnapZone` | `false` (1,377 of 1,377 in the corpus of 2026-10), `SnapZone` below | 24 of 24 |
 | 0xCA0B | u16 1 | `ViewPreference` `ShowTextThreads` `true`, INDD version 21.1 on | `false` | IDML has the attribute only from version 21.1: 26 of 26 (28 of 28 in all pairs) |
 
-Without chunk 0x555, `ColumnGuideColor` keeps its observed value, which
-4 of the 417 pairs without the chunk contradict. Without chunk 0x7006,
-`SnapZone` varies and is not written.
+Without chunk 0x555, `ColumnGuideColor` and without chunk 0x7006
+`SnapZone` follow the edition (values of the exporting edition, below).

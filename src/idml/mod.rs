@@ -94,6 +94,22 @@ impl Writer<'_> {
         (d.major, d.minor) >= v || self.doc.last_session_version.is_some_and(|s| s >= v)
     }
 
+    /// The edition that made the document, by the language of the name of
+    /// its first assignment (`docs/format/objects.md`, assignments).
+    pub(super) fn edition(&self) -> Option<Edition> {
+        Some(match self.doc.assignment_name.as_deref()? {
+            "Unassigned InCopy Content" => Edition::English,
+            "Contenu InCopy non affecté" => Edition::French,
+            "Nicht zugewiesener InCopy-Inhalt" => Edition::German,
+            "Niet toegewezen InCopy-inhoud" => Edition::Dutch,
+            "Contenuto InCopy non assegnato" => Edition::Italian,
+            "할당되지 않은 InCopy 내용" => Edition::Korean,
+            "アサインされていない InCopy の内容" => Edition::Japanese,
+            "未指定的 InCopy 內容" | "未指定的 InCopy 内容" => Edition::Chinese,
+            _ => Edition::Other,
+        })
+    }
+
     /// language depend on it (`docs/format/objects.md`, save history).
     pub(super) fn japanese_session(&self) -> Option<bool> {
         self.doc.last_session_code.map(|c| c == 0x0101)
@@ -171,13 +187,45 @@ impl Writer<'_> {
     }
 }
 
+/// The language of the InDesign edition that made a document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Edition {
+    English,
+    French,
+    German,
+    Dutch,
+    Italian,
+    Korean,
+    Japanese,
+    Chinese,
+    Other,
+}
+
+/// The `DOMVersion` of the application that saved the document last, by
+/// the save history, else by the header (`idml-values.md`, DOM version).
+/// Several releases keep the DOM version of an earlier one.
+fn dom_version(doc: &Document) -> String {
+    let header = (doc.version.major, doc.version.minor);
+    let (major, minor) = doc
+        .last_session_version
+        .filter(|v| v.0 == header.0)
+        .unwrap_or(header);
+    let minor = match (major, minor) {
+        (9, 1 | 2) | (11, 1) | (14, 3) | (17, 1..=4) | (18, 1..=4) | (19, 1 | 2) | (20, 1) => 0,
+        (16, 3 | 4) => 2,
+        (20, 5) => 4,
+        _ => minor,
+    };
+    format!("{major}.{minor}")
+}
+
 /// Write `doc` as an IDML package. `name` is the document name (file
 /// name). Returns warnings about values left out because the IDML schema
 /// does not allow them.
 pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::Result<Vec<String>> {
     let w = Writer {
         doc,
-        dom: format!("{}.0", doc.version.major),
+        dom: dom_version(doc),
         name: name.to_string(),
         group_path: group_paths(doc),
         warnings: Default::default(),

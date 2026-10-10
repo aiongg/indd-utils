@@ -794,6 +794,14 @@ mod id {
     pub const DICTIONARY: u32 = 0x2806;
     /// EPUB export options.
     pub const EPUB: u32 = 0x21A1A;
+    /// HTML export options.
+    pub const HTML: u32 = 0x21A19;
+    /// Fixed layout EPUB export options.
+    pub const EPUB_FIXED_LAYOUT: u32 = 0x21A25;
+    /// Publish Online export options.
+    pub const PUBLISH: u32 = 0x21A20;
+    /// Adjust layout options.
+    pub const ADJUST_LAYOUT: u32 = 0x7020;
     pub const DEFAULT_PARAGRAPH_STYLE: u32 = 0x28D4;
     pub const DEFAULT_CHARACTER_STYLE: u32 = 0x28D5;
     pub const DEFAULT_OBJECT_STYLES: u32 = 0x1B959;
@@ -838,6 +846,8 @@ mod ui {
     pub const MAGENTA: [f64; 3] = [1.0, 0.31, 1.0];
     pub const FIESTA: [f64; 3] = [0.97, 0.35, 0.42];
     pub const GRID_BLUE: [f64; 3] = [0.48, 0.73, 0.85];
+    pub const LAVENDER: [f64; 3] = [0.6, 0.6, 1.0];
+    pub const VIOLET: [f64; 3] = [0.6, 0.2, 1.0];
 }
 
 /// `CreateLinkToXML` from the XML import options (chunk 0x1BC0B): a u32
@@ -858,6 +868,228 @@ fn xml_import_link(enc: Encoding, d: &[u8]) -> Option<bool> {
         }
     }
     (n == 0).then_some(false)
+}
+
+/// The EPUB metadata strings, in the order of chunks 0x21A1A and 0x21A25.
+const EPUB_METADATA: [&str; 6] = [
+    "EpubTitle",
+    "EpubCreator",
+    "EpubDate",
+    "EpubDescription",
+    "EpubRights",
+    "EpubSubject",
+];
+
+/// A flagged string as IDML writes a style name: `$ID/` before the text of
+/// a built-in name (flag 1).
+fn style_name((flag, text): (u8, String)) -> String {
+    if flag == 1 {
+        format!("$ID/{text}")
+    } else {
+        text
+    }
+}
+
+/// `ImageExportResolution` of a stored resolution in ppi.
+fn resolution(ppi: u32) -> Option<&'static str> {
+    match ppi {
+        72 => Some("Ppi72"),
+        150 => Some("Ppi150"),
+        _ => None,
+    }
+}
+
+/// Values of the EPUB export options (chunk 0x21A1A), or `None` for a
+/// layout the samples do not show. Two blocks have lengths that differ
+/// between versions; the layout read is the one that ends exactly at the
+/// chunk's end (preferences.md, EPUB export).
+fn epub_export(enc: Encoding, d: &[u8]) -> Option<Vec<(&'static str, String)>> {
+    let read = |b2: usize, b3: usize| -> Result<Vec<(&'static str, String)>, Error> {
+        let mut c = enc.cursor(d);
+        let mut out = Vec::new();
+        let mut code = |name, v: u32, codes: &[(u32, &'static str)]| {
+            if let Some((_, s)) = codes.iter().find(|(k, _)| *k == v) {
+                out.push((name, s.to_string()));
+            }
+        };
+        code("Version", c.u32()?, &[(0, "Epub2"), (1, "Epub3")]);
+        code(
+            "ExportOrder",
+            c.u32()?,
+            &[(1, "LayoutOrder"), (2, "ArticlePanelOrder")],
+        );
+        code(
+            "EpubCover",
+            c.u32()?,
+            &[(0, "None"), (1, "FirstPage"), (2, "ExternalImage")],
+        );
+        out.push(("CoverImageFile", flagged(&mut c)?.1));
+        c.u16()?;
+        let toc = flagged(&mut c)?;
+        out.push(("UseTocStyle", (!toc.1.is_empty()).to_string()));
+        out.push(("TocStyleName", style_name(toc)));
+        match c.u16()? {
+            0 => out.push(("BreakDocument", "false".into())),
+            1 => out.push(("BreakDocument", "true".into())),
+            _ => {}
+        }
+        out.push(("ParagraphStyleName", style_name(flagged(&mut c)?)));
+        c.skip(46)?;
+        out.push(("EpubPublisher", flagged(&mut c)?.1));
+        out.push(("Id", flagged(&mut c)?.1));
+        c.skip(b2 - 50)?;
+        let mut b = enc.cursor(c.bytes(50)?);
+        // Four settings change together in every sample.
+        match b.u16()? {
+            0 => out.extend([
+                ("PreserveLayoutAppearence", "false".to_string()),
+                ("FootnotePlacement", "FootnoteInsidePopup".into()),
+                ("UseExistingImageOnExport", "true".into()),
+                ("UseOriginalImageOnExport", "true".into()),
+            ]),
+            1 => out.extend([
+                ("PreserveLayoutAppearence", "true".to_string()),
+                ("FootnotePlacement", "FootnoteAfterStory".into()),
+                ("UseExistingImageOnExport", "false".into()),
+                ("UseOriginalImageOnExport", "false".into()),
+            ]),
+            _ => {}
+        }
+        if let Some(r) = resolution(u32::from(b.u16()?)) {
+            out.push(("ImageExportResolution", r.into()));
+        }
+        b.u16()?;
+        match b.u16()? {
+            0 => out.push(("CustomImageSizeOption", "SizeFixed".into())),
+            1 => out.push(("CustomImageSizeOption", "SizeRelativeToTextFlow".into())),
+            _ => {}
+        }
+        if !flagged(&mut c)?.1.is_empty() {
+            return Err(Error::Corrupt("EPUB export: string not empty".into()));
+        }
+        let block = c.bytes(b3)?;
+        let font = enc.u16_at(block, if b3 == 26 { 14 } else { 10 });
+        match font {
+            Some(0) => out.push(("EmbedFont", "false".into())),
+            Some(1) => out.push(("EmbedFont", "true".into())),
+            _ => {}
+        }
+        if c.remaining() > 0 {
+            for name in EPUB_METADATA {
+                out.push((name, flagged(&mut c)?.1));
+            }
+        }
+        if c.remaining() > 0 {
+            return Err(Error::Corrupt("EPUB export: bytes left".into()));
+        }
+        Ok(out)
+    };
+    [(50, 20), (50, 22), (50, 26), (52, 20), (52, 22), (52, 26)]
+        .into_iter()
+        .find_map(|(b2, b3)| read(b2, b3).ok())
+}
+
+/// Values of the HTML export options (chunk 0x21A19): u32 at 4, u16 at
+/// 48 and 54, and after byte 98 a string, 6 bytes (10 from InDesign 17),
+/// two strings, a u16 and the u16 `PreserveLocalOverride`.
+fn html_export(enc: Encoding, d: &[u8]) -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    match enc.u32_at(d, 4) {
+        Some(1) => out.push(("ExportOrder", "LayoutOrder".to_string())),
+        Some(2) => out.push(("ExportOrder", "ArticlePanelOrder".to_string())),
+        _ => {}
+    }
+    for (o, name) in [
+        (48, "ViewDocumentAfterExport"),
+        (54, "PreserveLayoutAppearence"),
+    ] {
+        match enc.u16_at(d, o) {
+            Some(0) => out.push((name, "false".into())),
+            Some(1) => out.push((name, "true".into())),
+            _ => {}
+        }
+    }
+    let local = |gap: usize| -> Result<u16, Error> {
+        let mut c = enc.cursor(d);
+        c.skip(98)?;
+        flagged(&mut c)?;
+        c.skip(gap)?;
+        flagged(&mut c)?;
+        flagged(&mut c)?;
+        c.u16()?;
+        c.u16()
+    };
+    match local(6).or_else(|_| local(10)) {
+        Ok(0) => out.push(("PreserveLocalOverride", "false".into())),
+        Ok(1) => out.push(("PreserveLocalOverride", "true".into())),
+        _ => {}
+    }
+    out
+}
+
+/// Values of the fixed layout EPUB export options (chunk 0x21A25), read
+/// to the chunk's end; `None` if the layout does not end there.
+fn fixed_layout_export(enc: Encoding, d: &[u8]) -> Option<Vec<(&'static str, String)>> {
+    let read = || -> Result<Vec<(&'static str, String)>, Error> {
+        let mut c = enc.cursor(d);
+        let mut out = Vec::new();
+        match c.u32()? {
+            0 => out.push(("EpubCover", "None".to_string())),
+            1 => out.push(("EpubCover", "FirstPage".to_string())),
+            2 => out.push(("EpubCover", "ExternalImage".to_string())),
+            _ => {}
+        }
+        out.push(("CoverImageFile", flagged(&mut c)?.1));
+        c.u16()?;
+        out.push(("TocStyleName", style_name(flagged(&mut c)?)));
+        c.u16()?;
+        out.push(("EpubPublisher", flagged(&mut c)?.1));
+        out.push(("Id", flagged(&mut c)?.1));
+        c.skip(16)?;
+        flagged(&mut c)?;
+        c.skip(12)?;
+        for name in EPUB_METADATA {
+            out.push((name, flagged(&mut c)?.1));
+        }
+        // The page range: empty in every sample.
+        flagged(&mut c)?;
+        let tail = c.bytes(12)?;
+        match enc.u32_at(tail, 8) {
+            Some(0) => out.push(("EpubNavigationStyles", "NoNavigation".into())),
+            Some(2) => out.push(("EpubNavigationStyles", "TocStyleNavigation".into())),
+            Some(3) => out.push(("EpubNavigationStyles", "BookmarksNavigation".into())),
+            _ => {}
+        }
+        if c.remaining() > 0 {
+            return Err(Error::Corrupt("fixed layout export: bytes left".into()));
+        }
+        Ok(out)
+    };
+    read().ok()
+}
+
+/// Values of the Publish Online export options (chunk 0x21A20), read to
+/// the chunk's end; `None` if the layout does not end there.
+fn publish_export(enc: Encoding, d: &[u8]) -> Option<Vec<(&'static str, String)>> {
+    let read = || -> Result<Vec<(&'static str, String)>, Error> {
+        let mut c = enc.cursor(d);
+        c.skip(8)?;
+        let mut out = Vec::new();
+        for name in ["PublishFileName", "PublishDescription", "PublishPageRange"] {
+            out.push((name, flagged(&mut c)?.1));
+        }
+        c.skip(16)?;
+        flagged(&mut c)?;
+        c.skip(7)?;
+        flagged(&mut c)?;
+        c.skip(5)?;
+        out.push(("CoverPage", style_name(flagged(&mut c)?)));
+        if c.remaining() > 0 {
+            return Err(Error::Corrupt("publish export: bytes left".into()));
+        }
+        Ok(out)
+    };
+    read().ok()
 }
 
 /// The EPUB identifier of documents without EPUB export options.
@@ -1291,23 +1523,26 @@ impl Reader<'_> {
             );
         }
 
+        // Values without a field follow the edition of the last session of
+        // the save history (preferences.md, values of the exporting
+        // edition).
+        let japanese_session = self.last_session(1).map(|(code, _)| code == 0x0101);
         // Text preferences and the default text frame columns.
         let mut baseline_frame_grid_color = None;
         if let Some(d) = get(id::TEXT)?.filter(|d| d.len() >= 174) {
             // Bytes 168 and 170 are `UseCidMojikumi` and
             // `UseNewVerticalScaling` in an order not known; they are
-            // equal in every sample. Byte 168 also gives the default
-            // colour of baseline frame grids (preferences.md).
+            // equal in every sample.
             if d[168] == d[170] && d[168] <= 1 {
                 let on = (d[168] == 1).to_string();
                 set("TextPreference", "UseCidMojikumi", on.clone());
                 set("TextPreference", "UseNewVerticalScaling", on);
             }
             let ui = get(id::BASELINE_FRAME_GRID)?.and_then(|g| self.enc().u32_at(&g, 20));
-            baseline_frame_grid_color = match (ui, d[168]) {
+            baseline_frame_grid_color = match (ui, japanese_session) {
                 (Some(u), _) if u != 0 => self.ui_color(u)?.map(FrameGridColor::Rgb),
-                (_, 1) => Some(FrameGridColor::Charcoal),
-                (_, 0) => Some(FrameGridColor::LightBlue),
+                (_, Some(true)) => Some(FrameGridColor::Charcoal),
+                (_, Some(false)) => Some(FrameGridColor::LightBlue),
                 _ => None,
             };
             let f = |o: usize| self.cursor(&d[o..]).f64();
@@ -1743,7 +1978,7 @@ impl Reader<'_> {
                 18,
                 "DocumentPreference",
                 "ColumnGuideColor",
-                None,
+                japanese_session.map(|j| if j { ui::LAVENDER } else { ui::VIOLET }),
             ),
         ] {
             match get(id)? {
@@ -1876,31 +2111,173 @@ impl Reader<'_> {
             None => "Both",
         };
         set("DictionaryPreference", "Composition", composition.into());
-        // EPUB export, from DOM 8: u32 version at 0 and the identifier.
+        // EPUB and HTML export, from DOM 8 (preferences.md, EPUB, HTML
+        // and Publish Online export).
         if major >= 8 {
+            let v = (major, version.minor);
             match get(id::EPUB)? {
-                Some(d) => {
-                    match self.cursor(&d).u32()? {
-                        0 => set("EPubExportPreference", "Version", "Epub2".into()),
-                        1 => set("EPubExportPreference", "Version", "Epub3".into()),
-                        _ => {}
+                Some(d) => match epub_export(self.enc(), &d) {
+                    Some(e) => {
+                        for (name, value) in e {
+                            let since = match name {
+                                "FootnotePlacement" | "UseOriginalImageOnExport" => (9, 2),
+                                n if EPUB_METADATA.contains(&n)
+                                    || n == "UseExistingImageOnExport" =>
+                                {
+                                    (10, 0)
+                                }
+                                _ => (8, 0),
+                            };
+                            if v >= since {
+                                set("EPubExportPreference", name, value);
+                            }
+                        }
                     }
-                    // The layout after the version is not decoded; the
-                    // identifier is the string that starts `urn:uuid:`.
-                    if let Some((_, _, id)) =
-                        super::strings::find_flagged_string(self.enc(), &d, 4, |s| {
-                            s.starts_with("urn:uuid:")
-                        })
-                    {
-                        set("EPubExportPreference", "Id", id);
+                    None => {
+                        // A layout the samples do not show: the version and
+                        // the identifier, the string that starts `urn:uuid:`.
+                        match self.cursor(&d).u32()? {
+                            0 => set("EPubExportPreference", "Version", "Epub2".into()),
+                            1 => set("EPubExportPreference", "Version", "Epub3".into()),
+                            _ => {}
+                        }
+                        if let Some((_, _, id)) =
+                            super::strings::find_flagged_string(self.enc(), &d, 4, |s| {
+                                s.starts_with("urn:uuid:")
+                            })
+                        {
+                            set("EPubExportPreference", "Id", id);
+                        }
+                    }
+                },
+                None => {
+                    let epub3 = v >= (18, 1);
+                    let version = if epub3 { "Epub3" } else { "Epub2" };
+                    let size = if v >= (21, 1) {
+                        "SizeRelativeToTextFlow"
+                    } else {
+                        "SizeFixed"
+                    };
+                    for (name, value) in [
+                        ("Version", version),
+                        ("Id", EPUB_ID),
+                        ("TocStyleName", "$ID/"),
+                        ("UseTocStyle", "false"),
+                        ("ExportOrder", "LayoutOrder"),
+                        ("EpubCover", "FirstPage"),
+                        ("CoverImageFile", ""),
+                        ("BreakDocument", "false"),
+                        ("ParagraphStyleName", "$ID/NormalParagraphStyle"),
+                        ("EpubPublisher", ""),
+                        ("PreserveLayoutAppearence", "true"),
+                        ("ImageExportResolution", "Ppi150"),
+                        ("CustomImageSizeOption", size),
+                        ("EmbedFont", "true"),
+                    ] {
+                        set("EPubExportPreference", name, value.into());
+                    }
+                    if v >= (9, 2) {
+                        set(
+                            "EPubExportPreference",
+                            "FootnotePlacement",
+                            "FootnoteAfterStory".into(),
+                        );
+                        set(
+                            "EPubExportPreference",
+                            "UseOriginalImageOnExport",
+                            "false".into(),
+                        );
+                    }
+                    if v >= (10, 0) {
+                        for name in EPUB_METADATA {
+                            set("EPubExportPreference", name, String::new());
+                        }
+                        set(
+                            "EPubExportPreference",
+                            "UseExistingImageOnExport",
+                            "false".into(),
+                        );
+                    }
+                }
+            }
+            match get(id::HTML)? {
+                Some(d) => {
+                    for (name, value) in html_export(self.enc(), &d) {
+                        set("HTMLExportPreference", name, value);
                     }
                 }
                 None => {
-                    let epub3 = (major, version.minor) >= (18, 1);
-                    let v = if epub3 { "Epub3" } else { "Epub2" };
-                    set("EPubExportPreference", "Version", v.into());
-                    set("EPubExportPreference", "Id", EPUB_ID.into());
-                    set("EPubExportPreference", "TocStyleName", "$ID/".into());
+                    for (name, value) in [
+                        ("ExportOrder", "LayoutOrder"),
+                        ("ViewDocumentAfterExport", "true"),
+                        ("PreserveLayoutAppearence", "false"),
+                        ("PreserveLocalOverride", "true"),
+                    ] {
+                        set("HTMLExportPreference", name, value.into());
+                    }
+                }
+            }
+        }
+        // Fixed layout EPUB export, from DOM 10.
+        if major >= 10 {
+            match get(id::EPUB_FIXED_LAYOUT)? {
+                Some(d) => {
+                    for (name, value) in fixed_layout_export(self.enc(), &d).unwrap_or_default() {
+                        set("EPubFixedLayoutExportPreference", name, value);
+                    }
+                }
+                None => {
+                    for (name, value) in [
+                        ("EpubCover", "FirstPage"),
+                        ("CoverImageFile", ""),
+                        ("TocStyleName", "$ID/"),
+                        ("EpubPublisher", ""),
+                        ("Id", EPUB_ID),
+                        ("EpubNavigationStyles", "NoNavigation"),
+                    ] {
+                        set("EPubFixedLayoutExportPreference", name, value.into());
+                    }
+                    for name in EPUB_METADATA {
+                        set("EPubFixedLayoutExportPreference", name, String::new());
+                    }
+                }
+            }
+        }
+        // Adjust layout (designmap), from DOM 14: u16 flags at 0, 4 and 24
+        // of the 26-byte chunk. Without it the writer decides
+        // `EnableAdjustLayout` by the save history.
+        if major >= 14
+            && let Some(d) = get(id::ADJUST_LAYOUT)?.filter(|d| d.len() == 26)
+        {
+            for (o, name) in [
+                (0, "EnableAdjustLayout"),
+                (4, "AllowFontSizeAndLeadingAdjustment"),
+                (24, "EnableAutoAdjustMargins"),
+            ] {
+                match self.enc().u16_at(&d, o) {
+                    Some(0) => set("AdjustLayoutPreference", name, "false".into()),
+                    Some(1) => set("AdjustLayoutPreference", name, "true".into()),
+                    _ => {}
+                }
+            }
+        }
+        // Publish Online export (designmap), from DOM 11.
+        if major >= 11 {
+            match get(id::PUBLISH)? {
+                Some(d) => {
+                    for (name, value) in publish_export(self.enc(), &d).unwrap_or_default() {
+                        set("PublishExportPreference", name, value);
+                    }
+                }
+                None => {
+                    for (name, value) in [
+                        ("PublishFileName", ""),
+                        ("PublishDescription", ""),
+                        ("PublishPageRange", ""),
+                        ("CoverPage", "$ID/"),
+                    ] {
+                        set("PublishExportPreference", name, value.into());
+                    }
                 }
             }
         }
@@ -2329,5 +2706,48 @@ mod tests {
         assert_eq!(xml_import_link(enc, &[0; 4]), Some(false));
         // A pair cut short.
         assert_eq!(xml_import_link(enc, &d[..d.len() - 3]), None);
+    }
+
+    #[test]
+    fn reads_the_epub_export_layout_that_ends_the_chunk() {
+        let enc = Encoding::default();
+        let mut d = Vec::new();
+        for v in [1u32, 2, 0] {
+            d.extend(v.to_le_bytes());
+        }
+        fstr(&mut d, 0, "");
+        d.extend([1, 0]);
+        fstr(&mut d, 0, "TOC");
+        d.extend([1, 0]);
+        fstr(&mut d, 1, "NormalParagraphStyle");
+        d.extend([0; 46]);
+        fstr(&mut d, 0, "Pub");
+        fstr(&mut d, 0, "urn:uuid:x");
+        let mut block = [0u8; 50];
+        block[2] = 72;
+        block[6] = 1;
+        d.extend(block);
+        fstr(&mut d, 0, "");
+        let mut tail = [0u8; 26];
+        tail[14] = 1;
+        d.extend(tail);
+        for s in ["T", "C", "D", "Desc", "R", "S"] {
+            fstr(&mut d, 0, s);
+        }
+        let e = epub_export(enc, &d).unwrap();
+        let get = |k: &str| e.iter().find(|(n, _)| *n == k).map(|(_, v)| v.as_str());
+        assert_eq!(get("Version"), Some("Epub3"));
+        assert_eq!(get("ExportOrder"), Some("ArticlePanelOrder"));
+        assert_eq!(get("EpubCover"), Some("None"));
+        assert_eq!(get("UseTocStyle"), Some("true"));
+        assert_eq!(get("BreakDocument"), Some("true"));
+        assert_eq!(get("ParagraphStyleName"), Some("$ID/NormalParagraphStyle"));
+        assert_eq!(get("FootnotePlacement"), Some("FootnoteInsidePopup"));
+        assert_eq!(get("ImageExportResolution"), Some("Ppi72"));
+        assert_eq!(get("CustomImageSizeOption"), Some("SizeRelativeToTextFlow"));
+        assert_eq!(get("EmbedFont"), Some("true"));
+        assert_eq!(get("EpubSubject"), Some("S"));
+        // A chunk that no layout reads to its end.
+        assert!(epub_export(enc, &d[..d.len() - 1]).is_none());
     }
 }

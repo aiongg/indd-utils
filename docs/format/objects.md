@@ -111,7 +111,7 @@ session that saved the document, oldest first:
 | Field | Contents |
 |---|---|
 | u16 | kind (not used) |
-| u16 | platform (not used) |
+| u16 | platform: 0 or 3 (style shortcuts, below) |
 | u16, u16 | not identified |
 | u16 | language code (below) |
 | flag byte, in-object string | application version, such as `16.1.0.20` |
@@ -551,8 +551,9 @@ defaults.
 Every document has one object of class 0x1BE01, listed in chunk 0x1BE13
 of the document; IDML writes it as an `Assignment` with `Self` its UID
 (495 of 495 trustworthy pairs). Chunk 0x1BE1B starts with a flag byte
-and the name in the language the document was made in (`Unassigned
-InCopy Content`, `Contenu InCopy non affecté`, …), then two empty
+and the name in the language of the edition the document was made with
+(`Unassigned InCopy Content`, `Contenu InCopy non affecté`, …; the
+converter uses it for values of that edition, `preferences.md`), then two empty
 strings and fields that are the same in every pair. IDML names it
 `$ID/UnassignedInCopy` in 476 pairs and gives the stored name in 19, in
 files of several languages and versions, so the name follows the
@@ -663,9 +664,42 @@ found. For the 1,249 IDML languages the names and `Id` are equal in
 first when their flag is 1 (1,146 and 1,166 of 1,249); otherwise the
 stored string is empty or names a vendor the IDML does not show, and
 IDML gives `$ID/`, `$ID/InDihyph` or a vendor such as `Hunspell` that
-depends on the computer that exported it, so the converter leaves the
-attribute out. The quotes (`SingleQuotes`, `DoubleQuotes`) are not in the
-chunk; they are written from observation (`idml-values.md`).
+depends on the computer that exported it.
+
+**Vendors without a stored name.** Over the 3,139 language objects of
+the corpus of 2026-10 matched with an IDML `Language` by name, an empty
+vendor (flag 0, u32 0x01000000, empty string) is written `$ID/` for every
+language whose vendor of that kind is never stored with flag 1 anywhere
+in the corpus: hyphenation 914 of 914 (847 trustworthy), spelling 894
+of 895 (the other, in a stale pair, has `Hunspell`). For the languages
+that have a stored vendor in some document, an empty vendor is written
+as the exporting computer's dictionary (`Hunspell` 14 and 19, `Duden` 1
+and 1, `$ID/` 1 and 1), which no stored value shows; the converter
+leaves those out. The two lists of languages without a stored vendor:
+
+- Hyphenation (33): `Albanian`, `Arabic`, `Byelorussian`, `Chinese: Hong
+  Kong`, `Chinese: Simplified`, `Chinese: Taiwan`, `Chinese:
+  Traditional`, `Icelandic`, `Japanese`, `Korean`, `Neutral`,
+  `Vietnamese`, `cy_GB`, `en_US+Medical`, `eu_ES`, `fo_FO`, `fy_NL`,
+  `ga_IE`, `gl_ES`, `gv_GB`, `ko_KR`, `la_VA`, `lb_LU`, `mk_MK`, `mn_MN`,
+  `ms_MY`, `ne_NE`, `oc_FR`, `sr_RS`, `sr_RS-Cyr`, `sr_RS-Lat`, `tk_TM`,
+  `uz_UZ`.
+- Spelling (29): the same without `Arabic`, `Vietnamese`,
+  `en_US+Medical` and `ko_KR`.
+
+Two other hyphenation vendor flags occur: flag 3 with the text
+`DefaultLinguistic` is written `$ID/` (24 of 24, Korean and Chinese:
+Traditional), flag 10 with `InDihyph` is written `$ID/InDihyph` (2 of
+2). Two spelling vendors with flag 1 and the text `InDitect` are
+`Hunspell` in IDML; the converter writes the stored text for flag 1.
+
+**Quotes (chunk 0x2D26).** 34 language objects of the corpus have a
+second chunk 0x2D26: a flag byte, the language name as an in-object
+string, then four UTF-16 units, the two single quotes and the two double
+quotes. IDML writes them as `SingleQuotes` and `DoubleQuotes`: 34 of 34
+(Japanese `‘’` `“”`, Romanian `‘’` `»«`, Hebrew `’’` `””`, Korean). Without
+the chunk, the quotes come from observation (`idml-values.md`, language
+quotes).
 
 ## Interface colours (0x1F11)
 
@@ -2023,18 +2057,21 @@ whose IDML style has the same name.
 | Key | `KeyboardShortcut` | `ExtendedKeyboardShortcut` |
 |---|---|---|
 | 0 (5,272 styles) | `0 0` | `0 0 0` |
-| 0xC000*xx*, *xx* a digit `0`–`9`, *m1* = 0 | *m0* and the code below | `0 0 0` |
-| the same, *m1* = 1, paragraph style | *m0* + 256 and 96 + the digit | `0 0 0` |
+| 0xC000*xx*, *xx* a digit `0`–`9` | *m0* + 256 × *m1* and the code below | `0 0 0` |
 | 0x8000*xx* (4 styles, one file) | `0 0` | not written (`256 49 1` and similar in IDML) |
 
 The 103 styles with a key other than 0 are in 38 files.
 
-Codes with *m1* = 0: digits 0 to 7 give 82 to 89, 8 gives 91 and 9 gives
-92 (every digit occurs). The converter writes the attribute only for
-these rows; character styles with *m1* = 1 (11 styles: `257 83`, `257 84`,
-`257 105`) are left out. Over all pairs, `KeyboardShortcut` is
-reproduced for 5,273 of 5,273 paragraph styles and 2,191 of 2,202
-character styles. IDML has `ExtendedKeyboardShortcut` from DOM 15 on;
+The key code follows the platform of the last session of the save
+history (the second u16 of its record), not the style: with platform 0
+digits 0 to 7 give 82 to 89, 8 gives 91 and 9 gives 92 (every digit
+occurs); with platform 3 the code is 96 + the digit. This is a rule of
+the exporting edition (`preferences.md`): over the trustworthy pairs of
+the corpus of 2026-10 it reproduces `KeyboardShortcut` for 3,154 of
+3,154 character styles and 6,927 of 6,928 paragraph styles (a rule by
+*m1* failed for 26 character and 33 paragraph styles with *m1* 0 and
+platform 3). The converter writes the attribute on every style other
+than the root styles. IDML has `ExtendedKeyboardShortcut` from DOM 15 on;
 the converter writes it from version 15.
 
 **Preview colour.** Fourteen bytes before the name's flag byte is a

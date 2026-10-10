@@ -10,7 +10,10 @@ use super::*;
 /// `KeyboardShortcut` and `ExtendedKeyboardShortcut` of a style, from its
 /// stored key (`docs/format/objects.md`, style shortcuts). `None` where the
 /// samples do not show the value.
-pub(super) fn style_shortcut(s: &crate::model::Style) -> (Option<String>, Option<String>) {
+pub(super) fn style_shortcut(
+    s: &crate::model::Style,
+    platform: Option<u16>,
+) -> (Option<String>, Option<String>) {
     let Some((key, low, high)) = s.shortcut else {
         return (None, None);
     };
@@ -21,9 +24,11 @@ pub(super) fn style_shortcut(s: &crate::model::Style) -> (Option<String>, Option
     match key >> 16 {
         0xC000 if (0x30..=0x39).contains(&ch) => {
             let d = ch - 0x30;
-            let code = match (high, s.paragraph) {
-                (0, _) => Some(82 + d + u32::from(d >= 8)),
-                (1, true) => Some(96 + d),
+            // The key code follows the platform of the last session (an
+            // edition rule, objects.md, style shortcuts).
+            let code = match platform {
+                Some(3) => Some(96 + d),
+                Some(0) => Some(82 + d + u32::from(d >= 8)),
                 _ => None,
             };
             let mods = u32::from(low) + 256 * u32::from(high);
@@ -904,8 +909,8 @@ impl Writer<'_> {
                 }
             }
             extra = more;
-        } else if let Some(n) = values::element(tag, doc.version.major) {
-            let (short, extended) = style_shortcut(s);
+        } else {
+            let (short, extended) = style_shortcut(s, doc.last_session_platform);
             if let Some(k) = short {
                 x.attr("KeyboardShortcut", k);
             }
@@ -914,6 +919,8 @@ impl Writer<'_> {
             {
                 x.attr("ExtendedKeyboardShortcut", e);
             }
+        }
+        if !is_root && let Some(n) = values::element(tag, doc.version.major) {
             // Other styles get the values every IDML has on them.
             x.attrs_missing(n.attrs.iter());
             x.attrs_missing(values::when_written(tag, doc.version.major).iter());

@@ -364,18 +364,64 @@ all of them have; the converter writes it in the order of the IDML files.
 | `HTMLFXLExportPreference` | 11 | both | |
 | `PublishExportPreference` | 11 | 7 | `ImageExportResolution`, `PublishPdf`, `CoverPage`, `PublishDescription`, `PublishFileName`, `PublishPageRange` |
 
+The values left out here are read from the INDD or follow the rules of
+`preferences.md` (adjust layout; EPUB, HTML and Publish Online export;
+values of the exporting edition). The converter writes
+`TaggedPDFPreference` from version 7.5, which the per-major blocks
+cannot express.
+
+### DOM version
+
+Every package part has the `DOMVersion` of the application that
+exported the IDML. Several releases keep the DOM version of an earlier
+one. Over the 1,460 pairs of the corpus of 2026-10, by the version of
+the last session of the save history (`objects.md`, save history):
+
+| Last session | `DOMVersion` |
+|---|---|
+| 9.1, 9.2 | 9.0 |
+| 11.1 | 11.0 |
+| 14.3 | 14.0 |
+| 16.3, 16.4 | 16.2 |
+| 17.1 to 17.4 | 17.0 |
+| 18.1 to 18.4 | 18.0 |
+| 19.1, 19.2 | 19.0 |
+| 20.1 | 20.0 |
+| 20.5 | 20.4 |
+| every other version seen (7.0 to 21.5) | its major and minor version |
+
+The converter writes this value, from the header's version where the
+save history has none or names another major version. It matches 1,164
+of 1,251 trustworthy pairs (the header's major version with `.0`
+matched 668). The others are files that a later release exported
+without saving them: 68 sessions of 10.1 whose IDML has 10.2, 16 of
+13.0 with 13.1, and 3 more; their IDML `product` names that release.
+This is a rule of the exporting edition (`preferences.md`, values of
+the exporting edition).
+
 `Assignment` (1,495 elements, one per file): `UserName="$ID/"`,
 `ExportOptions="AssignedSpreads"`, `IncludeLinksWhenPackage="true"`,
 `FilePath="$ID/"` and `FrameColor` `Nothing`, from DOM 7.
 
 ### Language quotes
 
-The quotes of a language are not in its INDD object (`objects.md`,
-languages). For each language name the tool keeps `SingleQuotes` and
-`DoubleQuotes` when every IDML `Language` element with that name has the
-same value, in at least 3 files (a `Keyed` block of the values file):
-64 languages. Languages whose IDML quotes differ between files are left
-out (among them Romanian, Japanese and Korean).
+A language object stores its quotes only in chunk 0x2D26, which 34
+language objects of the corpus have (`objects.md`, languages); the
+converter writes those. For the others, for each language name the tool
+keeps `SingleQuotes` and `DoubleQuotes` when every IDML `Language`
+element with that name has the same value, in at least 3 files (a
+`Keyed` block of the values file): 64 languages.
+
+The tool reads IDML only, so it counts the languages with chunk 0x2D26
+too. Over the 3,139 IDML languages of the corpus pairs matched with an
+INDD language, only Romanian differs because of them: every Romanian
+language without the chunk has `‚’` and `„”` (21 of 21 files), and the
+one with the chunk `‘’` and `»«`. The converter writes these quotes for
+Romanian without the chunk. Three names differ without the chunk too,
+and are left out: Japanese (`''` and `""` in 162 files, `‘’` and `“”`
+in 2), Korean (457 and 7) and Hebrew (74 and 1, `‘’` and `“”`). No
+stored value tells the exceptions apart; they follow the dictionary
+preferences of the exporting computer.
 
 Pasted smooth shades are keyed the same way by `ContentsType`: every
 `ConstantShade` (and every `AxialShade`) has `ContentsVersion="0"`,

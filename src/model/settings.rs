@@ -104,6 +104,9 @@ pub struct Language {
     pub id: u16,
     /// The spelling and hyphenation vendors, each with its flag byte.
     pub vendors: Option<[(u8, String); 2]>,
+    /// Single and double quotes (chunk 0x2D26), where the language has
+    /// them.
+    pub quotes: Option<(String, String)>,
 }
 
 /// A bullet character of the document's list (IDML `ABullet`): u32
@@ -312,6 +315,17 @@ impl<'a> Reader<'a> {
     /// u32). `None` when the chunk is missing or empty or does not parse.
     /// See `docs/format/objects.md`, save history.
     pub(super) fn last_session(&self, doc: u32) -> Option<(u16, String)> {
+        self.last_record(doc).map(|(_, code, version)| (code, version))
+    }
+
+    /// The platform (the second u16) of the last record of the save
+    /// history: 0 or 3 (`objects.md`, save history).
+    pub(super) fn last_session_platform(&self, doc: u32) -> Option<u16> {
+        self.last_record(doc).map(|(platform, ..)| platform)
+    }
+
+    /// Platform, code and version string of the last save history record.
+    fn last_record(&self, doc: u32) -> Option<(u16, u16, String)> {
         let d = self.chunk(doc, chunk::DOC_HISTORY).ok()??;
         let mut c = self.cursor(&d);
         let n = c.u32().ok()? as usize;
@@ -321,16 +335,17 @@ impl<'a> Reader<'a> {
         }
         let mut last = None;
         for _ in 0..n {
-            for _ in 0..4 {
-                c.u16().ok()?;
-            }
+            c.u16().ok()?;
+            let platform = c.u16().ok()?;
+            c.u16().ok()?;
+            c.u16().ok()?;
             let code = c.u16().ok()?;
             c.flag().ok()?;
             let version = c.string().ok()?;
             c.u16().ok()?;
             c.u32().ok()?;
             c.u32().ok()?;
-            last = Some((code, version));
+            last = Some((platform, code, version));
         }
         last
     }
@@ -554,6 +569,24 @@ impl<'a> Reader<'a> {
             let hyphenation = vendor()?;
             Ok((primary, sub, id, [spelling, hyphenation]))
         })();
+        // Quotes (chunk 0x2D26): flag byte, the language name, then the
+        // two single and the two double quotes as UTF-16 units.
+        let quotes = match self.chunk(uid, chunk::LANGUAGE_QUOTES)? {
+            Some(q) => (|| -> Result<(String, String), Error> {
+                let mut c = self.cursor(&q);
+                c.flag()?;
+                c.string()?;
+                let mut unit = || -> Result<char, Error> {
+                    char::from_u32(u32::from(c.u16()?))
+                        .ok_or_else(|| Error::Corrupt("quote is not a character".into()))
+                };
+                let single: String = [unit()?, unit()?].into_iter().collect();
+                let double: String = [unit()?, unit()?].into_iter().collect();
+                Ok((single, double))
+            })()
+            .ok(),
+            None => None,
+        };
         let language = rest.ok().map(|(primary, sub, id, vendors)| Language {
             uid,
             name: name.clone(),
@@ -561,6 +594,7 @@ impl<'a> Reader<'a> {
             sub,
             id,
             vendors: Some(vendors),
+            quotes,
         });
         Ok(Some((name, language)))
     }

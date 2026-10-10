@@ -33,6 +33,8 @@ pub(super) const PREFERENCE_TAGS: &[&str] = &[
     "CjkGridPreference",
     "MojikumiUiPreference",
     "XMLImportPreference",
+    "HTMLExportPreference",
+    "EPubFixedLayoutExportPreference",
 ];
 
 /// A tree of preference values as a `Node`.
@@ -753,6 +755,24 @@ impl Writer<'_> {
         out
     }
 
+    /// The index title, where one is known, and the separator between
+    /// entries of a document without index options. Both follow the
+    /// edition that made the document (preferences.md, index options).
+    fn index_title(&self) -> Option<(Option<&'static str>, &'static str)> {
+        let japanese_session = self.japanese_session() == Some(true);
+        Some(match self.edition()? {
+            Edition::Japanese => (Some("索引"), "、"),
+            Edition::Chinese => (Some("索引"), "; "),
+            Edition::Korean => (Some("색인"), "; "),
+            Edition::English if japanese_session => (None, "; "),
+            Edition::English | Edition::French | Edition::German | Edition::Dutch => {
+                (Some("Index"), "; ")
+            }
+            Edition::Italian => (Some("Indice"), "; "),
+            Edition::Other => (None, "; "),
+        })
+    }
+
     pub(super) fn preferences(&self) -> String {
         let mut x = Xml::new();
         self.package_root(&mut x, "Preferences");
@@ -1106,15 +1126,36 @@ impl Writer<'_> {
             ] {
                 ours[i].attrs.push((k.into(), v.into()));
             }
-            if let Some(japanese) = self.japanese_session() {
-                if japanese {
-                    ours[i].attrs.push(("Title".into(), "索引".into()));
+            if let Some((title, separator)) = self.index_title() {
+                if let Some(t) = title {
+                    ours[i].attrs.push(("Title".into(), t.into()));
                 }
-                let separator = if japanese { "、" } else { "; " };
                 ours[i]
                     .attrs
                     .push(("BetweenEntriesSeparator".into(), separator.into()));
             }
+        }
+        // Without chunk 0x7006 the snap zone follows the ruler units and
+        // the edition that made the document (preferences.md, layout
+        // adjustment).
+        if !prefs
+            .values
+            .iter()
+            .any(|v| v.element == "LayoutAdjustmentPreference" && v.name == "SnapZone")
+            && let Some(edition) = self.edition()
+        {
+            let metric = prefs.values.iter().any(|v| {
+                v.element == "ViewPreference"
+                    && v.name == "HorizontalMeasurementUnits"
+                    && matches!(v.value.as_str(), "Millimeters" | "Centimeters")
+            });
+            let zone = if metric || edition != Edition::English {
+                "0.70866141732283"
+            } else {
+                "2"
+            };
+            let i = ours_of(&mut ours, "LayoutAdjustmentPreference");
+            ours[i].attrs.push(("SnapZone".into(), zone.into()));
         }
         ours.push(self.footnote_option());
         if let Some(c) = prefs.baseline_frame_grid_color.and_then(frame_grid_color) {
