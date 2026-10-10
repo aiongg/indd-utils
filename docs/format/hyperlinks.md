@@ -196,6 +196,22 @@ The converter writes:
   `Cell`, so the 5 story-level sources (all in one pair) cannot be
   written validly.
 
+**Sources at inserted text.** Where a tracked change run with an
+insertion entry (`objects.md`, tracked changes) starts at a source's
+first character and ends before the source does, IDML writes an empty
+`<Change ChangeType="InsertedText">`, with the run's attributes, before
+the source, and writes the source's first character without a `Change`.
+For a paragraph-level source the empty `Change` is the last child of a
+`CharacterStyleRange` of its own, with the attributes of the source's
+first range, after the text deleted there (`Change DeletedText`); for a
+character-level source it is in the open range, after the deleted text.
+A source that ends inside the run or with it is inside the run's
+`Change` instead; the converter writes the `Change` inside such a
+source. Trustworthy pairs: IDML has 1,681 empty `Change` elements in 19
+documents, each directly before a source (1,668 paragraph-level, 13
+character-level), and the rule gives the same sources in every pair
+(stale pairs: 385 of 385).
+
 A paragraph-level source that holds an XML marker is left out with a
 warning; a character-level source ends at an XML marker. A character-level
 source that holds an anchored object is left out (below); at paragraph

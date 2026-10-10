@@ -15,6 +15,21 @@ pub(super) struct TextState {
     inline: Vec<XmlKey>,
     /// Elements open between character ranges.
     blocks: Vec<XmlKey>,
+    /// A character written without its `Change` and deleted text, which
+    /// were written before the text source that starts there.
+    bare: Option<usize>,
+}
+
+/// The insertion entry of a change run of inserted text that starts where
+/// a text source of `len` characters starts, at `pos`, and ends before
+/// the source does.
+fn insertion_at_source(story: &Story, pos: usize, len: usize) -> Option<&ChangeEntry> {
+    let i = story.changes.partition_point(|c| c.start < pos);
+    let c = story
+        .changes
+        .get(i)
+        .filter(|c| c.start == pos && c.len < len)?;
+    c.entries.iter().find(|e| e.is_insertion())
 }
 
 impl TextState {
@@ -243,6 +258,19 @@ impl Writer<'_> {
                     && let Some(s) = sources.iter().find(|s| s.start == r.start)
                     && let Some(src) = self.doc.text_sources.get(&s.source)
                 {
+                    // A source that starts with inserted text and goes on
+                    // past it follows a character range with the deleted
+                    // text there and an empty `Change` (hyperlinks.md,
+                    // sources at inserted text).
+                    if let Some(e) = insertion_at_source(story, r.start, s.len) {
+                        self.csr_start(x, r);
+                        self.deleted_text(x, story, r.start, scope);
+                        x.start("Change");
+                        self.change_attrs(x, e, "InsertedText");
+                        x.end();
+                        x.end();
+                        st.bare = Some(r.start);
+                    }
                     self.source_start(x, src);
                     open = Some(s.start + s.len);
                 }
@@ -340,26 +368,11 @@ impl Writer<'_> {
             }
             // Deleted text of tracked changes, before the character that
             // follows it (objects.md, tracked changes).
-            if let Some(ds) = story.deletions.get(&pos) {
+            if st.bare != Some(pos) && story.deletions.contains_key(&pos) {
                 close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 st.open_csr(self, x, run);
-                let mut entries = story
-                    .changes
-                    .iter()
-                    .filter(|c| c.start == pos)
-                    .flat_map(|c| &c.entries)
-                    .filter(|e| e.is_deletion());
-                for d in ds {
-                    x.start("Change");
-                    if let Some(e) = entries.next() {
-                        self.change_attrs(x, e, "DeletedText");
-                    } else {
-                        x.attr("ChangeType", "DeletedText");
-                    }
-                    self.text_ranges(x, &d.runs, story, scope);
-                    x.end();
-                }
+                self.deleted_text(x, story, pos, scope);
             }
             // A character-level text source opens before its first
             // character, which can be an element (a note, a text
@@ -382,6 +395,15 @@ impl Writer<'_> {
                 close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 st.open_csr(self, x, run);
+                // A source that starts with inserted text and goes on past
+                // it follows an empty `Change`, and its first character has
+                // none (hyperlinks.md, sources at inserted text).
+                if let Some(e) = insertion_at_source(story, pos, r.len) {
+                    x.start("Change");
+                    self.change_attrs(x, e, "InsertedText");
+                    x.end();
+                    st.bare = Some(pos);
+                }
                 self.source_start(x, src);
                 open = Some(r.start + r.len);
             }
@@ -395,7 +417,9 @@ impl Writer<'_> {
                 .filter(|c| c.start <= pos && c.entries.iter().any(|e| e.is_insertion()))
                 .map(|_| want)
                 .filter(|_| {
-                    !matches!(ch, '\u{16}' | '\u{FFFC}') && !story.xml_markers.contains_key(&pos)
+                    !matches!(ch, '\u{16}' | '\u{FFFC}')
+                        && !story.xml_markers.contains_key(&pos)
+                        && st.bare != Some(pos)
                 });
             if inserted != want {
                 close_inserted(x, &mut buf, &mut inserted);
@@ -575,6 +599,30 @@ impl Writer<'_> {
             x.end();
         }
         if endnote.is_some() {
+            x.end();
+        }
+    }
+
+    /// The deleted text of tracked changes owned by the character at
+    /// `pos`, each in a `Change` (objects.md, tracked changes).
+    fn deleted_text(&self, x: &mut Xml, story: &Story, pos: usize, scope: &str) {
+        let Some(ds) = story.deletions.get(&pos) else {
+            return;
+        };
+        let mut entries = story
+            .changes
+            .iter()
+            .filter(|c| c.start == pos)
+            .flat_map(|c| &c.entries)
+            .filter(|e| e.is_deletion());
+        for d in ds {
+            x.start("Change");
+            if let Some(e) = entries.next() {
+                self.change_attrs(x, e, "DeletedText");
+            } else {
+                x.attr("ChangeType", "DeletedText");
+            }
+            self.text_ranges(x, &d.runs, story, scope);
             x.end();
         }
     }
@@ -792,6 +840,14 @@ impl Writer<'_> {
                     .attr("AppliedCellStylePriority", "0");
             }
             self.text_ranges(x, &c.runs, story, &cell_id);
+            // Deleted text owned by the cell's terminator, which no range
+            // holds, ends the cell (objects.md, tracked changes).
+            if let Some(r) = c.runs.last()
+                && r.text.ends_with('\r')
+            {
+                let end = r.start + r.text.encode_utf16().count() - 1;
+                self.deleted_text(x, story, end, &cell_id);
+            }
             x.end();
         }
         x.end();

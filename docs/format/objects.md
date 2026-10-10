@@ -1689,11 +1689,16 @@ change that crosses character ranges or elements is written as several
 `Change` elements. Over all pairs, 6,024 of the 6,027 reference `Change`
 elements have an equal `Change` in the output (`Date`, `ChangeType`,
 `UserName`, `AppliedDocumentUser`, compared as multisets per pair); the
-output has 92 more, from such splits. Where a paragraph-level hyperlink
-source starts at an inserted character, InDesign writes an empty
-`Change` before the source (1,668 of the 1,681 empty changes in the
-research run); the converter writes the inserted text inside the
-`Change` instead.
+output has 92 more, from such splits. Where a hyperlink source starts
+with inserted text, IDML writes an empty `Change` before the source
+(`hyperlinks.md`, sources at inserted text).
+
+A deletion owned by the U+000D that ends a table cell, which no
+character range holds, is the last child of the `Cell`, after its last
+`ParagraphStyleRange` (2 in one trustworthy pair, 1 in a stale pair;
+every other deletion of the corpus is owned by a character inside a
+range). With it the converter writes all 1,889 deleted-text `Change`
+elements of the trustworthy pairs.
 
 **Dates of notes and changes.** IDML writes `CreationDate`,
 `ModificationDate` and `Date` as local time of the exporting computer,
