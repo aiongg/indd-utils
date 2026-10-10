@@ -433,6 +433,21 @@ impl Writer<'_> {
         if let Some(e) = export::object_export_option(self.doc.version, None, true) {
             node.children.insert(0, e);
         }
+        // The transform values the style sets, where IDML has the element
+        // (objects.md, object style settings).
+        let transform: Vec<_> = [
+            "TransformAttrX",
+            "TransformAttrY",
+            "TransformAttrHeight",
+            "TransformAttrWidth",
+        ]
+        .into_iter()
+        .zip(os.transform)
+        .filter_map(|(name, v)| Some((name, num(v?))))
+        .collect();
+        if !transform.is_empty() && node.child("TransformAttributeOption").is_some() {
+            node.set(&["TransformAttributeOption"], transform);
+        }
         let mut attrs = self.item_attr_values(&os.attrs);
         for (id, name) in [
             (0x551E, "GradientFillAngle"),

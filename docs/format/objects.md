@@ -2198,6 +2198,7 @@ counts are matches of 337 unless stated.
 | 0x1B94D | u16, 1 = true | `ApplyNextParagraphStyle` (below) |
 | 0x2800 | Anchored object settings, as in the preferences | `AnchoredObjectSetting` (below) |
 | 0x1B907 | u32 based-on style, flag byte and name, u32 shortcut key | `BasedOn`, `Name`, `KeyboardShortcut` (below) |
+| 0x1E234 | 52 bytes: u16 flags at 8, 10, 12 and 14, f64 at 16, 24, 32 and 40 | `TransformAttributeOption`: `TransformAttrX`, `TransformAttrY`, `TransformAttrHeight` and `TransformAttrWidth`, each written when its flag is 1 (below) |
 
 **Settings found in the corpus after 2026-10.** Object styles other
 than `[None]`, matched by `Self` with their IDML style over the 1,251
@@ -2384,6 +2385,17 @@ has the values of preferences without it (`preferences.md`, anchored
 objects).
 The other values of object styles come from IDML observation
 (`idml-values.md`).
+
+**Transform attributes (chunk 0x1E234).** Over the 1,251 trustworthy
+pairs after 2026-10, 2,426 object styles have the chunk, 52 bytes each.
+The u16 at 8, 10, 12 and 14 are 1 exactly where IDML writes
+`TransformAttrX`, `TransformAttrY`, `TransformAttrHeight` and
+`TransformAttrWidth`, and the f64 at 16, 24, 32 and 40 are their
+values: 3 of 3 X, 1 of 1 Y, 11 of 11 height and 30 of 30 width values
+(36 styles; 2,390 styles have all four flags 0 and no such attribute,
+though many store values other than 0). Bytes 0–7 and 48–51 are 0 in
+every chunk. IDML has the element from DOM 13 (`idml-values.md`); the
+converter writes the values the style sets into it.
 
 ## Master spread names and sections
 

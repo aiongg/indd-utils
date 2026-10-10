@@ -312,6 +312,8 @@ pub mod chunk {
     pub const OBJECT_STYLE_PARAGRAPH_STYLE: u32 = 0x1B946;
     /// u16 1 when an object style applies the next paragraph style.
     pub const OBJECT_STYLE_APPLY_NEXT: u32 = 0x1B94D;
+    /// Size and position of an object style's transform attributes.
+    pub const OBJECT_STYLE_TRANSFORM: u32 = 0x1E234;
     pub const GUIDE: u32 = 0x3308;
 }
 

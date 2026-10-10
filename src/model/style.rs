@@ -164,6 +164,9 @@ pub struct ObjectStyle {
     pub named_grid: Option<Option<u32>>,
     /// Export settings (chunk 0x28F0).
     pub export: Option<StyleExport>,
+    /// Transform attributes (chunk 0x1E234): X, Y, height and width, each
+    /// `Some` when the style sets it.
+    pub transform: [Option<f64>; 4],
 }
 
 /// Whether `s` has the form of a GUID as styles store it: lowercase
@@ -504,8 +507,23 @@ impl<'a> Reader<'a> {
             }),
             named_grid: self.applied_named_grid(uid)?,
             export: self.style_export(uid)?,
+            transform: match self.chunk(uid, chunk::OBJECT_STYLE_TRANSFORM)? {
+                Some(d) => transform_options(self.enc(), &d),
+                None => [None; 4],
+            },
         }))
     }
+}
+
+/// Chunk 0x1E234 of an object style: u16 flags at 8, 10, 12 and 14 (1 when
+/// the style sets X, Y, height and width), and those values as f64 at 16,
+/// 24, 32 and 40. See `docs/format/objects.md`, object style settings.
+fn transform_options(enc: crate::object::Encoding, d: &[u8]) -> [Option<f64>; 4] {
+    std::array::from_fn(|i| {
+        (enc.u16_at(d, 8 + 2 * i) == Some(1))
+            .then(|| enc.f64_at(d, 16 + 8 * i))
+            .flatten()
+    })
 }
 
 /// Anchored object settings (chunk 0x2800, of an anchor, an object style
