@@ -702,6 +702,17 @@ value converted with a new code equals the IDML. (`KerningMethod` 79875
 is `$ID/Manual` in IDML for 19 runs of 3 documents; that is not
 decoded.)
 
+**Percentages.** IDML writes a fraction attribute (`HorizontalScale`,
+`VerticalScale`, `AutoLeading`, the word and letter spacing and glyph
+scaling attributes, `RubyXScale`, `KentenXScale`) as the stored f64
+times 100 with every digit of the product, binary noise included:
+`112.99999999999999` for a stored 1.13. Over the paragraph and character
+styles and story ranges of the trustworthy pairs, 24,055 reference
+values of these attributes have more than 9 decimals; the full product
+gives 23,910 of them exactly (rounding to 9 decimals gave none), and
+the 140,887 exact matches among the 142,524 shorter values stay the
+same.
+
 ### More paragraph and character attributes
 
 Found by aligning styles by name over all pairs and runs with IDML

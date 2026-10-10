@@ -18,7 +18,8 @@ pub(super) enum Kind {
     /// A number the IDML schema limits to this range (inclusive); values
     /// outside it have no IDML value.
     Range(f64, f64),
-    /// Stored as a fraction, written as a percentage.
+    /// Stored as a fraction, written as the fraction times 100 with every
+    /// digit of the product, as IDML writes it (`112.99999999999999`).
     Percent,
     /// Multiplied by the factor when written.
     Scale(f64),
@@ -134,7 +135,7 @@ impl Writer<'_> {
                 .as_f64()
                 .filter(|f| (lo..=hi).contains(f))
                 .map(|f| text("unit", num(f))),
-            Kind::Percent => v.as_f64().map(|f| text("unit", num(round(f * 100.0)))),
+            Kind::Percent => v.as_f64().map(|f| text("unit", num(f * 100.0))),
             Kind::Scale(k) => v.as_f64().map(|f| text("unit", num(round(f * k)))),
             Kind::Kerning => v
                 .as_f64()
