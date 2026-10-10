@@ -42,11 +42,11 @@ InDesign version or later (`MinimumVersion` in the file).
 
 | Root style | Values | Same in | Written for version |
 |---|---|---|---|
-| `[No paragraph style]` | 81 | 1,448 of 1,448 files | all |
+| `[No paragraph style]` | 72 | 1,448 of 1,448 files | all |
 | | 1 | 1,437 of 1,437 files with DOM 8 or later | 8 and later |
 | | 3 | 1,331 of 1,331 (DOM 10 or later) | 10 and later |
-| | 4 | 1,211 of 1,211 (DOM 11 or later) | 11 and later |
-| | 16 | 1,039 of 1,039 (DOM 13 or later) | 13 and later |
+| | 3 | 1,211 of 1,211 (DOM 11 or later) | 11 and later |
+| | 14 | 1,039 of 1,039 (DOM 13 or later) | 13 and later |
 | | 1 | 640 of 640 (DOM 15 or later) | 15 and later |
 | | 1 | 61 of 61 (DOM 21) | 21 |
 | `[No character style]` | 1 | 1,448 of 1,448 | all |
@@ -92,7 +92,7 @@ pair rule leaves them out: an IDML (DOM 7) beside an INDD of version
 17.2 that has no root styles at all, and a big-endian pair of version 11.2 whose table style lacks
 four region cell style values that every other file has.
 
-**Left out because the converter reads them from the INDD:** 205
+**Left out because the converter reads them from the INDD:** 217
 attributes of `[No paragraph style]`, listed in `attributes.md`. Some
 of these are also the same in every IDML; the INDD value is written.
 

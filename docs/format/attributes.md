@@ -229,7 +229,8 @@ Line end codes (u32): 0 `None`, 0x5A03 `SimpleArrowHead` (1 item),
 0x5A04 `SimpleWideArrowHead` (110 items in 5 files), 0x5A05
 `TriangleArrowHead` (44 in 8), 0x5A06 `TriangleWideArrowHead`, 0x5A07
 `BarbedArrowHead` (64 in 6), 0x5A08 `CurvedArrowHead`, 0x5A09
-`CircleArrowHead`, 0x5A0A `CircleSolidArrowHead` and 0x5A0D
+`CircleArrowHead`, 0x5A0A `CircleSolidArrowHead`, 0x5A0C
+`SquareSolidArrowHead` (the page item defaults of 5 files) and 0x5A0D
 `BarArrowHead`. `EndCap` 2 occurs on 4 items in 3 files, `EndJoin` 2 on
 6 items in 1 file. One line in the pairs before 2026-10 has 0x6E71 =
 0x5A08 and 0x6E72 = 0x5A0D with `LeftLineEnd="CurvedArrowHead"` and
@@ -276,9 +277,11 @@ with the same table (`preferences.md`).
 
 **Not identified.** `LeftArrowHeadScale` and `RightArrowHeadScale` are
 100 in every object style and in every `PageItemDefault` but one, as are
-0x6E95 and 0x6E96, so the two IDs cannot be told apart; the converter
-writes them from the value files on object styles only. 0x6E78 is 0 in
-every style, 0x6E73 in all but 2. 0x6E67, 0x6E6A and 0x6E8B are the
+0x6E95 and 0x6E96, so the two IDs cannot be told apart. The converter
+writes them from the value files on object styles, and from the IDs in
+their order on `PageItemDefault`, where the values are equal in every
+file (`preferences.md`, page item defaults). 0x6E78 is 0 in every style,
+0x6E73 in all but 2; 0x6E78 is `Nonprinting` of `PageItemDefault`. 0x6E67, 0x6E6A and 0x6E8B are the
 overprint flags (`objects.md`, object style settings).
 `StrokeCornerAdjustment` and `StrokeDashAndGap` do not occur in the
 corpus IDML files.
@@ -820,6 +823,36 @@ not listed leaves the attribute out.
 | 0x1BDA | `ParagraphShadingRightOffset` | num | 406 (26) |
 | 0x1BD5 | `ParagraphShadingWidth` | 0 `ColumnWidth`, 1 `TextWidth` | 386 (6) |
 | 0x1BD7 | `ParagraphShadingClipToFrame` | bool | 388 (8) |
+
+**Found in the corpus of 2026-10.** These IDs are in every text default
+list (chunk 0x23F of the preferences, 1,460 of 1,460 files, no
+contradiction) and in styles and runs. Counts are the converter's
+output over the 1,251 trustworthy pairs, all reproduced, with no extra
+value:
+
+| ID | IDML | Encoding | Text defaults; styles; ranges |
+|---|---|---|---|
+| 0x1B3A | `KeepFirstLines` | num | 1,251; 1,258 paragraph styles |
+| 0x1B3B | `KeepLastLines` | num | 1,251; 1,258 paragraph styles |
+| 0x42C1 | `AllowArbitraryHyphenation` | bool | 1,251; 1,270; 30 |
+| 0x4264 | `GridGyoudori` | num | 1,251; 1,323; 80 |
+| 0x4268 | `RotateSingleByteCharacters` | bool | 1,251; 1,277; 329 |
+| 0x4261 | `AutoTcy` | num | 1,251; 1,285; 241 |
+| 0x42A3 | `ScaleAffectsLineHeight` | bool | 1,251; 1,359 paragraph and character styles; 879 |
+| 0x1BD4 | `ParagraphShadingOverprint` | bool | 1,032; 1,033 |
+| 0x1BFD | `ParagraphBorderType` (Properties) | stroke type | 918; 919 |
+| 0x4233 | `RubyFont` (Properties) | u32 font family UID; 0 is `$ID/` (as `BulletsFont`) | 1,251; 1,255; 23 |
+| 0x4257 | `KentenFillColor` (Properties) | swatch | 1,251; 1,262; 23 |
+
+`KeepFirstLines` and `KeepLastLines` are equal in every list (2 in all
+but one file, 1 in that one), also in every paragraph style that has
+them, so which ID is which is assumed from their order. 0x1BD4 is told
+from 0x1BD8 by one document whose shading is overprinted (0x1BD4 1,
+0x1BD8 0). 0x4233 and 0x4257 are told apart in the one document that
+sets them by the class of the stored UID: a font family (class 0x3E03)
+and a colour. `ParagraphBorderType` uses the stroke type codes of page
+items: 0x5A29 `Solid` in 1,042 files, 0x5A3F `Japanese Dots` in one.
+0x1BD4 and 0x1BFD are absent exactly where IDML has no attribute.
 
 `MergeConsecutiveParaBorders` is in IDML from version 13.1 (in none of
 the 3 trustworthy pairs of version 13.0, in all 46 of 13.1); the

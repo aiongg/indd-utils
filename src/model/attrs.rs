@@ -323,8 +323,9 @@ fn text_layout(id: u32) -> Option<Layout> {
         // Ruby and kenten font styles are strings too (attributes.md,
         // ruby, kenten and warichu).
         0x1B02 | 0x1A414 | 0x1A423 | 0x1A424 | 0x4234 | 0x424B => Layout::String,
-        // Stroke types of rules, underline and strikethrough.
-        0x1B71 | 0x1B72 | 0x1B95 | 0x1B9D => Layout::RefOrCode,
+        // Stroke types of rules, underline, strikethrough and paragraph
+        // borders.
+        0x1B71 | 0x1B72 | 0x1B95 | 0x1B9D | 0x1BFD => Layout::RefOrCode,
         0x422E => Layout::Text,
         0x1B29 => Layout::TabList,
         0x1B75 => Layout::NestedStyles,

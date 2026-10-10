@@ -158,7 +158,13 @@ converter writes it as `TextDefault` with the same attribute table as
 styles. Over all pairs this reproduces 182,742 of 196,543 `TextDefault`
 values, against 159,982 from the observed values alone; no attribute
 reproduced before is lost. As for paragraph styles, `KerningValue` is
-left out: the schema does not allow it there.
+left out: the schema does not allow it there. The IDs of `KeepFirstLines`,
+`ParagraphBorderType`, `RubyFont` and the others found in the corpus of
+2026-10 are in every list where IDML has the attribute
+(`attributes.md`, more paragraph and character attributes): each is
+reproduced in 1,251 of 1,251 trustworthy pairs (`ParagraphBorderType`
+918 of 918 and `ParagraphShadingOverprint` 1,032 of 1,032, the pairs
+whose IDML has them).
 
 ## Text (`TextPreference`, `TextFramePreference`)
 
@@ -299,8 +305,25 @@ pairs: `AutoFit` absent and `false` in 1,324, `FittingOnEmptyFrame`
 The page item attributes of the list also give the stroke attributes of
 `PageItemDefault` (`attributes.md`, strokes): `StrokeTint`, `GapColor`,
 `GapTint`, `EndCap`, `EndJoin`, the line ends and `ArrowHeadAlignment`,
-each reproduced in every trustworthy pair whose IDML has it, except 4
-`RightLineEnd` values (a line end code not identified).
+each reproduced in every trustworthy pair whose IDML has it.
+
+The list has five more IDs that `PageItemDefault` has (1,460 of 1,460
+files; values over all pairs):
+
+| ID | Attribute | Values |
+|---|---|---|
+| 0x551E | `GradientFillAngle` | f64; 90 in 5 files |
+| 0x5524 | `GradientStrokeAngle` | f64; 90 in 4 files |
+| 0x6E78 | `Nonprinting` | u16 bool; `true` in 1 file |
+| 0x6E95, 0x6E96 | `LeftArrowHeadScale`, `RightArrowHeadScale` | f64; 100, and 80 in one file (both) |
+
+The two gradient angles are told apart by one file with fill angle 90
+and stroke angle 0. The two arrowhead scales are equal in every file, so
+which ID is which is assumed from their order; the IDs are in the list
+exactly where IDML has the attributes (1,159 files, from version 12.0
+on). The line end code 0x5A0C is `SquareSolidArrowHead` (5 files). The
+overprint IDs 0x6E67, 0x6E6A and 0x6E8B are 0 in every list, but IDML
+has the attributes in only 16 and 12 files, so they are not written.
 
 ## Print settings (`PrintPreference`, `PrintBookletPrintPreference`)
 

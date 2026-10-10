@@ -8,15 +8,13 @@ tools/root_values.py; evidence in docs/format/idml-values.md.
 -->
 <RootStyleValues>
 	<Values>
-		<ParagraphStyle Imported="false" PageNumberType="AutoPageNumber" DesiredGlyphScaling="100" KeepFirstLines="2" KeepLastLines="2" StrokeTint="-1" OverprintStroke="false" GradientStrokeAngle="0" GradientStrokeLength="-1" GradientStrokeStart="0 0" RuleAboveOverprint="false" RuleBelowOverprint="false" OTFOrdinal="false" OTFFraction="false" RuleAboveGapOverprint="false" RuleBelowGapTint="-1" RuleBelowGapOverprint="false" OTFMark="true" OTFLocale="true" OTFSlashedZero="false" OTFHistorical="false" UnderlineGapTint="-1" StrikeThroughGapOverprint="false" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" RubyYScale="100" RubyXOffset="0" RubyOverhang="false" RubyTint="-1" RubyOverprintFill="Auto" RubyStrokeTint="-1" RubyOverprintStroke="Auto" RubyWeight="-1" KentenYScale="100" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" KentenTint="-1" KentenOverprintFill="Auto" KentenStrokeTint="-1" KentenOverprintStroke="Auto" KentenWeight="-1" TatechuyokoXOffset="0" TatechuyokoYOffset="0" AutoTcy="0" AutoTcyIncludeRoman="false" Jidori="0" GridGyoudori="0" CharacterRotation="0" RotateSingleByteCharacters="false" ShataiMagnification="0" WarichuCharsBeforeBreak="2" WarichuCharsAfterBreak="2" OTFHVKana="false" OTFRomanItalics="false" ScaleAffectsLineHeight="false" ParagraphGyoudori="false" RubyAutoTcyAutoScale="true" AllowArbitraryHyphenation="false" NumberingStartAt="1" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection">
+		<ParagraphStyle Imported="false" PageNumberType="AutoPageNumber" DesiredGlyphScaling="100" StrokeTint="-1" OverprintStroke="false" GradientStrokeAngle="0" GradientStrokeLength="-1" GradientStrokeStart="0 0" RuleAboveOverprint="false" RuleBelowOverprint="false" OTFOrdinal="false" OTFFraction="false" RuleAboveGapOverprint="false" RuleBelowGapTint="-1" RuleBelowGapOverprint="false" OTFMark="true" OTFLocale="true" OTFSlashedZero="false" OTFHistorical="false" UnderlineGapTint="-1" StrikeThroughGapOverprint="false" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" RubyYScale="100" RubyXOffset="0" RubyOverhang="false" RubyTint="-1" RubyOverprintFill="Auto" RubyStrokeTint="-1" RubyOverprintStroke="Auto" RubyWeight="-1" KentenYScale="100" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" KentenTint="-1" KentenOverprintFill="Auto" KentenStrokeTint="-1" KentenOverprintStroke="Auto" KentenWeight="-1" TatechuyokoXOffset="0" TatechuyokoYOffset="0" AutoTcyIncludeRoman="false" Jidori="0" CharacterRotation="0" ShataiMagnification="0" WarichuCharsBeforeBreak="2" WarichuCharsAfterBreak="2" OTFHVKana="false" OTFRomanItalics="false" ParagraphGyoudori="false" RubyAutoTcyAutoScale="true" NumberingStartAt="1" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection">
 			<Properties>
 				<RuleBelowGapColor type="object">Swatch/None</RuleBelowGapColor>
 				<StrikeThroughGapColor type="object">Swatch/None</StrikeThroughGapColor>
-				<RubyFont type="string">$ID/</RubyFont>
 				<RubyFill type="string">Text Color</RubyFill>
 				<RubyStroke type="string">Text Color</RubyStroke>
 				<KentenFont type="string">$ID/</KentenFont>
-				<KentenFillColor type="string">Text Color</KentenFillColor>
 				<KentenStrokeColor type="string">Text Color</KentenStrokeColor>
 				<NumberingRestartPolicies RestartPolicy="AnyPreviousLevel" LowerLevel="0" UpperLevel="0" />
 			</Properties>
@@ -65,7 +63,7 @@ tools/root_values.py; evidence in docs/format/idml-values.md.
 		</ObjectStyle>
 	</Values>
 	<Values MinimumVersion="11">
-		<ParagraphStyle SplitDocument="false" EmitCss="true" ParagraphShadingOverprint="false" ParagraphShadingSuppressPrinting="false" />
+		<ParagraphStyle SplitDocument="false" EmitCss="true" ParagraphShadingSuppressPrinting="false" />
 		<CharacterStyle SplitDocument="false" EmitCss="true" />
 		<ObjectStyle EmitCss="true">
 			<ObjectExportOption SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault" />
@@ -78,12 +76,7 @@ tools/root_values.py; evidence in docs/format/idml-values.md.
 		</ObjectStyle>
 	</Values>
 	<Values MinimumVersion="13">
-		<ParagraphStyle IncludeClass="true" ParagraphBorderOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderGapOverprint="false" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphShadingTopLeftCornerOption="None" ParagraphShadingTopRightCornerOption="None" ParagraphShadingBottomLeftCornerOption="None" ParagraphShadingBottomRightCornerOption="None" ParagraphBorderDisplayIfSplits="false">
-			<Properties>
-				<ParagraphBorderGapColor type="object">Swatch/None</ParagraphBorderGapColor>
-				<ParagraphBorderType type="object">StrokeStyle/$ID/Solid</ParagraphBorderType>
-			</Properties>
-		</ParagraphStyle>
+		<ParagraphStyle IncludeClass="true" ParagraphBorderOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderGapOverprint="false" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphShadingTopLeftCornerOption="None" ParagraphShadingTopRightCornerOption="None" ParagraphShadingBottomLeftCornerOption="None" ParagraphShadingBottomRightCornerOption="None" ParagraphBorderDisplayIfSplits="false" />
 		<CharacterStyle IncludeClass="true" />
 		<ObjectStyle IncludeClass="true">
 			<TransformAttributeOption TransformAttrLeftReference="PageEdgeReference" TransformAttrTopReference="PageEdgeReference" TransformAttrRefAnchorPoint="TopLeftAnchor" />

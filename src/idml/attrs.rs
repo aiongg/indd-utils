@@ -796,6 +796,22 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
         false,
     ),
     (0x1BD7, "ParagraphShadingClipToFrame", Kind::Bool, false),
+    (0x1BD4, "ParagraphShadingOverprint", Kind::Bool, false),
+    (
+        0x1BFD,
+        "ParagraphBorderType",
+        Kind::Builtin("StrokeStyle/$ID/", STROKE_TYPES),
+        true,
+    ),
+    (0x1B3A, "KeepFirstLines", Kind::Number, false),
+    (0x1B3B, "KeepLastLines", Kind::Number, false),
+    (0x42C1, "AllowArbitraryHyphenation", Kind::Bool, false),
+    (0x4264, "GridGyoudori", Kind::Number, false),
+    (0x4268, "RotateSingleByteCharacters", Kind::Bool, false),
+    (0x4261, "AutoTcy", Kind::Number, false),
+    (0x42A3, "ScaleAffectsLineHeight", Kind::Bool, false),
+    (0x4233, "RubyFont", Kind::FontOrNone, true),
+    (0x4257, "KentenFillColor", Kind::SwatchOrText, true),
 ];
 
 /// Paragraph shading corner option codes.
@@ -972,7 +988,18 @@ const LINE_ENDS: &[(u32, &str)] = &[
     (0x5A08, "CurvedArrowHead"),
     (0x5A09, "CircleArrowHead"),
     (0x5A0A, "CircleSolidArrowHead"),
+    (0x5A0C, "SquareSolidArrowHead"),
     (0x5A0D, "BarArrowHead"),
+];
+
+/// Attributes of `PageItemDefault` beyond the page item table
+/// (`docs/format/preferences.md`, page item defaults).
+pub(super) const ITEM_DEFAULT_ATTRS: &[(u32, &str, Kind)] = &[
+    (0x551E, "GradientFillAngle", Kind::Number),
+    (0x5524, "GradientStrokeAngle", Kind::Number),
+    (0x6E78, "Nonprinting", Kind::Bool),
+    (0x6E95, "LeftArrowHeadScale", Kind::Number),
+    (0x6E96, "RightArrowHeadScale", Kind::Number),
 ];
 
 /// Gradient attributes every page item has: attribute-list ID (0 for
@@ -1481,6 +1508,13 @@ impl Writer<'_> {
     /// Page item attributes from an attribute list, as IDML values.
     pub(super) fn item_attr_values(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
         self.attr_values(attrs, ITEM_ATTRS)
+    }
+
+    /// IDML attributes of the page item defaults list.
+    pub(super) fn item_default_values(&self, attrs: &Attrs) -> Vec<(&'static str, String)> {
+        let mut out = self.attr_values(attrs, ITEM_ATTRS);
+        out.extend(self.attr_values(attrs, ITEM_DEFAULT_ATTRS));
+        out
     }
 
     /// IDML attributes of a table or (`style`) table style attribute

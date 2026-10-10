@@ -741,7 +741,7 @@ impl Writer<'_> {
         }
         if let Some(a) = &prefs.item_defaults {
             let i = ours_of(&mut ours, "PageItemDefault");
-            let values = self.item_attr_values(a);
+            let values = self.item_default_values(a);
             ours[i]
                 .attrs
                 .extend(values.into_iter().map(|(k, v)| (k.to_string(), v)));
