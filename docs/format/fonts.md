@@ -206,45 +206,63 @@ u32 count *n*, then *n* entries: u8 1 if the string is a built-in key
 
 ## Composite fonts
 
-Every INDD file has one object of class 0xCB02, and every IDML one
-`CompositeFont`, `[No composite font]` (240 of 240 IDML files). Its
-entries are objects of class 0xCB03; IDML writes them as
-`CompositeFontEntry` with `Self="u<UID>"`, six per file. Implemented in
+Every INDD file has an object of class 0xCB02 for `[No composite font]`,
+and every IDML that `CompositeFont` (240 of 240 IDML files of the early
+corpus). User composite fonts are more objects of the class: 47 of the
+1,251 trustworthy pairs of the corpus after 2026-10 have them, 1,434
+fonts in all. The entries are objects of class 0xCB03; IDML writes them
+as `CompositeFontEntry` with `Self="u<UID>"`. IDML lists the composite
+fonts in UID order (47 of 47 documents) and each font's entries in the
+order of its list (1,434 of 1,434 fonts). Implemented in
 `src/model/cjk.rs`.
 
-**Composite font (chunk 0xCB02).** A flag byte (1 = built-in key, `$ID/`)
-and the name, fields not identified, then a u16 count and the UIDs of
-the entries, which end the chunk. The list is the IDML entry order in
-76 of 78 pairs; the other two are pairs whose IDML was exported from
-another save (their entry UIDs have no INDD object). No sample has
-another composite font, so the converter writes only this one.
+**Composite font (chunk 0xCB02).**
+
+| Field | Contents |
+|---|---|
+| flagged string | name (`Name`; flag 1 → `$ID/`) |
+| flagged string | empty |
+| flagged string | a PostScript-style name (`ATC-…`) |
+| flagged string | the name again, or empty |
+| u32, u16 | not identified |
+| u16 *n*, *n* × u32 | the entry UIDs, which end the chunk |
+
+The four strings were found by parsing every 0xCB02 chunk of the pairs,
+which then end exactly after the UIDs. A chunk of another layout (files
+from InDesign 3.0 have four zero bytes before the name,
+`big-endian.md`) is read as the name followed by the first u16 count
+whose UIDs end the chunk. That search alone took a wrong position in one
+12.1 document, whose name bytes fit the test.
 
 **Entry (chunk 0xCB03).**
 
-| Field | IDML | Evidence |
+| Field | IDML | Evidence (trustworthy pairs, 8,589 entries) |
 |---|---|---|
-| Flag byte, string | `Name` | 456 of 456 |
-| u32 font family UID | `AppliedFont` (Properties): the family's name | 454 of 456; the other 2 are in the pair whose IDML names the family `Minion Pro (OTF)` (above) |
-| Flag byte, string | `FontStyle` | 456 of 456 (`$ID/R`, `$ID/Regular`, `$ID/Roman`) |
-| Four f64 | `RelativeSize`, `HorizontalScale`, `VerticalScale` 100, `BaselineShift` 0 | (100, 0, 100, 100) in all 1,500 entries of the 250 distinct little-endian files |
-| u16 1, u16 count *n*, *n* ranges | `CustomCharacters` | 380 of 380 |
-| Four u16 | `ScaleOption`: all 1 `true`, all 0 `false` | 456 of 456 |
+| Flag byte, string | `Name` | 8,589 |
+| u32 font family UID | `AppliedFont` (Properties): the family's name | 8,553; the other 36 are families that IDML names in another form (below) |
+| Flag byte, string | `FontStyle` | 8,589 |
+| f64 | `RelativeSize` | 8,589 (55 to 116) |
+| f64 | `BaselineShift` | 8,589 (−10 to 38) |
+| f64, f64 | `HorizontalScale`, `VerticalScale` | 100 in every entry, so their order is not shown |
+| u16 | `Locked`: 1 `true`, 0 `false` | 8,589 (204 `false`) |
+| u16 count *n*, *n* ranges | `CustomCharacters` | 7,155 |
+| Four u16 | `ScaleOption`: all 1 `true`, all 0 `false` | 8,589 |
 
 Each range is three code points (first, last, first again), each one
 UTF-16 unit or a surrogate pair. `CustomCharacters` is every character
-from first to last of each range, in order. IDML never writes
-`CustomCharacters` for the `$ID/Kanji` entry (240 of 240 files), whose
-ranges cover most of Unicode; the converter leaves it out for that entry.
-In one file without IDML the `$ID/kCompFontString_Base` entry covers all
-of Unicode (U+0000–U+D7FF and U+E000–U+10FFFF); XML 1.0 does not allow
-U+FFFE and U+FFFF, so the converter leaves those two characters out of
-every attribute value and text.
-The four numbers have one value in every sample, so only the 0 is told
-apart (`BaselineShift`); the converter writes the four attributes only
-when the numbers are (100, 0, 100, 100). Which of the four u16 is
+from first to last of each range, in order. IDML writes no
+`CustomCharacters` for the first entry of each font, the base font
+(1,434 of 1,434; every other entry has them, 7,155 of 7,155). Its ranges
+cover most of Unicode: for example U+0000–U+D7FF and U+E000–U+10FFFF, or
+U+0009–U+000A, U+000D, U+0020–U+D7FF and U+E000–U+FFFD. XML 1.0 does not
+allow U+FFFE and U+FFFF, so the converter leaves those two characters
+out of every attribute value and text. Which of the four u16 is
 `ScaleOption` is not known; the converter writes it only when all four
-agree. `Locked="true"` is in every IDML entry and is written from that
-observation (`idml-values.md`).
+agree.
+
+The 36 `AppliedFont` values not reproduced are in one document whose
+IDML names its families in English where the converter writes the
+native name (family names, above).
 
 `PlatformName` is `$ID/` in all 4,464 IDML fonts; the converter writes
 that value (`idml-values.md`).

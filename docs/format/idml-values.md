@@ -243,17 +243,6 @@ file has it only from DOM 14, since it is generated per major version;
 the converter writes it when the header or the last session of the save
 history is 13.1 or later (`objects.md`, save history).
 
-## Composite font entries
-
-The converter writes only the built-in composite font `[No composite
-font]`. All 5,231 of its `CompositeFontEntry` elements in the corpus
-IDML files have `Locked="true"`, `RelativeSize="100"`,
-`BaselineShift="0"`, `HorizontalScale="100"` and `VerticalScale="100"`.
-No INDD field for `Locked` is identified; the converter writes it on
-every entry, and the other four where the entry's stored numbers are
-those of every entry (`fonts.md`). Entries of other composite fonts
-have other values.
-
 ## Inks
 
 Every `Ink` element of the 1,495 corpus IDML files has `InkType="Normal"`

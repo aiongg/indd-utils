@@ -94,7 +94,7 @@ Each area below links to the document that holds the evidence.
 | Colours and swatches | Process, spot and registration colours, tints, gradients, inks, colour groups, the `None` swatch. [`objects.md`](docs/format/objects.md) |
 | Tables | Tables in stories and in cells: rows, columns, headers and footers, cells with spans, cell text, cell and table formatting, applied styles. [`tables.md`](docs/format/tables.md) |
 | Links and cross-references | Hyperlinks with text, paragraph and page item sources; text, page, URL and external page destinations; bookmarks; cross-reference sources and formats. [`hyperlinks.md`](docs/format/hyperlinks.md), [`cross-references.md`](docs/format/cross-references.md) |
-| Fonts | Font families and fonts with their names (including built-in and native-script names), styles, types, PostScript names and Typekit IDs; missing fonts; composite font entries. [`fonts.md`](docs/format/fonts.md) |
+| Fonts | Font families and fonts with their names (including built-in and native-script names), styles, types, PostScript names and Typekit IDs; missing fonts; composite fonts and their entries. [`fonts.md`](docs/format/fonts.md) |
 | CJK | Kinsoku and mojikumi tables (with the spacing of custom mojikumi tables), composite fonts, grid alignment of paragraphs, layout grids of pages, named grids, frame grids and their stories. [`objects.md`](docs/format/objects.md), [`fonts.md`](docs/format/fonts.md) |
 | XML | Tags, the XML structure with elements placed in story text, the backing story. [`xml.md`](docs/format/xml.md) |
 | Index | The index with its topics, page references in the text, index options and header groups, index sort groups. [`index.md`](docs/format/index.md), [`preferences.md`](docs/format/preferences.md) |

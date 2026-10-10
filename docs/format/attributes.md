@@ -387,6 +387,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1BDB | `ParagraphShadingTopOffset` | f64 | 91/91 styles |
 | 0x1BDC | `ParagraphShadingBottomOffset` | f64 | 90/90 styles |
 | 0x1BF6 | `ParagraphBorderColor` (Properties) | swatch UID | 72/72 styles |
+| 0x1BFA | `ParagraphBorderGapColor` (Properties) | swatch UID; 0 is `Swatch/None` | present exactly when the list has the ID (344 of 344 styles of the corpus of 2026-10); trustworthy pairs after 2026-10: 1,147 of 1,147 paragraph styles, 918 of 918 text defaults, 2,745 of 2,745 text ranges, 642 + 84 story and cell paragraph ranges |
 | 0x1BF9 | `ParagraphBorderOn` | 1 = true | 77/77 styles |
 | 0x1DF03 | `ParagraphBorderTopOffset` | f64 | 83/83 styles |
 | 0x1DF04 | `ParagraphBorderBottomOffset` | f64 | 83/83 styles |

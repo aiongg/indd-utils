@@ -327,35 +327,36 @@ impl Writer<'_> {
             }
             x.end();
         }
-        // Only the built-in composite font occurs in the corpus.
-        for cf in self
-            .doc
-            .composite_fonts
-            .iter()
-            .filter(|c| c.name.builtin && c.name.name == "[No composite font]")
-        {
+        // Composite fonts in UID order (fonts.md, composite fonts).
+        let mut fonts: Vec<_> = self.doc.composite_fonts.iter().collect();
+        fonts.sort_by_key(|c| c.uid);
+        for cf in fonts {
             let name = cf.name.idml();
             x.start("CompositeFont")
                 .attr("Self", format!("CompositeFont/{}", self_name(&name)))
                 .attr("Name", &name);
-            for e in &cf.entries {
-                // The four numbers are the same in every sample.
-                let usual = e.numbers == [100.0, 0.0, 100.0, 100.0];
+            for (k, e) in cf.entries.iter().enumerate() {
+                let [size, shift, horizontal, vertical] = e.numbers;
                 x.start("CompositeFontEntry")
                     .attr("Self", uref(Some(e.uid)))
                     .attr("Name", e.name.idml())
-                    .attr("FontStyle", e.font_style.idml());
-                if usual {
-                    x.attr("RelativeSize", "100")
-                        .attr("HorizontalScale", "100")
-                        .attr("VerticalScale", "100");
-                }
-                // IDML gives no characters for the Kanji entry.
-                if !(e.name.builtin && e.name.name == "Kanji") {
+                    .attr("FontStyle", e.font_style.idml())
+                    .attr("RelativeSize", num(size))
+                    .attr("HorizontalScale", num(horizontal))
+                    .attr("VerticalScale", num(vertical));
+                // The first entry is the base font, without characters.
+                if k > 0 {
                     x.attr("CustomCharacters", e.characters());
                 }
-                // In every CompositeFontEntry of the corpus IDML files.
-                x.attr("Locked", "true");
+                match e.locked {
+                    0 => {
+                        x.attr("Locked", "false");
+                    }
+                    1 => {
+                        x.attr("Locked", "true");
+                    }
+                    _ => {}
+                }
                 match e.scale {
                     [1, 1, 1, 1] => {
                         x.attr("ScaleOption", "true");
@@ -365,9 +366,7 @@ impl Writer<'_> {
                     }
                     _ => {}
                 }
-                if usual {
-                    x.attr("BaselineShift", "0");
-                }
+                x.attr("BaselineShift", num(shift));
                 if let Some(f) = self.doc.fonts.get(&e.font_family) {
                     Self::properties(
                         &mut x,

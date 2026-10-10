@@ -390,6 +390,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (0x1BDB, "ParagraphShadingTopOffset", Kind::Number, false),
     (0x1BDC, "ParagraphShadingBottomOffset", Kind::Number, false),
     (0x1BF6, "ParagraphBorderColor", Kind::Swatch, true),
+    (0x1BFA, "ParagraphBorderGapColor", Kind::SwatchOrNone, true),
     (0x1BF9, "ParagraphBorderOn", Kind::Equals(1), false),
     (0x1DF03, "ParagraphBorderTopOffset", Kind::Number, false),
     (

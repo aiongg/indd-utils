@@ -56,6 +56,8 @@ pub(super) enum Kind {
     Swatch,
     /// A swatch, or 0 for "Text Color".
     SwatchOrText,
+    /// A swatch, or 0 for the swatch `None`.
+    SwatchOrNone,
     /// A font family.
     Font,
     /// A font family, or 0 for none (`$ID/`).
@@ -200,6 +202,10 @@ impl Writer<'_> {
             Kind::Swatch => v.as_u32().and_then(swatch).map(|s| text("object", s)),
             Kind::SwatchOrText => match v.as_u32()? {
                 0 => Some(text("string", "Text Color".into())),
+                u => swatch(u).map(|s| text("object", s)),
+            },
+            Kind::SwatchOrNone => match v.as_u32()? {
+                0 => Some(text("object", "Swatch/None".into())),
                 u => swatch(u).map(|s| text("object", s)),
             },
             Kind::NumberingList => v

@@ -163,10 +163,9 @@ only for attributes the element does not have. For value trees
 values.
 
 A few observed values are still written as literals in the writer,
-where the generators cannot express them: the entries of the built-in
-composite font, `AccurateLABSpots` of the document (one DOM 7 file lacks
-it) and the default numbering list for a file whose lists cannot be
-read. Each cites `idml-values.md`.
+where the generators cannot express them: `AccurateLABSpots` of the
+document (one DOM 7 file lacks it) and the default numbering list for a
+file whose lists cannot be read. Each cites `idml-values.md`.
 
 ## Tests and tools
 

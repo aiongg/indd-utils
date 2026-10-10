@@ -40,9 +40,11 @@ pub struct CompositeFontEntry {
     pub name: Name,
     pub font_family: u32,
     pub font_style: Name,
-    /// Four f64; (100, 0, 100, 100) in every sample, the 0 being the
-    /// baseline shift.
+    /// Four f64: relative size, baseline shift, then the horizontal and
+    /// vertical scale (100 in every sample, so their order is not shown).
     pub numbers: [f64; 4],
+    /// The u16 after the numbers: 1 for `Locked="true"`, 0 for false.
+    pub locked: u16,
     /// Character ranges as (first, last) code points.
     pub ranges: Vec<(u32, u32)>,
     /// The four u16 after the ranges: all 1 for `ScaleOption="true"`, all 0
@@ -62,8 +64,8 @@ fn code_point(c: &mut Cursor) -> Result<u32, Error> {
 }
 
 impl CompositeFontEntry {
-    /// Chunk 0xCB03: name, u32 font family, font style, four f64, u16 1,
-    /// u16 range count, ranges (first, last, first), four u16.
+    /// Chunk 0xCB03: name, u32 font family, font style, four f64, u16
+    /// locked, u16 range count, ranges (first, last, first), four u16.
     pub fn read(uid: u32, obj: &crate::Object) -> Result<Option<CompositeFontEntry>, Error> {
         let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::COMPOSITE_FONT_ENTRY) else {
@@ -74,7 +76,7 @@ impl CompositeFontEntry {
         let font_family = c.u32()?;
         let font_style = c.name()?;
         let numbers = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
-        c.u16()?;
+        let locked = c.u16()?;
         let n = c.u16()?;
         let mut ranges = Vec::new();
         for _ in 0..n {
@@ -90,6 +92,7 @@ impl CompositeFontEntry {
             font_family,
             font_style,
             numbers,
+            locked,
             ranges,
             scale,
         }))
@@ -105,10 +108,12 @@ impl CompositeFontEntry {
 }
 
 impl CompositeFont {
-    /// Chunk 0xCB02: the name, fields not identified, then a u16 count and
-    /// the entry UIDs, which end the chunk. In files from InDesign 3.0
-    /// four zero bytes come before the name (`big-endian.md`). Returns the
-    /// name and the entry UIDs.
+    /// Chunk 0xCB02: four flagged strings (the name first), a u32 and a
+    /// u16 not identified, then a u16 count and the entry UIDs, which end
+    /// the chunk. In files from InDesign 3.0 four zero bytes come before
+    /// the name (`big-endian.md`). A chunk of another layout gives the
+    /// first u16 count after the name whose UIDs end the chunk. Returns
+    /// the name and the entry UIDs.
     pub fn read(obj: &crate::Object) -> Result<Option<(Name, Vec<u32>)>, Error> {
         let enc = obj.encoding;
         let Some(d) = obj.chunk(chunk::COMPOSITE_FONT) else {
@@ -125,6 +130,23 @@ impl CompositeFont {
             Err(e) => return Err(e),
         };
         let start = c.pos();
+        let structured = (|| -> Result<Option<Vec<u32>>, Error> {
+            for _ in 0..3 {
+                c.name()?;
+            }
+            c.u32()?;
+            c.u16()?;
+            let n = c.u16()? as usize;
+            if c.remaining() != 4 * n {
+                return Ok(None);
+            }
+            Ok(Some(
+                (0..n).map(|_| c.u32()).collect::<Result<Vec<_>, _>>()?,
+            ))
+        })();
+        if let Ok(Some(entries)) = structured {
+            return Ok(Some((name, entries)));
+        }
         let Some(p) = (start..d.len().saturating_sub(1)).find(|&p| {
             let n = enc.u16_from([d[p], d[p + 1]]) as usize;
             n > 0 && p + 2 + 4 * n == d.len()
@@ -349,6 +371,29 @@ mod tests {
         let (name, entries) = CompositeFont::read(&obj).unwrap().unwrap();
         assert!(name.builtin);
         assert_eq!(name.name, "[No composite font]");
+        assert_eq!(entries, [0x60, 0x61]);
+    }
+
+    #[test]
+    fn reads_composite_fonts_by_their_four_names() {
+        let enc = Encoding::default();
+        let mut d = flagged_string(enc, 0, "Font A");
+        d.extend(flagged_string(enc, 0, ""));
+        d.extend(flagged_string(enc, 0, "ATC-416e6f74686572basic"));
+        d.extend(flagged_string(enc, 0, "Font A"));
+        d.extend(enc.u32_bytes(0));
+        d.extend(enc.u16_bytes(0));
+        d.extend(enc.u16_bytes(2));
+        d.extend(enc.u32_bytes(0x60));
+        d.extend(enc.u32_bytes(0x61));
+        let obj = object(
+            0x5F,
+            class::COMPOSITE_FONT,
+            &[(chunk::COMPOSITE_FONT, d)],
+            enc,
+        );
+        let (name, entries) = CompositeFont::read(&obj).unwrap().unwrap();
+        assert_eq!(name.idml(), "Font A");
         assert_eq!(entries, [0x60, 0x61]);
     }
 
