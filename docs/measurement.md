@@ -410,9 +410,29 @@ all boxes equal) and compared:
 | Mean difference | Mean absolute difference of the images after a 2 × 2 mean, from 0 to 1 |
 | Missing ink, extra ink | Share of pixels with ink (value below 200) in one image and none within 2 pixels in the other, after the 2 × 2 mean |
 | Lines | `pdftotext -bbox-layout` lines; a line's key is its text without white space, casefolded. Lines with the same key are matched, nearest first |
-| Moved line | A matched line whose left edge or top differs by more than 1 pt. Line boxes depend on the ascent and descent each PDF declares for its fonts, so between R and A the top is first corrected by the document's median difference for lines of the same pair of box heights |
+| Moved line | A matched line whose left edge or top differs by more than 1 pt. Between R and A the top is first corrected by a line-box offset (below) |
 | Character overlap | Share of the characters of a page (without white space) that the other page also has, counted as a multiset |
 | Font-complete | DesignCraft matches every font family of the document exactly (`font.list`); a page of another document is font-complete when every font `pdffonts` lists for the page in R belongs to such a family |
+
+**Line-box offset (R vs A).** A line's box depends on the ascent and
+descent each PDF declares for its fonts, so the same line can have a
+different top in R and A without moving. Matched lines are grouped by
+their pair of box heights (R, A). Each page corrects a group by the
+median vertical difference of that group's lines on the page. A group
+with fewer than 3 lines on the page takes the median of the group over
+the whole document instead: with 3 lines the median is one of the lines
+and one line that moved does not change it, while with 2 lines it is
+their mean and a moved line shifts both. The per-page median keeps
+pagination drift on other pages out of a page's correction. A shift
+that most lines of a group share on one page is not counted as moved.
+
+Evidence, on the same renders of 170 same-save documents (2026-10):
+with the document's median alone, 17,066 of 42,932 matched lines count
+as moved and 1,003 pages as `lines moved`; with the per-page median,
+11,786 lines and 905 pages. On one page whose lines have the same
+coordinates in two renderer builds, the document's median changed from
+11.6 to 73.6 pt between the builds and 29 of 30 matched lines counted as
+moved; with the page's median, none do.
 
 **First differing page.** In A vs B, the first page that is not
 pixel-identical is where the converter's output first changes the
@@ -467,6 +487,7 @@ and the Python standard library only. Options:
 | `--link-fonts` | Give DesignCraft the font files a package keeps beside the IDML, in a `Document Fonts` folder; DesignCraft reads only that folder |
 | `--bin PATH` | Another converter binary |
 | `--gaps PATH` | compare.py's `gaps.tsv` to rank first-difference keys against (default `target/compare/gaps.tsv`) |
+| `--reuse DIR` | Take A.pdf, B.pdf and DesignCraft's results from `work/` of an earlier run in DIR (which may be `--out` itself) for each triple whose converted IDML has the same bytes as in that run; render the others, which needs `--designcraft`. For measuring a change to the tool on the same renders: pass the earlier run's `--bin` |
 | `--images ID:PAGE…` | Write images of pages of the last run (below) and nothing else |
 
 Run it after converter changes, like `diff_outputs.py`: a page whose A vs

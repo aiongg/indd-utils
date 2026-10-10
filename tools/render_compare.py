@@ -18,7 +18,7 @@ variable).
 Usage: python3 -I tools/render_compare.py --designcraft PATH [--bin PATH]
            [--jobs N] [--limit N] [--file SUBSTR] [--exclude PREFIX]...
            [--versions 13-21] [--max-pages N] [--link-fonts] [--out DIR]
-           [--gaps GAPS_TSV]
+           [--gaps GAPS_TSV] [--reuse DIR]
        python3 -I tools/render_compare.py --images ID:PAGE [ID:PAGE...] [--out DIR]
 
 Run from the repository root after `cargo build --release`. Needs
@@ -33,6 +33,12 @@ triples. --max-pages limits the page-by-page comparison of each document
 (default 100). --link-fonts gives DesignCraft the font files that a
 package keeps beside the IDML, in a `Document Fonts` folder (DesignCraft
 reads only that folder).
+
+--reuse DIR takes A.pdf, B.pdf and the renderer's results from the work/
+folder of an earlier run in DIR (which may be --out itself) instead of
+rendering, for each triple whose converted IDML has the same bytes as in
+that run; other triples are rendered, which needs --designcraft. Use it
+to measure a change to this tool on the same renders.
 
 Outputs go to --out (default target/render-compare): triples.tsv,
 docs.tsv, pages.tsv, lines.tsv, dropped.tsv, issues.tsv, summary.json, and
@@ -69,6 +75,9 @@ import compare  # noqa: E402
 ROOT = compare.ROOT
 CORPUS = ROOT / "corpus"
 DPI = 50
+# Fewest matched lines of one pair of box heights on a page for the page's
+# own median offset; see box_offsets.
+MIN_PAGE_LINES = 3
 PX = DPI / 72.0
 RENDER_TIMEOUT = 600
 CONVERT_TIMEOUT = 120
@@ -457,8 +466,8 @@ def line_stats(ref, oth, offsets=None):
     """Line match of a page. A matched line moved when its left edge or the
     top of its box differs by more than 1 pt. Line boxes come from the
     fonts' ascent and descent as each PDF declares them, so between R and A
-    the top of the box is first corrected by `offsets`: the document's
-    median difference for lines of the same box heights."""
+    the top of the box is first corrected by `offsets`, the page's offsets
+    from box_offsets."""
     pairs, unref, unoth = match(ref, oth)
     moved = []
     for i, j in pairs:
@@ -476,13 +485,24 @@ def line_stats(ref, oth, offsets=None):
 
 
 def box_offsets(pairs_by_page):
-    """Median vertical difference of matched lines per (reference box
-    height, other box height) over a document."""
-    groups = defaultdict(list)
-    for ref, oth, pairs in pairs_by_page:
+    """{page: {(reference box height, other box height): offset}}: the
+    median vertical difference of the page's matched lines with those box
+    heights, or the document's median for them when the page has fewer than
+    MIN_PAGE_LINES such lines. A document-wide median alone follows
+    pagination drift on other pages: where most lines of a document moved,
+    it shifts the lines of pages that did not move."""
+    doc, pages = defaultdict(list), {}
+    for pno, ref, oth, pairs in pairs_by_page:
+        groups = defaultdict(list)
         for i, j in pairs:
             groups[(ref[i]["h"], oth[j]["h"])].append(oth[j]["ty"] - ref[i]["ty"])
-    return {k: statistics.median(v) for k, v in groups.items()}
+        for k, v in groups.items():
+            doc[k].extend(v)
+        pages[pno] = groups
+    doc = {k: statistics.median(v) for k, v in doc.items()}
+    return {pno: {k: statistics.median(v) if len(v) >= MIN_PAGE_LINES else doc[k]
+                  for k, v in groups.items()}
+            for pno, groups in pages.items()}
 
 
 def line_checks(lines):
@@ -877,15 +897,48 @@ def ab_flags(p):
     return out
 
 
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def reuse(cfg, work, res):
+    """With --reuse, take A.pdf, B.pdf and the renderer's results from the
+    earlier run when its converted IDML has the same bytes; True if taken."""
+    if not cfg["reuse"]:
+        return False
+    src = Path(cfg["reuse"]) / "work" / work.name
+    try:
+        prev = json.loads((src / "run.json").read_text())
+        same = prev.get("ours_sha256")
+        if same is None and src.resolve() != work.resolve():
+            same = sha256(src / "ours.idml")
+    except (OSError, ValueError):
+        return False
+    pdfs = [src / "A.pdf", src / "B.pdf"]
+    if same != res["ours_sha256"] or not all(f.exists() for f in pdfs) \
+            or "A" not in prev or "B" not in prev:
+        return False
+    if src.resolve() != work.resolve():
+        for f in pdfs:
+            link = work / f.name
+            link.unlink(missing_ok=True)
+            link.symlink_to(f.resolve())
+    res["A"], res["B"], res["reused"] = prev["A"], prev["B"], str(src)
+    return True
+
+
 def measure(cfg, t):
     """Render A and B and compare R, A and B page by page."""
     work = Path(cfg["out"]) / "work" / t["id"]
     ref_idml, r_pdf = CORPUS / t["idml"], CORPUS / t["pdf"]
-    res = {"id": t["id"]}
-    a_doc = package(ref_idml, work / "pkgA", ref_idml, cfg["link_fonts"])
-    res["A"] = designcraft(cfg, a_doc, work / "A.pdf")
-    b_doc = package(ref_idml, work / "pkgB", work / "ours.idml", cfg["link_fonts"])
-    res["B"] = designcraft(cfg, b_doc, work / "B.pdf")
+    res = {"id": t["id"], "ours_sha256": sha256(work / "ours.idml")}
+    if not reuse(cfg, work, res):
+        if not cfg["designcraft"]:
+            raise RuntimeError("renders not reusable and no --designcraft")
+        a_doc = package(ref_idml, work / "pkgA", ref_idml, cfg["link_fonts"])
+        res["A"] = designcraft(cfg, a_doc, work / "A.pdf")
+        b_doc = package(ref_idml, work / "pkgB", work / "ours.idml", cfg["link_fonts"])
+        res["B"] = designcraft(cfg, b_doc, work / "B.pdf")
     (work / "run.json").write_text(json.dumps(res, indent=1))
     pdfs = {"R": r_pdf, "A": work / "A.pdf", "B": work / "B.pdf"}
     info = {k: boxes(p) for k, p in pdfs.items() if p.exists()}
@@ -940,7 +993,7 @@ def measure(cfg, t):
     for p in rows:
         r, a, b = lines("R", p["page"]), lines("A", p["page"]), lines("B", p["page"])
         if r is not None and a is not None:
-            ra_pairs.append((r, a, match(r, a)[0]))
+            ra_pairs.append((p["page"], r, a, match(r, a)[0]))
         if a is not None and b is not None:
             p["AB_text"] = line_stats(a, b)
     offsets = box_offsets(ra_pairs)
@@ -950,7 +1003,7 @@ def measure(cfg, t):
         pno = p["page"]
         r, a = lines("R", pno), lines("A", pno)
         if r is not None and a is not None:
-            p["RA_text"] = line_stats(r, a, offsets)
+            p["RA_text"] = line_stats(r, a, offsets.get(pno, {}))
         p["fontok"] = all_ok or (res["A"]["exit"] == 0 and all(
             font_ok(families, f) for f in page_fonts(r_pdf, pno)))
         p["RA_flags"], p["AB_flags"] = ra_flags(p), ab_flags(p)
@@ -1285,6 +1338,7 @@ def report(args, cfg, judged, measured, secs):
         },
         "designcraft": {
             "renders": 2 * len(measured),
+            "renders_reused": 2 * sum(1 for m in measured if m.get("reused")),
             "render_failures": sum(1 for m in measured for k in ("A", "B") if m[k]["exit"] not in (0, "timeout")),
             "render_timeouts": sum(1 for m in measured for k in ("A", "B") if m[k]["exit"] == "timeout"),
             "render_seconds_median": statistics.median(times) if times else None,
@@ -1345,6 +1399,8 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "target" / "render-compare"))
     ap.add_argument("--gaps", default=str(ROOT / "target" / "compare" / "gaps.tsv"),
                     help="compare.py's gaps.tsv, to rank first-difference keys against")
+    ap.add_argument("--reuse", metavar="DIR",
+                    help="take the renders of an earlier run in DIR where the IDML is the same")
     ap.add_argument("--images", nargs="+", metavar="ID:PAGE",
                     help="write images of these pages of an earlier run, and nothing else")
     args = ap.parse_args()
@@ -1354,21 +1410,24 @@ def main():
     if args.images:
         images(args)
         return
-    if not args.designcraft:
+    if not args.designcraft and not args.reuse:
         ap.error("--designcraft PATH (or DESIGNCRAFT_CLI) is required")
     out.mkdir(parents=True, exist_ok=True)
     tmp = out / "tmp"
     tmp.mkdir(exist_ok=True)
-    dc = Path(args.designcraft).resolve()
-    _, _, version, _ = run([str(dc), "--version"], 60, text=True)
-    cfg = {"bin": str(Path(args.bin).resolve()), "designcraft": str(dc), "out": str(out.resolve()),
-           "tmp": str(tmp.resolve()), "link_fonts": args.link_fonts, "max_pages": args.max_pages,
+    dc = Path(args.designcraft).resolve() if args.designcraft else None
+    version = run([str(dc), "--version"], 60, text=True)[2].strip() if dc else None
+    cfg = {"bin": str(Path(args.bin).resolve()), "designcraft": str(dc) if dc else None,
+           "out": str(out.resolve()), "tmp": str(tmp.resolve()), "link_fonts": args.link_fonts,
+           "max_pages": args.max_pages,
+           "reuse": str(Path(args.reuse).resolve()) if args.reuse else None,
            "tools": {"converter": args.bin,
                      "repository": subprocess.run(["git", "-C", str(ROOT), "describe", "--always",
                                                    "--dirty"], capture_output=True,
                                                   text=True).stdout.strip(),
-                     "designcraft": version.strip(),
-                     "designcraft_sha256": hashlib.sha256(dc.read_bytes()).hexdigest()[:16]}}
+                     "designcraft": version,
+                     "designcraft_sha256": sha256(dc)[:16] if dc else None,
+                     "renders_reused_from": str(Path(args.reuse).resolve()) if args.reuse else None}}
     start = time.time()
     todo = candidates(args)
     results = {}
