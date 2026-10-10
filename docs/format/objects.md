@@ -726,7 +726,8 @@ file in some of these styles, but it does not decide
 | flag byte, in-object string | `Name`: the paragraph style's name, with `$ID/` first for flag 1; the group separator U+E00B is written `:` |
 | flag byte, in-object string | a document path; not in IDML |
 | u32 | `FormatStyle`: paragraph style UID |
-| u32 | `Level` |
+| u16 | `Level` |
+| u16 | 0 in every entry of the pairs; 1 in some entries of files without a pair (not mapped) |
 | u16 | `PageNumberPosition`: 0 `AfterEntry`, 1 `BeforeEntry`, 2 `None` |
 | u32 | `PageNumberStyle`: character style UID |
 | u32 *n*, segments | `Separator` |

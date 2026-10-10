@@ -409,7 +409,7 @@ impl<'a> Reader<'a> {
 
 /// The entries of a TOC style chunk after its fields: u16 count, then per
 /// entry the style name (flag byte, string), a document path (flag byte,
-/// string), u32 format style, u32 level, u16 page number position, u32
+/// string), u32 format style, u16 level, u16, u16 page number position, u32
 /// page number style, u32-counted separator text, u32 separator style,
 /// u16, a u32-counted text and a u16. The chunk must end after them.
 fn toc_entries(c: &mut crate::object::Cursor) -> Result<Vec<TocEntry>, Error> {
@@ -421,7 +421,10 @@ fn toc_entries(c: &mut crate::object::Cursor) -> Result<Vec<TocEntry>, Error> {
         c.flag()?;
         c.string()?;
         let format_style = c.u32()?;
-        let level = c.u32()?;
+        let level = u32::from(c.u16()?);
+        // 0 in every entry of the pairs; 1 in some entries of files
+        // without one (objects.md, table of contents styles).
+        c.u16()?;
         let page_number_position = c.u16()?;
         let page_number_style = c.u32()?;
         let len = c.u32()? as usize;
@@ -858,9 +861,9 @@ mod tests {
             let mut d = enc.u16_bytes(1).to_vec();
             d.extend(flagged_string(enc, 1, "Heading"));
             d.extend(flagged_string(enc, 2, ""));
-            for v in [0x51u32, 2] {
-                d.extend(enc.u32_bytes(v));
-            }
+            d.extend(enc.u32_bytes(0x51));
+            d.extend(enc.u16_bytes(2));
+            d.extend(enc.u16_bytes(1));
             d.extend(enc.u16_bytes(2));
             d.extend(enc.u32_bytes(0));
             d.extend(export_string(enc, "\t"));
