@@ -18,6 +18,9 @@ pub(super) struct TextState {
     /// A character written without its `Change` and deleted text, which
     /// were written before the text source that starts there.
     bare: Option<usize>,
+    /// Change runs written above the character ranges (indices into the
+    /// story's changes); their text has no `Change` of its own.
+    lifted: Vec<usize>,
 }
 
 /// The insertion entry of a change run of inserted text that starts where
@@ -30,6 +33,84 @@ fn insertion_at_source(story: &Story, pos: usize, len: usize) -> Option<&ChangeE
         .get(i)
         .filter(|c| c.start == pos && c.len < len)?;
     c.entries.iter().find(|e| e.is_insertion())
+}
+
+/// The change run of inserted text that holds the whole extent of the
+/// character-level source `r`, where the source's text in this run
+/// (`text`, from UTF-16 offset `offset`) has no table, anchored item or
+/// XML marker, which a `Change` cannot hold.
+fn holding_change(story: &Story, r: &SourceRange, offset: usize, text: &[u16]) -> Option<usize> {
+    if r.len == 0 {
+        return None;
+    }
+    let end = r.start + r.len;
+    let i = story
+        .changes
+        .partition_point(|c| c.start + c.len <= r.start);
+    let c = story.changes.get(i)?;
+    if c.start > r.start || c.start + c.len < end || !c.entries.iter().any(|e| e.is_insertion()) {
+        return None;
+    }
+    let local = text.get(r.start.checked_sub(offset)?..end.checked_sub(offset)?)?;
+    let blocked = local.iter().any(|&u| u == 0x16 || u == 0xFFFC)
+        || (r.start..end).any(|p| story.xml_markers.contains_key(&p));
+    (!blocked).then_some(i)
+}
+
+/// The change runs of inserted text that `ranges` writes above the
+/// character ranges (objects.md, tracked changes): their extent is not
+/// inside one run once the runs are split at the paragraph-level
+/// `sources`, it holds no table, anchored item or XML marker, and it nests
+/// with every source (a source that starts with the inserted text and
+/// goes on past it keeps its own rule). A change over several paragraph
+/// ranges must also not lie inside a source.
+fn lifted_changes(runs: &[TextRun], story: &Story, sources: &[&SourceRange]) -> Vec<usize> {
+    let run_end = |t: &TextRun| t.start + t.text.encode_utf16().count();
+    let (Some(first), Some(last)) = (runs.first(), runs.last()) else {
+        return Vec::new();
+    };
+    let (lo, hi) = (first.start, run_end(last));
+    let mut bounds: Vec<usize> = runs.iter().skip(1).map(|r| r.start).collect();
+    bounds.extend(sources.iter().flat_map(|s| [s.start, s.start + s.len]));
+    // Offsets of tables and anchored items, in order.
+    let items: Vec<usize> = runs
+        .iter()
+        .flat_map(|r| {
+            r.text
+                .encode_utf16()
+                .enumerate()
+                .filter(|&(_, u)| u == 0x16 || u == 0xFFFC)
+                .map(move |(i, _)| r.start + i)
+        })
+        .collect();
+    let mut out = Vec::new();
+    for (k, c) in story.changes.iter().enumerate() {
+        let end = c.start + c.len;
+        if c.len == 0
+            || c.start < lo
+            || end > hi
+            || !c.entries.iter().any(|e| e.is_insertion())
+            || !bounds.iter().any(|&b| c.start < b && b < end)
+        {
+            continue;
+        }
+        let nests = sources.iter().all(|s| {
+            let s_end = s.start + s.len;
+            let disjoint = s_end <= c.start || end <= s.start;
+            let holds = c.start <= s.start && s_end <= end;
+            let inside =
+                s.start <= c.start && end <= s_end && !(s.start == c.start && c.len < s.len);
+            disjoint || holds || inside
+        });
+        let blocked = story.xml_markers.range(c.start..end).next().is_some()
+            || items[items.partition_point(|&p| p < c.start)..]
+                .first()
+                .is_some_and(|&p| p < end);
+        if nests && !blocked {
+            out.push(k);
+        }
+    }
+    out
 }
 
 impl TextState {
@@ -167,7 +248,7 @@ impl Writer<'_> {
         if let Some(e) = element {
             Self::xml_element_start(&mut x, e);
         }
-        self.text_ranges(&mut x, &s.runs, s, &scope);
+        self.story_ranges(&mut x, &s.runs, s, &scope);
         if element.is_some() {
             x.end();
         }
@@ -193,6 +274,18 @@ impl Writer<'_> {
     /// `scope` is the `Self` of the enclosing story or table cell, which
     /// prefixes the `Self` of tables inside the text.
     pub(super) fn text_ranges(&self, x: &mut Xml, runs: &[TextRun], story: &Story, scope: &str) {
+        self.ranges(x, runs, story, scope, false);
+    }
+
+    /// `text_ranges` for text whose offsets are those of the story's
+    /// changes (the story and its table cells): inserted text over several
+    /// character ranges is written above them (objects.md, tracked
+    /// changes).
+    pub(super) fn story_ranges(&self, x: &mut Xml, runs: &[TextRun], story: &Story, scope: &str) {
+        self.ranges(x, runs, story, scope, true);
+    }
+
+    fn ranges(&self, x: &mut Xml, runs: &[TextRun], story: &Story, scope: &str, lift: bool) {
         let run_end = |t: &TextRun| t.start + t.text.encode_utf16().count();
         // Sources written around character ranges: their runs are split at
         // the source's ends (hyperlinks.md, extent and placement).
@@ -200,7 +293,7 @@ impl Writer<'_> {
             (Some(a), Some(b)) => (a.start, run_end(b)),
             _ => (0, 0),
         };
-        let para: Vec<&SourceRange> = story
+        let sources: Vec<&SourceRange> = story
             .sources
             .iter()
             .filter(|r| r.paragraph && r.start >= lo && r.start < hi)
@@ -209,14 +302,25 @@ impl Writer<'_> {
                     .any(|t| t.start <= r.start && r.start < run_end(t))
             })
             .collect();
+        let lifted = if lift {
+            lifted_changes(runs, story, &sources)
+        } else {
+            Vec::new()
+        };
+        let cuts: Vec<usize> = sources
+            .iter()
+            .map(|r| (r.start, r.len))
+            .chain(
+                lifted
+                    .iter()
+                    .map(|&k| (story.changes[k].start, story.changes[k].len)),
+            )
+            .flat_map(|(start, len)| [start, start + len])
+            .collect();
         let split;
-        let runs = if para.is_empty() {
+        let runs = if cuts.is_empty() {
             runs
         } else {
-            let cuts: Vec<usize> = para
-                .iter()
-                .flat_map(|r| [r.start, r.start + r.len])
-                .collect();
             split = split_runs_at(runs, &cuts);
             &split[..]
         };
@@ -238,10 +342,47 @@ impl Writer<'_> {
                 _ => &runs[i].text,
             }
         };
-        let sources = para;
+        // A lifted change over runs of more than one paragraph range is a
+        // child of the story, the others of their paragraph range.
+        fn para_of(t: &TextRun) -> (Option<u32>, &crate::model::Attrs) {
+            (t.paragraph_style, &t.paragraph_attrs)
+        }
+        let mut group = vec![0usize; n];
+        for i in 1..n {
+            group[i] = group[i - 1] + usize::from(para_of(runs[i]) != para_of(runs[i - 1]));
+        }
+        let change_end = |k: usize| story.changes[k].start + story.changes[k].len;
+        let (top, inner): (Vec<usize>, Vec<usize>) = lifted.iter().partition(|&&k| {
+            let c = &story.changes[k];
+            let inside: Vec<usize> = (0..n)
+                .filter(|&i| runs[i].start >= c.start && run_end(runs[i]) <= change_end(k))
+                .map(|i| group[i])
+                .collect();
+            inside.first() != inside.last()
+        });
+        let insertion = |k: usize| story.changes[k].entries.iter().find(|e| e.is_insertion());
+        let boundary = |p: usize| {
+            top.iter()
+                .any(|&k| story.changes[k].start == p || change_end(k) == p)
+        };
+        // Story-level changes open, innermost last.
+        let mut outer: Vec<usize> = Vec::new();
         let mut i = 0;
         while i < n {
-            let para = (runs[i].paragraph_style, &runs[i].paragraph_attrs);
+            let mut starting: Vec<usize> = top
+                .iter()
+                .copied()
+                .filter(|&k| story.changes[k].start == runs[i].start)
+                .collect();
+            starting.sort_by_key(|&k| std::cmp::Reverse(change_end(k)));
+            for k in starting {
+                x.start("Change");
+                if let Some(e) = insertion(k) {
+                    self.change_attrs(x, e, "InsertedText");
+                }
+                outer.push(k);
+            }
+            let para = para_of(runs[i]);
             let (plain, props) = self.text_attrs(para.1);
             x.start("ParagraphStyleRange")
                 .attr("AppliedParagraphStyle", self.style_ref(para.0, true));
@@ -249,15 +390,44 @@ impl Writer<'_> {
                 x.attr(k, v);
             }
             Self::properties(x, &props);
-            let mut st = TextState::default();
-            // End offset of the open paragraph-level source.
-            let mut open: Option<usize> = None;
-            while i < n && (runs[i].paragraph_style, &runs[i].paragraph_attrs) == para {
+            let mut st = TextState {
+                lifted: lifted.clone(),
+                ..TextState::default()
+            };
+            // Paragraph-level sources and changes open, innermost last,
+            // with their end offsets.
+            let mut open: Vec<usize> = Vec::new();
+            let first = i;
+            while i < n && para_of(runs[i]) == para && (i == first || !boundary(runs[i].start)) {
                 let r = runs[i];
-                if open.is_none()
-                    && let Some(s) = sources.iter().find(|s| s.start == r.start)
-                    && let Some(src) = self.doc.text_sources.get(&s.source)
-                {
+                // Sources and changes that start here, the longest first;
+                // a change before a source of the same extent.
+                let mut starting: Vec<(usize, bool, usize)> = inner
+                    .iter()
+                    .filter(|&&k| story.changes[k].start == r.start)
+                    .map(|&k| (change_end(k), true, k))
+                    .chain(
+                        sources
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, s)| s.start == r.start)
+                            .map(|(j, s)| (s.start + s.len, false, j)),
+                    )
+                    .collect();
+                starting.sort_by_key(|&(end, change, _)| (std::cmp::Reverse(end), !change));
+                for (end, change, k) in starting {
+                    if change {
+                        x.start("Change");
+                        if let Some(e) = insertion(k) {
+                            self.change_attrs(x, e, "InsertedText");
+                        }
+                        open.push(end);
+                        continue;
+                    }
+                    let s = sources[k];
+                    let Some(src) = self.doc.text_sources.get(&s.source) else {
+                        continue;
+                    };
                     // A source that starts with inserted text and goes on
                     // past it follows a character range with the deleted
                     // text there and an empty `Change` (hyperlinks.md,
@@ -272,25 +442,33 @@ impl Writer<'_> {
                         st.bare = Some(r.start);
                     }
                     self.source_start(x, src);
-                    open = Some(s.start + s.len);
+                    open.push(end);
                 }
                 self.csr_start(x, r);
                 st.csr = true;
                 self.run_content(x, text_of(i), r, story, scope, &mut st);
                 st.close_csr(x);
-                if open.is_some_and(|end| end <= run_end(r)) {
+                while open.last().is_some_and(|&end| end <= run_end(r)) {
                     x.end();
-                    open = None;
+                    open.pop();
                 }
                 i += 1;
             }
-            if open.is_some() {
+            for _ in open.drain(..) {
                 x.end();
             }
             // Elements left open (their end is missing) end with the range.
             for _ in st.blocks.drain(..) {
                 x.end();
             }
+            x.end();
+            let end = run_end(runs[i - 1]);
+            while outer.last().is_some_and(|&k| change_end(k) <= end) {
+                x.end();
+                outer.pop();
+            }
+        }
+        for _ in outer.drain(..) {
             x.end();
         }
     }
@@ -334,17 +512,35 @@ impl Writer<'_> {
                 x.end();
             }
         };
+        // The `Change` of inserted text that holds the open text source
+        // (hyperlinks.md, sources in tracked changes): the index of its
+        // change run. It closes after the source.
+        let mut holding: Option<usize> = None;
+        let utf16: Vec<u16> = text.encode_utf16().collect();
         for ch in text.chars() {
             if open == Some(pos) {
                 close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 x.end();
                 open = None;
+                // The holding change goes on as the innermost element
+                // where its text continues.
+                if let Some(i) = holding.take() {
+                    let c = &story.changes[i];
+                    if c.start + c.len > pos {
+                        inserted = Some(i);
+                    } else {
+                        x.end();
+                    }
+                }
             }
             if endnote == Some(pos) {
                 close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 if open.take().is_some() {
+                    x.end();
+                }
+                if holding.take().is_some() {
                     x.end();
                 }
                 x.end();
@@ -358,6 +554,9 @@ impl Writer<'_> {
                 close_inserted(x, &mut buf, &mut inserted);
                 flush(x, &mut buf);
                 if open.take().is_some() {
+                    x.end();
+                }
+                if holding.take().is_some() {
                     x.end();
                 }
                 st.open_csr(self, x, run);
@@ -392,17 +591,39 @@ impl Writer<'_> {
                     .find(|r| r.start == pos && !r.paragraph)
                 && let Some(src) = self.doc.text_sources.get(&r.source)
             {
-                close_inserted(x, &mut buf, &mut inserted);
+                let at_source = insertion_at_source(story, pos, r.len);
+                // Inserted text that holds the whole source: the source is
+                // inside its `Change` (hyperlinks.md, sources in tracked
+                // changes).
+                let hold = at_source
+                    .is_none()
+                    .then(|| holding_change(story, r, offset, &utf16))
+                    .flatten()
+                    .filter(|i| !st.lifted.contains(i));
                 flush(x, &mut buf);
+                if hold.is_some() && inserted == hold {
+                    inserted = None;
+                    holding = hold;
+                } else {
+                    close_inserted(x, &mut buf, &mut inserted);
+                }
                 st.open_csr(self, x, run);
                 // A source that starts with inserted text and goes on past
                 // it follows an empty `Change`, and its first character has
                 // none (hyperlinks.md, sources at inserted text).
-                if let Some(e) = insertion_at_source(story, pos, r.len) {
+                if let Some(e) = at_source {
                     x.start("Change");
                     self.change_attrs(x, e, "InsertedText");
                     x.end();
                     st.bare = Some(pos);
+                } else if let Some(i) = hold
+                    && holding.is_none()
+                {
+                    x.start("Change");
+                    if let Some(e) = story.changes[i].entries.iter().find(|e| e.is_insertion()) {
+                        self.change_attrs(x, e, "InsertedText");
+                    }
+                    holding = Some(i);
                 }
                 self.source_start(x, src);
                 open = Some(r.start + r.len);
@@ -416,10 +637,12 @@ impl Writer<'_> {
                 .get(want)
                 .filter(|c| c.start <= pos && c.entries.iter().any(|e| e.is_insertion()))
                 .map(|_| want)
-                .filter(|_| {
+                .filter(|&i| {
                     !matches!(ch, '\u{16}' | '\u{FFFC}')
                         && !story.xml_markers.contains_key(&pos)
                         && st.bare != Some(pos)
+                        && holding != Some(i)
+                        && !st.lifted.contains(&i)
                 });
             if inserted != want {
                 close_inserted(x, &mut buf, &mut inserted);
@@ -506,6 +729,9 @@ impl Writer<'_> {
                 close_inserted(x, &mut buf, &mut inserted);
                 // An XML marker ends the open text source.
                 if open.take().is_some() {
+                    x.end();
+                }
+                if holding.take().is_some() {
                     x.end();
                 }
                 let get = |k: &XmlKey| self.doc.xml.elements.get(k);
@@ -596,6 +822,9 @@ impl Writer<'_> {
         flush(x, &mut buf);
         close_inserted(x, &mut buf, &mut inserted);
         if open.is_some() {
+            x.end();
+        }
+        if holding.is_some() {
             x.end();
         }
         if endnote.is_some() {
@@ -839,7 +1068,7 @@ impl Writer<'_> {
                 x.attr("AppliedCellStyle", "CellStyle/$ID/[None]")
                     .attr("AppliedCellStylePriority", "0");
             }
-            self.text_ranges(x, &c.runs, story, &cell_id);
+            self.story_ranges(x, &c.runs, story, &cell_id);
             // Deleted text owned by the cell's terminator, which no range
             // holds, ends the cell (objects.md, tracked changes).
             if let Some(r) = c.runs.last()
@@ -858,7 +1087,7 @@ impl Writer<'_> {
         self.package_root(&mut x, "BackingStory");
         if let Some(s) = &self.doc.xml.story {
             self.story_start(&mut x, "XmlStory", s);
-            self.text_ranges(&mut x, &s.runs, s, &uref(Some(s.uid)));
+            self.story_ranges(&mut x, &s.runs, s, &uref(Some(s.uid)));
             x.end();
         }
         x.end();
@@ -1027,6 +1256,98 @@ mod tests {
             ),
             "{shape}"
         );
+    }
+
+    #[test]
+    fn writes_inserted_text_above_the_ranges_it_covers() {
+        use crate::model::{Attrs, ChangeEntry, ChangeRun, TextSource};
+        let run = |start, text: &str, style| TextRun {
+            start,
+            text: text.into(),
+            paragraph_style: None,
+            character_style: style,
+            paragraph_attrs: Attrs::default(),
+            character_attrs: Attrs::default(),
+        };
+        let inserted = |start, len| ChangeRun {
+            start,
+            len,
+            entries: vec![ChangeEntry {
+                kind: 2,
+                user: "u".into(),
+                time: 0,
+            }],
+        };
+        let mut story = Story {
+            uid: 9,
+            runs: vec![run(0, "ab", None), run(2, "cdef\r", Some(0x30))],
+            anchors: Default::default(),
+            tables: Default::default(),
+            text_variables: Default::default(),
+            sources: vec![SourceRange {
+                start: 4,
+                len: 1,
+                source: 0x40,
+                paragraph: false,
+            }],
+            xml_markers: Default::default(),
+            footnotes: Default::default(),
+            notes: Default::default(),
+            deletions: Default::default(),
+            // Over two runs, and with the extent of a source.
+            changes: vec![inserted(1, 2), inserted(4, 1)],
+            index_markers: Default::default(),
+            endnotes: Default::default(),
+            is_endnote: false,
+            endnote_ranges: Vec::new(),
+            text_destinations: Default::default(),
+            xml_element: None,
+            orientation: None,
+            toc_style: None,
+            settings: Default::default(),
+        };
+        let src = TextSource {
+            uid: 0x40,
+            name: "s".into(),
+            hidden: false,
+            character_style: None,
+            alternative: None,
+            format: None,
+        };
+        let doc = Document {
+            text_sources: [(0x40, src)].into_iter().collect(),
+            ..Document::default()
+        };
+        let w = Writer::for_test(&doc);
+        let shape = |story: &Story| -> String {
+            let out: String = w.story(story).lines().map(str::trim).collect();
+            out.split('<')
+                .skip_while(|t| !t.starts_with("ParagraphStyleRange"))
+                .filter(|t| !t.starts_with("Properties") && !t.starts_with("/Properties"))
+                .map(|t| {
+                    let (tag, rest) = t.split_once('>').unwrap_or((t, ""));
+                    let name = tag.split(' ').next().unwrap_or("");
+                    format!("<{name}>{rest}")
+                })
+                .collect()
+        };
+        let out = shape(&story);
+        assert!(
+            out.starts_with(
+                "<ParagraphStyleRange><CharacterStyleRange><Content>a</Content>\
+                 </CharacterStyleRange><Change><CharacterStyleRange><Content>b</Content>\
+                 </CharacterStyleRange><CharacterStyleRange><Content>c</Content>\
+                 </CharacterStyleRange></Change><CharacterStyleRange><Content>d</Content>\
+                 <Change><HyperlinkTextSource><Content>e</Content></HyperlinkTextSource>\
+                 </Change><Content>f</Content></CharacterStyleRange></ParagraphStyleRange>"
+            ),
+            "{out}"
+        );
+        // A table in the extent keeps the change inside each range.
+        story.runs[1].text = "c\u{16}ef\r".into();
+        story.changes.truncate(1);
+        story.changes[0].len = 3;
+        assert!(!shape(&story).contains("</CharacterStyleRange></Change>"));
     }
 
     #[test]

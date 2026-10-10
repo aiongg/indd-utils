@@ -206,11 +206,24 @@ For a paragraph-level source the empty `Change` is the last child of a
 first range, after the text deleted there (`Change DeletedText`); for a
 character-level source it is in the open range, after the deleted text.
 A source that ends inside the run or with it is inside the run's
-`Change` instead; the converter writes the `Change` inside such a
-source. Trustworthy pairs: IDML has 1,681 empty `Change` elements in 19
+`Change` instead (sources in tracked changes, below). Trustworthy pairs: IDML has 1,681 empty `Change` elements in 19
 documents, each directly before a source (1,668 paragraph-level, 13
 character-level), and the rule gives the same sources in every pair
 (stale pairs: 385 of 385).
+
+**Sources in tracked changes.** A character-level source whose whole
+extent lies inside an inserted-text change run is inside that run's
+`Change`: `CharacterStyleRange > Change > HyperlinkTextSource`, the
+`Change` closing after the source (or going on as the range's `Change`
+when the run continues). A change that starts inside a character-level
+source and ends with it is inside the source. A paragraph-level source
+inside a change written above the character ranges is inside that
+`Change` (`objects.md`, tracked changes). The converter does not wrap a
+source whose text holds a table, an anchored item or an XML marker,
+which a `Change` cannot hold. Over the trustworthy pairs of the corpus
+after 2026-10 this removes all 220 extra values of
+`HyperlinkTextSource/Change` (44 sources in 10 documents), where the
+converter had written the `Change` inside the source; no value is lost.
 
 A paragraph-level source that holds an XML marker is left out with a
 warning; a character-level source ends at an XML marker. A character-level

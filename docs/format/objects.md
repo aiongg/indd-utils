@@ -1898,17 +1898,56 @@ deleted-text stretches have no entries. `Change` attributes, in this
 order: `Date`, `ChangeType`, `UserName`, `AppliedDocumentUser`, the last
 two by the rule for notes.
 
-The converter writes deleted text before the owning character and wraps
-inserted text in a `Change` inside each character range it covers; a
-table, an anchored item (the schema allows no page item in a `Change`) or
-an XML marker ends it, and it is opened again after them, so a
-change that crosses character ranges or elements is written as several
-`Change` elements. Over all pairs, 6,024 of the 6,027 reference `Change`
-elements have an equal `Change` in the output (`Date`, `ChangeType`,
-`UserName`, `AppliedDocumentUser`, compared as multisets per pair); the
-output has 92 more, from such splits. Where a hyperlink source starts
-with inserted text, IDML writes an empty `Change` before the source
-(`hyperlinks.md`, sources at inserted text).
+**Where IDML puts an inserted-text `Change`.** IDML writes it at the
+lowest level that holds its whole extent, as for hyperlink sources
+(`hyperlinks.md`, extent and placement). The 3,962 `Change` elements of
+the 21 trustworthy pairs with tracked changes sit as follows:
+
+| Parent | Content | Elements |
+|---|---|---:|
+| `CharacterStyleRange` | inserted text within one range, also across a `Br` where the range goes on, and empty changes | 1,989 |
+| `CharacterStyleRange` | deleted text | 1,887 |
+| `CharacterStyleRange` | a `HyperlinkTextSource` with the change's extent | 43 |
+| character-level `HyperlinkTextSource` | inserted text from inside the source to its end | 13 |
+| `ParagraphStyleRange` (story or cell) | `CharacterStyleRange` children, and paragraph-level sources inside the extent | 23 |
+| paragraph-level `HyperlinkTextSource` | `CharacterStyleRange` children | 4 |
+| `Cell` | deleted text at the cell's end | 2 |
+| `Story` | `ParagraphStyleRange` children | 1 |
+
+So a change over several character ranges of one paragraph range is a
+child of the `ParagraphStyleRange`, one over several paragraph ranges
+a child of the `Story`, and one over several character ranges inside a
+paragraph-level source a child of the source. A change with the extent
+of a source holds it (`hyperlinks.md`, sources in tracked changes). The
+ranges are split at the ends of such a change, as at a source.
+
+The converter writes deleted text before the owning character. It
+writes inserted text that lies in one text run in a `Change` inside the
+character range. Inserted text over several runs (once the runs are
+split at the paragraph-level sources) is written above them: as a child
+of the paragraph range, or of the story where the runs belong to more
+than one paragraph range, which then ends and starts again at the
+change's ends. Inside a lifted change the character ranges have no
+`Change` of their own. A table, an anchored item (the schema allows no
+page item in a `Change`) or an XML marker in the extent keeps the
+change inside each character range, opened again after the element; so
+does a change that does not nest with a paragraph-level source.
+
+Over the 21 trustworthy pairs the output has 3,969 `Change` elements,
+and 3,960 of the 3,962 reference elements have an equal one (`Date`,
+`ChangeType`, `UserName`, compared as multisets per pair). The
+differences are the 4 changes of the export defect below and a few
+changes still split. compare.py gains
+13 range starts at the ends of lifted changes. Where a hyperlink source
+starts with inserted text, IDML writes an empty `Change` before the
+source (`hyperlinks.md`, sources at inserted text).
+
+**Export defect.** In one trustworthy pair, 4 inserted-text changes
+start inside a paragraph-level source and end after it. IDML writes each
+inside the source, holding the text past the source's end, and writes
+text after the source that the INDD stores once. The converter writes
+the INDD's text once, so this story counts as "story text differs" in
+compare.py.
 
 A deletion owned by the U+000D that ends a table cell, which no
 character range holds, is the last child of the `Cell`, after its last
