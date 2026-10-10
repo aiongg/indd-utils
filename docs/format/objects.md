@@ -208,6 +208,7 @@ with every code.
 | 0x14580 | Tab orders: u32 count, then per page u32 page UID and a UID list (the page's `TabOrder`) |
 | 0x140D | Master spreads: u16, 0 = `ShowMasterItems="false"` |
 | 0x140A | Master spreads: u32 story of the primary text frame (below) |
+| 0x2050C | Page transition (12 bytes): u32 type code, u32 40, u32 direction code (below) |
 
 Evidence, over the 5,129 spreads and 914 master spreads of the 495
 trustworthy pairs:
@@ -230,6 +231,27 @@ trustworthy pairs:
 - `TabOrder` of pages: the list for the page in its spread's chunk 0x14580
   equals the IDML list for 9,367 of 9,367 pages (8 with a tab order);
   pages not in the chunk have an empty `TabOrder`.
+
+**Page transitions.** Chunk 0x2050C gives `PageTransitionType` and
+`PageTransitionDirection`. Over the 11,676 spreads of the distinct
+little-endian pairs with the same major version (corpus after 2026-10):
+
+| u32 at 0 | `PageTransitionType` | u32 at 8 | `PageTransitionDirection` | Spreads (documents) |
+|---|---|---|---|---|
+| no chunk | `None` | | `NotApplicable` | 11,646 (1,453) |
+| 0 | `None` | 0 | `NotApplicable` | 12 (2) |
+| 0x205C8 | `BlindsTransition` | 0xB | `Horizontal` | 8 (4) |
+| 0x205CA | `CombTransition` | 0xB | `Horizontal` | 2 (2) |
+| 0x205CC | `DissolveTransition` | 0 | `NotApplicable` | 4 (4) |
+| 0x205CF | `PushTransition` | 1 | `Down` | 2 (2) |
+| 0x205D0 | `SplitTransition` | 0xD | `HorizontalIn` | 2 (2) |
+
+The u32 at 4 is 40 in every chunk, and every spread has
+`PageTransitionDuration="Medium"` (`idml-values.md`), so the field is
+not mapped. Master spreads have neither the chunk nor the attributes
+(2,395 of 2,395). The converter writes the two attributes on
+spreads for these codes, and leaves out an attribute whose code is not
+in the table.
 
 **Flattener settings.** Every IDML spread has a `FlattenerPreference`
 child. Chunk 0x10833 (52 bytes) is in 20 spreads of 5 trustworthy
@@ -1759,6 +1781,17 @@ reproduced for 5,273 of 5,273 paragraph styles and 2,191 of 2,202
 character styles. IDML has `ExtendedKeyboardShortcut` from DOM 15 on;
 the converter writes it from version 15.
 
+**Preview colour.** Fourteen bytes before the name's flag byte is a
+u32: 0, or the UID of an interface colour (class 0x1F11). IDML writes it
+as the style's `PreviewColor` property: `Nothing` for 0, otherwise the
+colour named as for layers. Over all pairs of the corpus after 2026-10
+(styles other than the root styles, matched by name): 8,457 of 8,457
+paragraph styles and 3,638 of 3,638 character styles. Two character
+styles of one document (two pairs) have a colour: UID 0x20, RGB 0.5 0.5
+0.5, `Gray`, and UID 0x35, RGB 0.48 0.73 0.85, `GridBlue`. The root
+styles have no `PreviewColor` in IDML. The converter leaves the property
+to the observed values when the u32 is neither 0 nor an interface colour.
+
 **Export flags (chunk 0x28F0).** u32 count of export tag maps, the
 maps, then u16 values: `SplitDocument`, `EmitCss` and, from DOM 13,
 `IncludeClass` (1 `true`, 0 `false`); later versions add more u16
@@ -1846,6 +1879,25 @@ counts are matches of 337 unless stated.
 | 0x1B92E | u32 count, IDs of the categories the style turns on | `Enable…` attributes (below) |
 | 0x1B946 | u32 paragraph style, 0 = none | `AppliedParagraphStyle` (`n` for none) |
 | 0xCD32 | u16 0 for none, or u16 1 and the UID of a named grid | `AppliedNamedGrid` (named grids, above) |
+| 0x1B94D | u16, 1 = true | `ApplyNextParagraphStyle` (below) |
+| 0x2800 | Anchored object settings, as in the preferences | `AnchoredObjectSetting` (below) |
+| 0x1B907 | u32 based-on style, flag byte and name, u32 shortcut key | `BasedOn`, `Name`, `KeyboardShortcut` (below) |
+
+**Settings found in the corpus after 2026-10.** Object styles other
+than `[None]`, matched by `Self` with their IDML style over the 1,251
+trustworthy pairs (4,305 styles; with `[None]`, 5,556):
+
+| Field | IDML | Matches |
+|---|---|---|
+| 0x1B94D u16: 0 `false`, 1 `true`; no chunk `false` | `ApplyNextParagraphStyle` | 3,963 with 0, 3 with 1, 339 without the chunk; `[None]` has no attribute |
+| 0x1B907, u32 after the name: 0 | `KeyboardShortcut="0 0"` | every style with 0 (other keys are followed by two modifier bytes as for paragraph styles, but their codes differ from those of paragraph styles; the converter leaves them out) |
+| 0x3776 (44 bytes) u16 at 40: 1 `false`, 0 `true`; no chunk `false` | `TextWrapPreference` `ApplyToMasterPageOnly` | 3,914, 84 and 1,558 of 5,556 |
+| 0x1B924 u16 at 140, 1 = true (142 bytes or more) | `TextFramePreference` `UseNoLineBreaksForAutoSizing` | 5,518 of 5,518 (24 true) |
+| 0x2800 f64 at 16 | `AnchoredObjectSetting` `AnchorXoffset` | 5,551 of 5,551 (28 not 0); 5 styles have no chunk |
+| 0x2800 u16 at 42: 1 `TextFrame`, 4 `AnchorLocation` | `AnchoredObjectSetting` `HorizontalReferencePoint` | 5,547 and 4 |
+
+The converter reads the anchor fields wherever it reads chunk 0x2800:
+object styles, anchored frames and the preferences.
 
 **Attribute list.** The IDs of page items carry over. `CornerOption` 0
 is `None` and 0x5A16 `InverseRoundedCorner` (1 style). The two gradient

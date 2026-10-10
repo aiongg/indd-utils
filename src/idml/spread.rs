@@ -121,6 +121,22 @@ pub(super) const POINTS: [&str; 9] = [
     "BottomCenterPoint",
     "BottomRightPoint",
 ];
+/// `PageTransitionType` codes of spreads (objects.md, spreads).
+const TRANSITION_TYPES: [(u32, &str); 6] = [
+    (0, "None"),
+    (0x205C8, "BlindsTransition"),
+    (0x205CA, "CombTransition"),
+    (0x205CC, "DissolveTransition"),
+    (0x205CF, "PushTransition"),
+    (0x205D0, "SplitTransition"),
+];
+/// `PageTransitionDirection` codes of spreads.
+const TRANSITION_DIRECTIONS: [(u32, &str); 4] = [
+    (0, "NotApplicable"),
+    (1, "Down"),
+    (0xB, "Horizontal"),
+    (0xD, "HorizontalIn"),
+];
 /// `BaselineFrameGridRelativeOption` codes (objects.md, baseline frame
 /// grid of text frames).
 pub(super) const BASELINE_RELATIVE: [Option<&str>; 4] = [
@@ -1034,6 +1050,15 @@ impl Writer<'_> {
                 Some(_) => {}
             }
         } else {
+            // Page transitions (objects.md, spreads); without the chunk,
+            // none.
+            let (ty, dir) = s.transition.unwrap_or((0, 0));
+            if let Some(t) = TRANSITION_TYPES.iter().find(|(c, _)| *c == ty) {
+                x.attr("PageTransitionType", t.1);
+            }
+            if let Some(d) = TRANSITION_DIRECTIONS.iter().find(|(c, _)| *c == dir) {
+                x.attr("PageTransitionDirection", d.1);
+            }
             match s.shuffle {
                 Some(0) => {
                     x.attr("AllowPageShuffle", "true");
@@ -1207,6 +1232,7 @@ mod tests {
             flattener_resolution: None,
             show_master_items: None,
             primary_story: None,
+            transition: None,
         };
         assert_eq!(primary_text_frame(&s).as_deref(), Some("n"));
         s.primary_story = Some(0);

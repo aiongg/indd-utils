@@ -28,6 +28,10 @@ pub struct Style {
     /// chunk has tag maps, whose layout is not known; `None` without the
     /// chunk.
     pub export_flags: Option<Vec<u16>>,
+    /// `PreviewColor`: the u32 14 bytes before the name's flag byte, 0
+    /// for none or an interface colour (`docs/format/objects.md`, styles).
+    /// `None` for another value or a shorter header.
+    pub preview_color: Option<Option<[f64; 3]>>,
 }
 
 /// A table of contents style (class 0x11605), from chunk 0x11605: a flag
@@ -83,6 +87,11 @@ pub struct ObjectStyle {
     pub enabled: Option<Vec<u32>>,
     /// Paragraph style applied to text frames (chunk 0x1B946).
     pub paragraph_style: Option<u32>,
+    /// The u32 after the name in chunk 0x1B907: the keyboard shortcut
+    /// key, 0 for none.
+    pub shortcut_key: Option<u32>,
+    /// Chunk 0x1B94D, u16: 1 for `ApplyNextParagraphStyle="true"`.
+    pub apply_next: Option<u16>,
     /// Anchored object settings (chunk 0x2800).
     pub anchor: Option<AnchorSettings>,
     /// Chunk 0xCD32: the applied named grid (`Reader::applied_named_grid`).
@@ -171,6 +180,14 @@ impl<'a> Reader<'a> {
                 .position(|w| w[0] == 2 && w[2..] == [36, 0, 36, 0x40])
                 .and_then(|i| self.cursor(&data[at + i..]).string().ok())
         };
+        let preview_color = match (at >= 14)
+            .then(|| self.enc().u32_at(&data, at - 14))
+            .flatten()
+        {
+            Some(0) => Some(None),
+            Some(u) => self.ui_color(u)?.map(Some),
+            None => None,
+        };
         let attrs = match self.chunk(uid, chunk::STYLE_ATTRS)? {
             Some(d) if d.len() >= 2 => {
                 let mut c = self.cursor(&d);
@@ -206,6 +223,7 @@ impl<'a> Reader<'a> {
             unique_id,
             shortcut,
             export_flags,
+            preview_color,
         }))
     }
 
@@ -309,6 +327,8 @@ impl<'a> Reader<'a> {
         let based_on = c.u32()?;
         let builtin = c.flag()? == 1;
         let name = c.string()?;
+        // The u32 after the name: the keyboard shortcut key.
+        let shortcut_key = c.u32().ok();
         let u32_chunk = |id: u32| -> Result<Option<u32>, Error> {
             match self.chunk(uid, id)? {
                 Some(d) if d.len() >= 4 => Ok(Some(self.cursor(&d).u32()?)),
@@ -383,6 +403,10 @@ impl<'a> Reader<'a> {
                 None => None,
             },
             paragraph_style: u32_chunk(chunk::OBJECT_STYLE_PARAGRAPH_STYLE)?,
+            shortcut_key,
+            apply_next: self
+                .chunk(uid, chunk::OBJECT_STYLE_APPLY_NEXT)?
+                .and_then(|d| self.enc().u16_at(&d, 0)),
             anchor: self
                 .chunk(uid, chunk::ANCHOR_SETTINGS)?
                 .map(|d| AnchorSettings::read(self.enc(), &d)),
@@ -402,6 +426,9 @@ pub struct AnchorSettings {
     /// 40 and 48 (anchored position and horizontal alignment), if the
     /// chunk has 58 bytes. Each group changes together in every sample.
     pub fields: Option<([u16; 3], [u16; 2])>,
+    /// f64 `AnchorXoffset` at 16 and the u16 horizontal reference point
+    /// at 42, if the chunk has 58 bytes.
+    pub horizontal: Option<(f64, u16)>,
 }
 
 impl AnchorSettings {
@@ -410,6 +437,7 @@ impl AnchorSettings {
         AnchorSettings {
             offset: (d.len() >= 54).then(|| (enc.f64_at(d, 0).unwrap_or_default(), u(52))),
             fields: (d.len() >= 58).then(|| ([u(46), u(50), u(56)], [u(40), u(48)])),
+            horizontal: (d.len() >= 58).then(|| (enc.f64_at(d, 16).unwrap_or_default(), u(42))),
         }
     }
 }
@@ -450,6 +478,8 @@ pub struct ObjectStyleFrame {
     /// u16 at 120 and f64 at 122 (minimum height), u16 at 130 and f64 at
     /// 132 (minimum width).
     pub minimum_sizes: Option<([bool; 2], [f64; 2])>,
+    /// u16 at 140, 1 = true: `UseNoLineBreaksForAutoSizing`.
+    pub no_line_breaks: Option<bool>,
     /// Baseline frame grid at 82, in the layout of frames' chunk 0x2834.
     pub baseline_grid: Option<super::BaselineGrid>,
 }
@@ -473,6 +503,7 @@ impl ObjectStyleFrame {
             vertical_justification: code(74),
             auto_sizing: (|| Some((code(116)?, code(118)?)))(),
             minimum_sizes: (|| Some(([flag(120)?, flag(130)?], [f(122)?, f(132)?])))(),
+            no_line_breaks: flag(140),
             baseline_grid: super::BaselineGrid::read(enc, d, 82),
         }
     }

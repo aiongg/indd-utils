@@ -227,6 +227,7 @@ mod tests {
                 flattener_resolution: None,
                 show_master_items: None,
                 primary_story: None,
+                transition: None,
             }],
             // Listed out of page order, as in some samples.
             sections: vec![

@@ -158,6 +158,9 @@ pub struct Spread {
     /// Master spreads: the story of the primary text frame (chunk
     /// 0x140A); `None` without the chunk.
     pub primary_story: Option<u32>,
+    /// Page transition type and direction codes (chunk 0x2050C, u32 at 0
+    /// and 8); `None` without the chunk.
+    pub transition: Option<(u32, u32)>,
 }
 
 /// A ruler guide (class 0x3301, chunk 0x3308). See `docs/format/objects.md`.
@@ -464,7 +467,11 @@ impl<'a> Reader<'a> {
         let short = |id: u32| -> Result<Option<u16>, Error> {
             Ok(self.chunk(uid, id)?.and_then(|d| self.enc().u16_at(&d, 0)))
         };
+        let transition = self.chunk(uid, chunk::SPREAD_TRANSITION)?.and_then(|d| {
+            Some((self.enc().u32_at(&d, 0)?, self.enc().u32_at(&d, 8)?))
+        });
         Ok(Spread {
+            transition,
             uid,
             master_name,
             transform,

@@ -54,6 +54,14 @@ pub(super) fn anchored_settings(a: &AnchorSettings) -> Vec<(&'static str, String
         out.push(("VerticalAlignment", a.to_string()));
     }
     out.push(("AnchorYoffset", num(y)));
+    if let Some((x, reference)) = a.horizontal {
+        out.push(("AnchorXoffset", num(x)));
+        match reference {
+            1 => out.push(("HorizontalReferencePoint", "TextFrame".into())),
+            4 => out.push(("HorizontalReferencePoint", "AnchorLocation".into())),
+            _ => {}
+        }
+    }
     if let Some((point, position)) = a.fields {
         match point {
             [0, 2, 1] => {
@@ -883,6 +891,41 @@ pub(super) const ITEM_ATTRS: &[(u32, &str, Kind)] = &[
         0x6E8C,
         "StrokeAlignment",
         Kind::Enum(&[(0, "CenterAlignment"), (1, "InsideAlignment")]),
+    ),
+];
+
+/// Line end codes of 0x6E71 and 0x6E72 (attributes.md, line ends).
+const LINE_ENDS: &[(u32, &str)] = &[
+    (0, "None"),
+    (0x5A06, "TriangleWideArrowHead"),
+    (0x5A08, "CurvedArrowHead"),
+    (0x5A09, "CircleArrowHead"),
+    (0x5A0A, "CircleSolidArrowHead"),
+    (0x5A0D, "BarArrowHead"),
+];
+
+/// Stroke attributes of object style lists that the converter writes on
+/// object styles only; when IDML writes them on page items is not known
+/// (attributes.md, strokes).
+pub(super) const STYLE_STROKE_ATTRS: &[(u32, &str, Kind)] = &[
+    (0x6E66, "StrokeTint", Kind::Number),
+    (0x6E89, "GapColor", Kind::Swatch),
+    (
+        0x6E6B,
+        "EndCap",
+        Kind::Enum(&[(0, "ButtEndCap"), (1, "RoundEndCap")]),
+    ),
+    (
+        0x6E6C,
+        "EndJoin",
+        Kind::Enum(&[(0, "MiterEndJoin"), (1, "RoundEndJoin")]),
+    ),
+    (0x6E71, "LeftLineEnd", Kind::Enum(LINE_ENDS)),
+    (0x6E72, "RightLineEnd", Kind::Enum(LINE_ENDS)),
+    (
+        0x6E84,
+        "ArrowHeadAlignment",
+        Kind::Enum(&[(0, "InsidePath"), (1, "OutsidePath")]),
     ),
 ];
 

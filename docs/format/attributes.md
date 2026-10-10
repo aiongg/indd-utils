@@ -188,21 +188,40 @@ IDML differs from its object style in four stroke attributes:
 identified above, which leaves 0x6E8C for `StrokeAlignment`. The code for
 `OutsideAlignment` is not known; the converter leaves out other codes.
 
-**Not identified.** These attributes have one value in every object style
-and in every item whose IDML writes them, so the field cannot be told
-apart from others with the same value: `StrokeTint` (-1),
-`GapColor` (`Swatch/None`), `GapTint` (-1), `EndCap` (`ButtEndCap`),
-`EndJoin` (`MiterEndJoin`), `LeftArrowHeadScale` and
-`RightArrowHeadScale` (100), `ArrowHeadAlignment` (`InsidePath`). Items
-with another `StrokeTint` (20 in one pair) have no INDD object with the
-same UID. `StrokeCornerAdjustment` and `StrokeDashAndGap` do not occur in
-the corpus IDML files.
+**More stroke attributes of object styles.** The corpus after 2026-10
+shows other values for these attributes. Object styles other than
+`[None]` were matched by `Self` with their IDML style over the 1,251
+trustworthy pairs (4,305 styles; every one has the IDs below except
+0x6E84):
 
-**Line ends.** One line in the pairs has
-`LeftLineEnd="CurvedArrowHead"` and `RightLineEnd="BarArrowHead"`, and
-its INDD list has 0x6E71 = 0x5A08 and 0x6E72 = 0x5A0D (both 0 in all 576
-object styles, whose line ends are `None`). Either attribute could be
-either ID, so line ends are not converted.
+| ID | IDML attribute | Values | Matches |
+|---|---|---|---|
+| 0x6E66 | `StrokeTint` | f64 | 4,305 of 4,305; 69 styles other than −1 (25 to 75) |
+| 0x6E89 | `GapColor` | swatch UID | 4,305 of 4,305; 23 `Color/Paper` |
+| 0x6E6B | `EndCap` | 0 `ButtEndCap`, 1 `RoundEndCap` | 4,305 of 4,305; 3 round |
+| 0x6E6C | `EndJoin` | 0 `MiterEndJoin`, 1 `RoundEndJoin` | 4,305 of 4,305; 5 round |
+| 0x6E71 | `LeftLineEnd` | line end code (below) | 4,305 of 4,305; 9 other than `None` |
+| 0x6E72 | `RightLineEnd` | line end code | 4,305 of 4,305; 14 other than `None` |
+| 0x6E84 | `ArrowHeadAlignment` | 0 `InsidePath`, 1 `OutsidePath` | in the 3,349 styles whose IDML has the attribute, 3,349 of 3,349; one style has 1 |
+
+Line end codes: 0 `None`, 0x5A06 `TriangleWideArrowHead` (10 styles),
+0x5A08 `CurvedArrowHead` (4), 0x5A09 `CircleArrowHead` (2), 0x5A0A
+`CircleSolidArrowHead` (7). One line in the pairs before 2026-10 has
+0x6E71 = 0x5A08 and 0x6E72 = 0x5A0D with `LeftLineEnd="CurvedArrowHead"`
+and `RightLineEnd="BarArrowHead"`, which gives 0x5A0D `BarArrowHead`.
+`ArrowHeadAlignment` code 1 rests on one style; that style's line ends
+are mapped by their own IDs, which leaves 0x6E84.
+
+The converter writes these on object styles. Page items have the same
+IDs, but when IDML writes them on an item is not established; the
+converter does not write them there.
+
+**Not identified.** `GapTint` (−1 in IDML) is not 0x6E8A: two styles
+with 100 there have −1 in IDML. `LeftArrowHeadScale` and
+`RightArrowHeadScale` are 100 in every style, as are 0x6E95 and 0x6E96.
+0x6E67, 0x6E6A, 0x6E78 and 0x6E8B are 0 in every style, 0x6E73 in all
+but 2. `StrokeCornerAdjustment` and `StrokeDashAndGap` do not occur in
+the corpus IDML files.
 
 ## Text attribute lists
 

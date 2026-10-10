@@ -397,6 +397,7 @@ impl Writer<'_> {
             node.children.insert(0, e);
         }
         let mut attrs = self.item_attr_values(&os.attrs);
+        attrs.extend(self.attr_values(&os.attrs, STYLE_STROKE_ATTRS));
         for (id, name) in [
             (0x551E, "GradientFillAngle"),
             (0x5524, "GradientStrokeAngle"),
@@ -414,6 +415,19 @@ impl Writer<'_> {
                 attrs.push(("AppliedParagraphStyle", self.style_ref(Some(p), true)))
             }
             _ => {}
+        }
+        // Chunk 0x1B94D; without it, false. The root style has none
+        // (objects.md, object style settings).
+        // A style without a keyboard shortcut (objects.md, object style
+        // settings); other keys are not decoded.
+        if !root && os.shortcut_key == Some(0) {
+            attrs.push(("KeyboardShortcut", "0 0".into()));
+        }
+        if !root {
+            let on = os.apply_next == Some(1);
+            if matches!(os.apply_next, None | Some(0 | 1)) {
+                attrs.push(("ApplyNextParagraphStyle", on.to_string()));
+            }
         }
         let mut effects = Vec::new();
         // The root `[None]` has no `Enable…` attributes and no effects
@@ -531,6 +545,11 @@ impl Writer<'_> {
             {
                 tf.push(("AutoSizingType", ty.to_string()));
                 tf.push(("AutoSizingReferencePoint", point.to_string()));
+            }
+            if major >= 8
+                && let Some(v) = fr.no_line_breaks
+            {
+                tf.push(("UseNoLineBreaksForAutoSizing", v.to_string()));
             }
             if major >= 8
                 && let Some(([use_height, use_width], [height, width])) = fr.minimum_sizes
@@ -652,6 +671,19 @@ impl Writer<'_> {
             _ => {}
         }
         node.set(&["StoryPreference"], story);
+        // The u32 at 40 of the wrap chunk: 0 for `ApplyToMasterPageOnly`;
+        // without the chunk, false (objects.md, object style settings).
+        if node.child("TextWrapPreference").is_some() {
+            match os.text_wrap.as_ref().map(|w| w.flags) {
+                Some(1) | None => {
+                    node.set(&["TextWrapPreference"], vec![("ApplyToMasterPageOnly", "false".into())]);
+                }
+                Some(0) => {
+                    node.set(&["TextWrapPreference"], vec![("ApplyToMasterPageOnly", "true".into())]);
+                }
+                _ => {}
+            }
+        }
         if let Some(mode) = text_wrap_mode(os.text_wrap.as_ref()) {
             node.set(&["TextWrapPreference"], vec![("TextWrapMode", mode.into())]);
             node.set(
@@ -819,6 +851,25 @@ impl Writer<'_> {
             x.attrs_missing(values::when_written(tag, doc.version.major).iter());
             if let Some(p) = n.child("Properties") {
                 extra = p.children.clone();
+            }
+        }
+        // The style's preview colour (objects.md, styles) in place of the
+        // observed one; the root styles have none.
+        if !is_root && let Some(c) = s.preview_color {
+            let node = match c {
+                None => Some(Node {
+                    tag: "PreviewColor".into(),
+                    attrs: vec![("type".into(), "enumeration".into())],
+                    text: Some("Nothing".into()),
+                    children: Vec::new(),
+                }),
+                Some(rgb) => ui_color_property("PreviewColor", rgb),
+            };
+            if let Some(n) = node {
+                match extra.iter_mut().find(|e| e.tag == "PreviewColor") {
+                    Some(e) => *e = n,
+                    None => extra.push(n),
+                }
             }
         }
         if let Some(base) = s.based_on.and_then(|b| doc.styles.get(&b)) {

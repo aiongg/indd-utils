@@ -198,6 +198,7 @@ mod tests {
             flattener_resolution: None,
             show_master_items: None,
             primary_story: None,
+            transition: None,
         };
         // Master B (pages listed right to left) is based on master A.
         let mut masters = vec![

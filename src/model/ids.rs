@@ -118,6 +118,8 @@ pub mod chunk {
     pub const SPREAD_SHUFFLE: u32 = 0x1A8;
     /// Flattener settings of a spread.
     pub const SPREAD_FLATTENER: u32 = 0x10833;
+    /// Page transition of a spread: u32 type code, u32, u32 direction code.
+    pub const SPREAD_TRANSITION: u32 = 0x2050C;
     /// Tab orders: u32 count, then per page u32 page and a UID list.
     pub const SPREAD_TAB_ORDERS: u32 = 0x14580;
     /// u16 0 if a master spread hides the items of its own master.
@@ -287,6 +289,8 @@ pub mod chunk {
     pub const OBJECT_STYLE_CONTOUR: u32 = 0x3777;
     pub const OBJECT_STYLE_ENABLED: u32 = 0x1B92E;
     pub const OBJECT_STYLE_PARAGRAPH_STYLE: u32 = 0x1B946;
+    /// u16 1 when an object style applies the next paragraph style.
+    pub const OBJECT_STYLE_APPLY_NEXT: u32 = 0x1B94D;
     pub const GUIDE: u32 = 0x3308;
 }
 
