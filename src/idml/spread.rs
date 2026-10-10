@@ -344,9 +344,8 @@ impl Writer<'_> {
         }
         // A category is off when the applied style's list lacks its ID, or
         // the frame has no style (objects.md, text frame preferences).
-        let off = |id: u32| {
-            style.is_none_or(|s| !s.enabled.as_ref().is_some_and(|on| on.contains(&id)))
-        };
+        let off =
+            |id: u32| style.is_none_or(|s| !s.enabled.as_ref().is_some_and(|on| on.contains(&id)));
         let footnote_options = self.frame_footnote_options(p, style, off(0xADCA));
         let baseline = self.frame_baseline_grid(p, style, off(0xADC8));
         // Before DOM 11 IDML gives a frame without values no element.
@@ -398,9 +397,7 @@ impl Writer<'_> {
         }
         // Without chunk 0x22608 the values are false, 12 and 6.
         let [min, between] = p.footnotes.unwrap_or([12.0, 6.0]);
-        let (span, smin, sbetween) = style
-            .and_then(|s| s.footnote)
-            .unwrap_or((false, 12.0, 6.0));
+        let (span, smin, sbetween) = style.and_then(|s| s.footnote).unwrap_or((false, 12.0, 6.0));
         let differ = p.footnote_span != span
             || !applied::same_value(&num(min), &num(smin))
             || !applied::same_value(&num(between), &num(sbetween));
@@ -448,7 +445,11 @@ impl Writer<'_> {
             "StartingOffsetForBaselineFrameGrid",
             num(g.start),
         );
-        if let Some(r) = BASELINE_RELATIVE.get(g.relative as usize).copied().flatten() {
+        if let Some(r) = BASELINE_RELATIVE
+            .get(g.relative as usize)
+            .copied()
+            .flatten()
+        {
             push(
                 g.relative != sg.relative,
                 "BaselineFrameGridRelativeOption",

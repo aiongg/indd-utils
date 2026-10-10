@@ -572,9 +572,7 @@ impl<'a> Reader<'a> {
             first_baseline_offset: self.cursor(&just).u16()?,
             vertical_justification: self.cursor(&just[2..]).u16()?,
             vertical_balance_columns: self.cursor(&just[20..]).u16()? != 0,
-            auto_sizing_type: auto_sizing
-                .then(|| self.enc().u16_at(&just, 22))
-                .flatten(),
+            auto_sizing_type: auto_sizing.then(|| self.enc().u16_at(&just, 22)).flatten(),
             auto_sizing_reference_point: auto_sizing
                 .then(|| self.enc().u16_at(&just, 24))
                 .flatten(),
@@ -594,9 +592,7 @@ impl<'a> Reader<'a> {
                 .chunk(mcf, chunk::FRAME_COLUMN_RULE_OVERRIDE)?
                 .map(|d| d.iter().any(|&b| b != 0)),
             footnotes,
-            footnote_span: footnote_chunk
-                .and_then(|d| self.enc().u16_at(&d, 2))
-                == Some(1),
+            footnote_span: footnote_chunk.and_then(|d| self.enc().u16_at(&d, 2)) == Some(1),
             baseline_grid,
             baseline_rgb,
             inset,

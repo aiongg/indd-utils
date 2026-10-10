@@ -622,7 +622,11 @@ impl Writer<'_> {
                     ("UseCustomBaselineFrameGrid", g.use_custom.to_string()),
                     ("StartingOffsetForBaselineFrameGrid", num(g.start)),
                 ];
-                if let Some(r) = BASELINE_RELATIVE.get(g.relative as usize).copied().flatten() {
+                if let Some(r) = BASELINE_RELATIVE
+                    .get(g.relative as usize)
+                    .copied()
+                    .flatten()
+                {
                     attrs.push(("BaselineFrameGridRelativeOption", r.to_string()));
                 }
                 attrs.push(("BaselineFrameGridIncrement", num(g.increment)));
@@ -676,10 +680,16 @@ impl Writer<'_> {
         if node.child("TextWrapPreference").is_some() {
             match os.text_wrap.as_ref().map(|w| w.flags) {
                 Some(1) | None => {
-                    node.set(&["TextWrapPreference"], vec![("ApplyToMasterPageOnly", "false".into())]);
+                    node.set(
+                        &["TextWrapPreference"],
+                        vec![("ApplyToMasterPageOnly", "false".into())],
+                    );
                 }
                 Some(0) => {
-                    node.set(&["TextWrapPreference"], vec![("ApplyToMasterPageOnly", "true".into())]);
+                    node.set(
+                        &["TextWrapPreference"],
+                        vec![("ApplyToMasterPageOnly", "true".into())],
+                    );
                 }
                 _ => {}
             }
