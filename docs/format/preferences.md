@@ -175,9 +175,9 @@ Chunk 0x16344 (621 files): from offset 10, the font family and the font
 style, each a u32 length in code units followed by text segments, then
 u32 point size and u32 UID of an interface colour (`objects.md`,
 interface colours), written as `WatermarkFontColor`. Family, style and
-size match 621 of 621. The 33 files without the chunk are left with the
-observed values only. Without the chunk the font follows the language
-of the assignment name (values of the exporting edition, below).
+size match 621 of 621. In files without the chunk the font follows the
+language of the assignment name (values of the exporting edition,
+below); the other values are the observed ones.
 
 ## Text defaults (`TextDefault`)
 
@@ -274,7 +274,7 @@ trustworthy pairs.
 Chunk 0x550: f64 `Left`, `Top`, `Right`, `Bottom` at 0, 8, 16, 24 (528
 of 528 files). The 126 files without it have 36 for all four.
 
-Chunk 0x555 (24 bytes): u32 `ColumnCount` at 0, f64 `ColumnGutter` at 4
+Chunk 0x555: u32 `ColumnCount` at 0, f64 `ColumnGutter` at 4
 (119 of 119), u16 at 12 the column direction: 0 `Horizontal`, 1
 `Vertical`. Without it, `ColumnCount` is 1 (535 of 535) and
 `ColumnGutter` follows the edition (values of the exporting edition,
@@ -285,9 +285,8 @@ below).
 `StoryOrientation` of the story settings (chunk 0x280, byte 116). With
 both rules the converter reproduces 1,249 of 1,251 values of each in
 the trustworthy pairs of the corpus after 2026-10 (75 of them
-`Vertical`). The 2 others have no chunk, horizontal
-story orientation and horizontal master pages, but `Vertical` in IDML;
-no field was found for them.
+`Vertical`). The 2 others have no chunk and a horizontal story
+orientation, but `Vertical` in IDML; no field was found for them.
 
 ## Anchored objects (`AnchoredObjectSetting`)
 
