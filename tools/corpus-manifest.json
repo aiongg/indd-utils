@@ -1706,6 +1706,49 @@
    "licence_evidence": "European Commission legal notice: EU-owned content CC BY 4.0",
    "doubt": "logos, trademarks and third-party works (photos) excluded; zip not versioned",
    "files": 72
+  },
+  {
+   "slug": "phinney-world-ready-indesign",
+   "homepage": "https://web.archive.org/web/20120105221247/http://www.thomasphinney.com/2009/01/adobe-world-ready-composer/",
+   "licence": "BSD-3-Clause",
+   "licence_evidence": "post section \"End-User License for Scripts & Templates\": BSD 3-clause text, Copyright 2008, 2009, Peter Kahrel & Thomas Phinney",
+   "doubt": "the zip comes from a Wayback Machine capture; the site refuses scripted downloads",
+   "files": 1
+  },
+  {
+   "slug": "zenodo-11063384-mainali-nepali-chapter",
+   "homepage": "https://zenodo.org/records/11063384",
+   "licence": "CC-BY-4.0",
+   "licence_evidence": "Zenodo record licence field",
+   "files": 1
+  },
+  {
+   "slug": "zenodo-15620982-gerada-gsc-awareness",
+   "homepage": "https://zenodo.org/records/15620982",
+   "licence": "CC-BY-4.0",
+   "licence_evidence": "Zenodo record licence field",
+   "files": 1
+  },
+  {
+   "slug": "zenodo-17162974-amac-perfusionists",
+   "homepage": "https://zenodo.org/records/17162974",
+   "licence": "CC-BY-4.0",
+   "licence_evidence": "Zenodo record licence field",
+   "files": 1
+  },
+  {
+   "slug": "zenodo-23061047-estes-red-tape-theory",
+   "homepage": "https://zenodo.org/records/23061047",
+   "licence": "CC-BY-4.0",
+   "licence_evidence": "Zenodo record licence field",
+   "files": 1
+  },
+  {
+   "slug": "zenodo-23121553-estes-red-thread-thesis",
+   "homepage": "https://zenodo.org/records/23121553",
+   "licence": "CC-BY-4.0",
+   "licence_evidence": "Zenodo record licence field",
+   "files": 1
   }
  ],
  "archives": [
@@ -1965,6 +2008,13 @@
    "size": 840191449,
    "sha256": "954d4d8624cecbe96866033270ed9a48b7b31401b4462582b80bd616395e730d",
    "source": "https://erasmus-plus.ec.europa.eu/communication-package-for-erasmus-2021-2027"
+  },
+  {
+   "id": "phinney-world-ready-indesign/world-ready-indesign.zip",
+   "url": "https://web.archive.org/web/20120311173007id_/http://www.thomasphinney.com/wp-content/uploads/2009/01/world-ready-indesign.zip",
+   "size": 441401,
+   "sha256": "5c172dacb345c310cd8c31ddeb86b307b03a103eef0e3b476e681a60d268252e",
+   "source": "https://web.archive.org/web/20120105221247/http://www.thomasphinney.com/2009/01/adobe-world-ready-composer/"
   }
  ],
  "files": [
@@ -26341,6 +26391,56 @@
    "archive": "eu-erasmus-plus-visual-identity/Source files2023.zip",
    "member": "Source files/Export/PDF/ErasmusPlus_2021_27-social_medias-templates_2023/ErasmusPlus_2021_27-social_medias-templates_2023_02.pdf",
    "source": "https://erasmus-plus.ec.europa.eu/communication-package-for-erasmus-2021-2027"
+  },
+  {
+   "path": "phinney-world-ready-indesign/World-Ready InDesign.indt",
+   "size": 909312,
+   "sha256": "2a82303a3449affefebe2ab3f4887b3eb9d1bb767312b4ccc4219d5def07ddc5",
+   "licence": "BSD-3-Clause",
+   "archive": "phinney-world-ready-indesign/world-ready-indesign.zip",
+   "member": "World-Ready InDesign.indt",
+   "source": "https://web.archive.org/web/20120105221247/http://www.thomasphinney.com/2009/01/adobe-world-ready-composer/"
+  },
+  {
+   "path": "zenodo-11063384-mainali-nepali-chapter/paris-commune-october-revolution.indd",
+   "size": 4816896,
+   "sha256": "e3f79d6afdb3982c345569cd69687ec4425ec0afcc7ee7f7aa85402573d6659a",
+   "licence": "CC-BY-4.0",
+   "url": "https://zenodo.org/api/records/11063384/files/11.%20%E0%A4%B5%E0%A4%BF%E0%A4%B6%E0%A5%8D%E0%A4%B5%20%E0%A4%B8%E0%A4%AE%E0%A4%BE%E0%A4%9C%E0%A4%B5%E0%A4%BE%E0%A4%A6%E0%A5%80%20%E0%A4%95%E0%A5%8D%E0%A4%B0%E0%A4%BE%E0%A4%A8%E0%A5%8D%E0%A4%A4%E0%A4%BF%E0%A4%95%E0%A5%8B%20%E0%A4%87%E0%A4%A4%E0%A4%BF%E0%A4%B9%E0%A4%BE%E0%A4%B8%E0%A4%AE%E0%A4%BE%20%E0%A4%B2%E0%A4%BF%E0%A4%96%E0%A4%BF%E0%A4%A4%20%E0%A4%A6%E0%A5%81%E0%A4%88%20%E0%A4%95%E0%A5%8D%E0%A4%B0%E0%A4%BE%E0%A4%A8%E0%A5%8D%E0%A4%A4%E0%A4%BF%20%E0%A4%AA%E0%A5%87%E0%A4%B0%E0%A4%BF%E0%A4%B8%20%E0%A4%95%E0%A4%AE%E0%A5%8D%E0%A4%AF%E0%A5%81%E0%A4%A8%20%E0%A4%B0%20%E0%A4%85%E0%A4%95%E0%A5%8D%E0%A4%9F%E0%A5%8B%E0%A4%AC%E0%A4%B0%20%E0%A4%B8%E0%A4%AE%E0%A4%BE%E0%A4%9C%E0%A4%B5%E0%A4%BE%E0%A4%A6%E0%A5%80%20%E0%A4%95%E0%A5%8D%E0%A4%B0%E0%A4%BE%E0%A4%A8%E0%A5%8D%E0%A4%A4%E0%A4%BF.indd/content",
+   "source": "https://zenodo.org/records/11063384",
+   "note": "saved under a shorter name: the record file name is longer than 255 bytes"
+  },
+  {
+   "path": "zenodo-15620982-gerada-gsc-awareness/Students' Level of Awareness and Acceptance of the GSC Vision and Mission, Goals of the School Education and Program Objectives of BSED and BEED.indd",
+   "size": 9322496,
+   "sha256": "3c2d50308674dafb780f25c69d5a1e5f837f6f82bc312bd0a955e361ef88c82e",
+   "licence": "CC-BY-4.0",
+   "url": "https://zenodo.org/api/records/15620982/files/Students'%20Level%20of%20Awareness%20and%20Acceptance%20of%20the%20GSC%20Vision%20and%20Mission,%20Goals%20of%20the%20School%20Education%20and%20Program%20Objectives%20of%20BSED%20and%20BEED.indd/content",
+   "source": "https://zenodo.org/records/15620982"
+  },
+  {
+   "path": "zenodo-17162974-amac-perfusionists/4.3.3.indd",
+   "size": 4751360,
+   "sha256": "97ea9727423484cdbef662076bf68c7d81d8149865766137f099e39212eb879d",
+   "licence": "CC-BY-4.0",
+   "url": "https://zenodo.org/api/records/17162974/files/4.3.3.indd/content",
+   "source": "https://zenodo.org/records/17162974"
+  },
+  {
+   "path": "zenodo-23061047-estes-red-tape-theory/RTT-The Difference Between “I Don’t Know” and “That’s Your Problem”.indd",
+   "size": 1548288,
+   "sha256": "00b97ce0cd3371c850bafee30621a8f079c0daf01f39506b2e4943aaf465b729",
+   "licence": "CC-BY-4.0",
+   "url": "https://zenodo.org/api/records/23061047/files/RTT-The%20Difference%20Between%20%E2%80%9CI%20Don%E2%80%99t%20Know%E2%80%9D%20and%20%E2%80%9CThat%E2%80%99s%20Your%20Problem%E2%80%9D.indd/content",
+   "source": "https://zenodo.org/records/23061047"
+  },
+  {
+   "path": "zenodo-23121553-estes-red-thread-thesis/RTT-RedThreadThesis.indd",
+   "size": 1736704,
+   "sha256": "4ad4681e582df75bd17db838edce61c86c978287e33e5d4efdf6ae34ed5a6cc8",
+   "licence": "CC-BY-4.0",
+   "url": "https://zenodo.org/api/records/23121553/files/RTT-RedThreadThesis.indd/content",
+   "source": "https://zenodo.org/records/23121553"
   }
  ]
 }
