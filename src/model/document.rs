@@ -43,6 +43,8 @@ pub struct Document {
     /// u32 and three f64; and its name (chunk 0x5531: a flag byte, 1 for
     /// a built-in key, and the name).
     pub constant_shade: Option<ConstantShade>,
+    /// The pasted smooth shades with an axial shading, in UID order.
+    pub axial_shades: Vec<AxialShade>,
     /// Assignment objects (class 0x1BE01), in UID order.
     pub assignments: Vec<u32>,
     /// Named grids (class 0xCD12, chunk 0xCD28: u32, a flag byte, 1 for
@@ -191,6 +193,14 @@ impl<'a> Reader<'a> {
             None
         });
         let constant_shade = self.constant_shade();
+        let axial_shades = self.axial_shades();
+        // Page item fills refer to axial shades by UID (objects.md,
+        // pasted smooth shades).
+        for a in &axial_shades {
+            objects
+                .swatches
+                .insert(a.uid, format!("PastedSmoothShade/u{:x}", a.uid));
+        }
         let assignments = self.assignments();
         let users_script = self.users_script(DOC);
         let last_session = self.last_session(DOC);
@@ -258,6 +268,7 @@ impl<'a> Reader<'a> {
             index_groups,
             index,
             constant_shade,
+            axial_shades,
             assignments,
             style_groups: objects.style_groups,
             object_styles: objects.object_styles,

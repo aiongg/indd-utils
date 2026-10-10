@@ -235,7 +235,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
 fn swatch_refs<'a>(parts: impl Iterator<Item = &'a str>) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     for part in parts {
-        for prefix in ["Color/u", "Gradient/u"] {
+        for prefix in ["Color/u", "Gradient/u", "PastedSmoothShade/u"] {
             for (i, _) in part.match_indices(prefix) {
                 if i == 0 || !matches!(part.as_bytes()[i - 1], b'"' | b'>') {
                     continue;

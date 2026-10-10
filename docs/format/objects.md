@@ -415,8 +415,64 @@ class 0x5533 object of lowest UID with a constant shade (495 of 495);
 in 84 pairs the INDD has two more that IDML leaves out. The converter
 writes that one shade, and matches the IDML on all values in 495 of
 495 (name `$ID/` from flag 1 and an empty name; two contents values,
-255 and 1). The other shades in IDML are `AxialShade`s whose contents
-re-encode a longer structure in the same way; they are not decoded.
+255 and 1).
+
+**Axial shades.** Chunk 0x5532 in general: u32 0 at 0; six f64 at 4 (a
+matrix); u32 0 at 52; u32 shading type at 56; u32 *n* at 60; *n* bytes
+of shading data from 64, to the end of the chunk. A constant shade has
+type 0 and *n* = 28. Type 5 is an axial shade, which IDML writes as
+`ContentsType="AxialShade"` with `ContentsMatrix` the six f64 and
+`Contents` the base64 of the shading data with every field converted to
+big-endian. The data is a sequence of fields:
+
+```
+shading:
+  f64 ×6                      coordinates
+  u16 ×4                      (0 or 1)
+  u32 colour space            (2 in every sample)
+  u32 function count F
+  function ×F
+  u32                         (4 in every sample)
+  f64 ×6
+  u32                         (2 in every sample)
+  u16 ×2                      (0 or 1)
+function:
+  u32 function type           (0 in every sample)
+  u32 inputs, u32 outputs     (1 and 1 in every sample)
+  u16, u32 c, f64 ×2c         domain
+  u16, u32 c, f64 ×2c         range
+  u32, u32 c, f64 ×2c         encode
+  u32 c, f64 ×2c              decode
+  u16
+  u32, u32 bits per sample (8 in every sample), u32 byte count B
+  u8 ×B                       samples, not swapped
+```
+
+Over all pairs of the corpus of 2026-10 the INDD files hold 3,725 axial
+shades (3,704 in 37 trustworthy pairs); the grammar consumes every chunk
+to its end. IDML has 900 axial shades (891 in 12 trustworthy pairs), and
+the converter's `Contents`, `ContentsMatrix` and other attributes equal
+IDML's for all 900. The name chunk is that of constant shades (`$ID/`).
+The other attributes are those every IDML has on an axial shade
+(`idml-values.md`), and `SwatchColorGroupReference` from DOM 12 as for
+other swatches. Type 6 also occurs (43 objects in trustworthy pairs);
+IDML writes none of them, so its layout is not needed. A shading with
+another value where the grammar names the value of every sample, or with
+bytes left over, is left out with a warning.
+
+**Which axial shades IDML writes.** The rule of unnamed colours (colours,
+below): a shade is written when a value in the package refers to it, or
+when the page item defaults name it (chunk 0x6E07 or entry 0 of chunk
+0x6E06, by class 0x5533). In the trustworthy pairs IDML writes 891 of
+the 3,704 axial shades, all 891 that the rule selects and none of the
+other 2,813. Of the 891, 884 are referred to by a page item's
+`FillColor` (attribute 0x6E68 of the item's chunk 0x6E03 holds the
+shade's UID; 744 rectangles of spreads and 140 of master spreads) and 7
+are named by the defaults only. All references are rectangle fills.
+
+**Order.** In `Graphic.xml` the shades follow the inks in UID order (the
+constant shade has the lowest UID), before `Swatch/None`: 12 of 12
+trustworthy pairs with axial shades.
 
 ## Index sort options
 

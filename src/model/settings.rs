@@ -1,5 +1,5 @@
 //! Document-level settings and lists: document preferences, bullets,
-//! colour group order, index groups, constant shade, named grids, document
+//! colour group order, index groups, smooth shades, named grids, document
 //! users and languages.
 //!
 //! Evidence: `docs/format/objects.md` and `preferences.md`.
@@ -23,6 +23,20 @@ pub struct ConstantShade {
     pub uid: u32,
     pub count: u32,
     pub values: [f64; 3],
+    /// Flag (built-in key) and name.
+    pub name: Option<(bool, String)>,
+}
+
+/// A pasted smooth shade with an axial shading. See
+/// `docs/format/objects.md`, pasted smooth shades.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AxialShade {
+    pub uid: u32,
+    /// The six f64 at offset 4 of chunk 0x5532.
+    pub matrix: [f64; 6],
+    /// The shading data with every field big-endian, as IDML `Contents`
+    /// holds it.
+    pub data: Vec<u8>,
     /// Flag (built-in key) and name.
     pub name: Option<(bool, String)>,
 }
@@ -385,15 +399,6 @@ impl<'a> Reader<'a> {
             if d.len() != 92 || self.enc().u32_at(&d, 60) != Some(28) {
                 return None;
             }
-            let name = self
-                .chunk(uid, chunk::SMOOTH_SHADE_NAME)
-                .ok()
-                .flatten()
-                .and_then(|n| {
-                    let mut c = self.cursor(&n);
-                    let builtin = c.flag().ok()? == 1;
-                    Some((builtin, c.string().ok()?))
-                });
             Some(ConstantShade {
                 uid,
                 count: self.enc().u32_at(&d, 64)?,
@@ -402,9 +407,68 @@ impl<'a> Reader<'a> {
                     self.enc().f64_at(&d, 76)?,
                     self.enc().f64_at(&d, 84)?,
                 ],
-                name,
+                name: self.shade_name(uid),
             })
         })
+    }
+
+    /// The name of a pasted smooth shade (chunk 0x5531): flag and name.
+    fn shade_name(&self, uid: u32) -> Option<(bool, String)> {
+        let n = self.chunk(uid, chunk::SMOOTH_SHADE_NAME).ok()??;
+        let mut c = self.cursor(&n);
+        let builtin = c.flag().ok()? == 1;
+        Some((builtin, c.string().ok()?))
+    }
+
+    /// The pasted smooth shades (class 0x5533) whose chunk 0x5532 holds an
+    /// axial shading (type 5 at offset 56), in UID order. A shading whose
+    /// data does not follow the known grammar is left out with a warning.
+    /// See `docs/format/objects.md`, pasted smooth shades.
+    pub(super) fn axial_shades(&self) -> Vec<AxialShade> {
+        let mut uids: Vec<u32> = self
+            .db
+            .classes()
+            .iter()
+            .filter(|&&(_, c)| c == class::SMOOTH_SHADE)
+            .map(|&(u, _)| u)
+            .collect();
+        uids.sort_unstable();
+        let mut out = Vec::new();
+        for uid in uids {
+            let Ok(Some(d)) = self.chunk(uid, chunk::SMOOTH_SHADE) else {
+                continue;
+            };
+            let enc = self.enc();
+            if d.len() < 64 || enc.u32_at(&d, 56) != Some(5) {
+                continue;
+            }
+            let n = enc.u32_at(&d, 60).unwrap_or(0) as usize;
+            let read = (|| -> Result<AxialShade, Error> {
+                if d.len() != 64 + n {
+                    return Err(Error::Corrupt(format!(
+                        "{} bytes of shading data in a chunk of {}",
+                        n,
+                        d.len()
+                    )));
+                }
+                let mut c = self.cursor(&d[4..]);
+                let mut matrix = [0.0; 6];
+                for m in &mut matrix {
+                    *m = c.f64()?;
+                }
+                Ok(AxialShade {
+                    uid,
+                    matrix,
+                    data: axial_shading_be(enc, &d[64..])?,
+                    name: self.shade_name(uid),
+                })
+            })();
+            match read {
+                Ok(s) => out.push(s),
+                Err(e) => self.warn(format!("pasted smooth shade {uid} left out: {e}")),
+            }
+        }
+        out
     }
 
     /// The named grids, in UID order: built-in key, name and the grid's
@@ -549,6 +613,85 @@ fn index_groups(c: &mut crate::object::Cursor) -> Result<Vec<(String, bool, u16)
     Ok(out)
 }
 
+/// The data of an axial shading with each field in big-endian order, as
+/// IDML `Contents` holds it. `data` must follow the grammar of
+/// `docs/format/objects.md`, pasted smooth shades, to its end, with the
+/// values every sample has where the grammar names one.
+fn axial_shading_be(enc: Encoding, data: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut c = enc.cursor(data);
+    let mut out = Vec::with_capacity(data.len());
+    let bad = |what: &str, v: u32| Error::Corrupt(format!("shading {what} {v} is not known"));
+    fn u16s(c: &mut Cursor, out: &mut Vec<u8>, n: usize) -> Result<(), Error> {
+        for _ in 0..n {
+            out.extend(c.u16()?.to_be_bytes());
+        }
+        Ok(())
+    }
+    fn u32_be(c: &mut Cursor, out: &mut Vec<u8>) -> Result<u32, Error> {
+        let v = c.u32()?;
+        out.extend(v.to_be_bytes());
+        Ok(v)
+    }
+    fn f64s(c: &mut Cursor, out: &mut Vec<u8>, n: usize) -> Result<(), Error> {
+        if n > c.remaining() / 8 {
+            return Err(Error::Corrupt(format!("{n} shading numbers")));
+        }
+        for _ in 0..n {
+            out.extend(c.f64()?.to_be_bytes());
+        }
+        Ok(())
+    }
+    let expect = |c: &mut Cursor, out: &mut Vec<u8>, what: &str, v: u32| {
+        let got = u32_be(c, out)?;
+        if got == v {
+            Ok(())
+        } else {
+            Err(bad(what, got))
+        }
+    };
+    f64s(&mut c, &mut out, 6)?;
+    u16s(&mut c, &mut out, 4)?;
+    expect(&mut c, &mut out, "colour space", 2)?;
+    let functions = u32_be(&mut c, &mut out)? as usize;
+    if functions > c.remaining() / 50 {
+        return Err(Error::Corrupt(format!("{functions} shading functions")));
+    }
+    for _ in 0..functions {
+        expect(&mut c, &mut out, "function type", 0)?;
+        expect(&mut c, &mut out, "function inputs", 1)?;
+        expect(&mut c, &mut out, "function outputs", 1)?;
+        // Domain and range: u16, u32 count, pairs of f64; encode: u32,
+        // u32 count, pairs; decode: u32 count, pairs.
+        for lead in [2, 2, 4, 0] {
+            match lead {
+                2 => u16s(&mut c, &mut out, 1)?,
+                4 => {
+                    u32_be(&mut c, &mut out)?;
+                }
+                _ => {}
+            }
+            let n = u32_be(&mut c, &mut out)? as usize;
+            f64s(&mut c, &mut out, n.saturating_mul(2))?;
+        }
+        u16s(&mut c, &mut out, 1)?;
+        u32_be(&mut c, &mut out)?;
+        expect(&mut c, &mut out, "bits per sample", 8)?;
+        let samples = u32_be(&mut c, &mut out)? as usize;
+        out.extend(c.bytes(samples)?);
+    }
+    expect(&mut c, &mut out, "extend code", 4)?;
+    f64s(&mut c, &mut out, 6)?;
+    expect(&mut c, &mut out, "end code", 2)?;
+    u16s(&mut c, &mut out, 2)?;
+    if c.remaining() != 0 {
+        return Err(Error::Corrupt(format!(
+            "{} bytes after the shading data",
+            c.remaining()
+        )));
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,5 +761,57 @@ mod tests {
         let mut cut = history(&[0x0101]);
         cut.pop();
         assert_eq!(last_code(Some(cut)), None);
+    }
+}
+
+#[cfg(test)]
+mod shading_tests {
+    use super::*;
+
+    /// The fields of an axial shading with one sampled function, as
+    /// (width, value) pairs: 2, 4 or 8 bytes, or 1 for a sample byte.
+    fn fields() -> Vec<(usize, u64)> {
+        let f = |v: f64| (8, v.to_bits());
+        let mut v = vec![f(0.0), f(0.0), f(1.0), f(0.0), f(0.0), f(1.0)];
+        v.extend([(2, 1), (2, 0), (2, 1), (2, 0), (4, 2), (4, 1)]);
+        v.extend([(4, 0), (4, 1), (4, 1)]);
+        for lead in [2, 2, 4, 0] {
+            if lead > 0 {
+                v.push((lead, 0));
+            }
+            v.extend([(4, 1), f(0.0), f(1.0)]);
+        }
+        v.extend([(2, 0), (4, 2), (4, 8), (4, 2), (1, 0x10), (1, 0xF0)]);
+        v.extend([(4, 4), f(1.0), f(0.0), f(0.0), f(1.0), f(0.0), f(0.0)]);
+        v.extend([(4, 2), (2, 1), (2, 1)]);
+        v
+    }
+
+    fn bytes(fields: &[(usize, u64)], big: bool) -> Vec<u8> {
+        let mut out = Vec::new();
+        for &(w, v) in fields {
+            let b = if big {
+                v.to_be_bytes()
+            } else {
+                v.to_le_bytes()
+            };
+            out.extend(if big { &b[8 - w..] } else { &b[..w] });
+        }
+        out
+    }
+
+    #[test]
+    fn writes_an_axial_shading_big_endian() {
+        let f = fields();
+        let le = bytes(&f, false);
+        let got = axial_shading_be(Encoding::default(), &le).unwrap();
+        assert_eq!(got, bytes(&f, true));
+        // A byte left over, or a colour space other than 2, is refused.
+        let mut long = le.clone();
+        long.push(0);
+        assert!(axial_shading_be(Encoding::default(), &long).is_err());
+        let mut space = le;
+        space[56] = 3;
+        assert!(axial_shading_be(Encoding::default(), &space).is_err());
     }
 }

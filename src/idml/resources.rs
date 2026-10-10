@@ -175,21 +175,53 @@ impl Writer<'_> {
             x.attrs_missing(self.observed("Ink").iter());
             x.end();
         }
-        // The document's constant shade, with the values every IDML has
-        // on one (idml-values.md); its contents are the stored numbers in
-        // big-endian order (objects.md, pasted smooth shades).
-        if let Some(shade) = &self.doc.constant_shade
-            && let Some(node) = values::keyed("PastedSmoothShade", "ConstantShade")
-        {
-            let reference = format!("PastedSmoothShade/{}", uref(Some(shade.uid)));
+        // The pasted smooth shades, in UID order: the document's constant
+        // shade, and each axial shade that something refers to or the
+        // page item defaults name. Each has the values every IDML has on
+        // one of its kind (idml-values.md); its contents are the stored
+        // fields in big-endian order (objects.md, pasted smooth shades).
+        let named_shades = named(crate::model::class::SMOOTH_SHADE);
+        // UID, contents type, matrix, contents, name.
+        type Shade<'s> = (
+            u32,
+            &'s str,
+            Option<&'s [f64; 6]>,
+            Vec<u8>,
+            &'s Option<(bool, String)>,
+        );
+        let mut shades: Vec<Shade> = Vec::new();
+        if let Some(shade) = &self.doc.constant_shade {
             let mut data = shade.count.to_be_bytes().to_vec();
             for v in shade.values {
                 data.extend(v.to_be_bytes());
             }
+            shades.push((shade.uid, "ConstantShade", None, data, &shade.name));
+        }
+        for a in &self.doc.axial_shades {
+            let reference = format!("PastedSmoothShade/{}", uref(Some(a.uid)));
+            if refs.contains(&reference) || named_shades.contains(&a.uid) {
+                shades.push((
+                    a.uid,
+                    "AxialShade",
+                    Some(&a.matrix),
+                    a.data.clone(),
+                    &a.name,
+                ));
+            }
+        }
+        shades.sort_by_key(|s| s.0);
+        for (uid, kind, matrix, data, name) in shades {
+            let Some(node) = values::keyed("PastedSmoothShade", kind) else {
+                continue;
+            };
+            let reference = format!("PastedSmoothShade/{}", uref(Some(uid)));
             x.start("PastedSmoothShade")
                 .attr("Self", &reference)
-                .attr("ContentsType", "ConstantShade");
-            if let Some((builtin, name)) = &shade.name {
+                .attr("ContentsType", kind);
+            if let Some(m) = matrix {
+                x.attr("ContentsMatrix", nums(m));
+            }
+            if let Some((builtin, name)) = name {
                 let name = if *builtin {
                     builtin_key(name)
                 } else {
