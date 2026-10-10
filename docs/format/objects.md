@@ -1917,7 +1917,9 @@ is not identified.
 files from older versions (942, 48, 66 and 61 object styles in the
 little-endian corpus). The converter reads it only with these sizes.
 The InDesign 4.0 file has 104 bytes, with another layout; the converter
-leaves it out with a warning (`big-endian.md`).
+leaves it out with a warning (`big-endian.md`). In the corpus after
+2026-10, 1,129 object styles in 263 files of InDesign 4.0 to 6.0 have 104
+bytes; none of these files has an IDML, so the layout cannot be checked.
 
 | Offset | Contents | Attribute |
 |---|---|---|
@@ -2055,7 +2057,7 @@ Section chunk 0x4C02:
 | u8, string | `Marker` |
 | u32 | First page of the section; 0 for the section that starts at the document's first page |
 | u32 | Page number start (`PageNumberStart`) |
-| u32 | Page number style: 0x4C15 = `Arabic`, 0x4C17 = `LowerRoman`, 0x4C12 = `Kanji` |
+| u32 | Page number style: 0x4C15 = `Arabic`, 0x4C17 = `LowerRoman`, 0x4C12 = `Kanji`, 0x4C13 = `DoubleLeadingZeros`, 0x4C16 = `UpperRoman`, 0x4C19 = `LowerLetters`, 0x4C1A = `SingleLeadingZeros` (below) |
 | u32 | Continue numbering (1 = true, `ContinueNumbering`) |
 | u32 | Not identified |
 | u8 flag, string | `AlternateLayout`: the string, with `$ID/` before it if the flag is 1 |
@@ -2114,15 +2116,35 @@ Evidence:
   show the style. `Kanji` is the only value of the schema's
   `PageNumberStyle` enumeration that uses such numerals.
 
-The converter writes `PageNumberStyle` for these three codes and leaves
-it out (with a warning) for other codes.
+Pairs of the corpus after 2026-10 show four more codes. Over every
+valid distinct file, each section whose code the converter did not know
+was matched with the IDML `Section` of the same UID:
+
+| Code | IDML `PageNumberStyle` | Sections with an IDML section | Sections without |
+|---|---|---|---|
+| 0x4C1A | `SingleLeadingZeros` | 51 | 30 |
+| 0x4C13 | `DoubleLeadingZeros` | 21 | 3 |
+| 0x4C19 | `LowerLetters` | 14 | 2 |
+| 0x4C16 | `UpperRoman` | 3 | 10 |
+
+No section has another value for these codes. In the `Descriptor` of a
+page, whose second item is the section's style, IDML writes a page of a
+`SingleLeadingZeros` section with a string there, the section prefix
+again: 1,249 descriptors in the IDML files of the corpus (1,223 with an
+empty prefix), none with the enumeration value. 0x4C18 (one section) and
+0x4C06 (InDesign 2.0 and 3.0 files) occur only in files without IDML.
+The converter writes `PageNumberStyle` for the seven codes and leaves it
+out (with a warning) for other codes.
 
 The converter names document pages by their number in their section,
 counting on from the previous section when numbering continues. In a
 section with style 0x4C17 it writes the number in lower-case Roman (i,
 ii, iii), as in the PDF labels above, and in a section with style 0x4C12
 in Chinese digits, as the folios show. No pair shows IDML page names in
-such sections.
+such sections. It writes upper-case Roman numerals for 0x4C16, two and
+three digits with leading zeros for 0x4C1A and 0x4C13, and the letters a
+to z for 0x4C19 (later numbers as Arabic numbers); the page names of the
+pairs above measure these.
 
 ## Document preferences (class 0x2202)
 
@@ -2545,8 +2567,16 @@ writes is written (783 of 783 `Gradient` elements).
 colours with chunk 0x1F09: 12,814 with code 0, 250 with code 2 (one
 `Registration` colour per file) and 3 with code 1. Two of the three are
 copies of one colour in two pairs, and their IDML has `Model="Spot"`;
-the third is in a file without an IDML. No file has another code, so
-the converter leaves `Model` out, with a warning, for any other code.
+the third is in a file without an IDML. The converter leaves `Model`
+out, with a warning, for any other code.
+
+**Code 3: mixed inks.** The corpus after 2026-10 has 47 colours with
+code 3 in 27 files, 16 of them pairs (InDesign 12.1 to 17.0, typeset in
+Korean). Their IDML has no `Color` element for them; it lists
+`MixedInk` elements in `Resources/Graphic.xml` (`Model="Mixedinkmodel"`,
+`Space="MixedInk"`, `InkList`, `InkPercentages`, `BaseColor` and the
+spot colour lists). The fields of the ink list are not decoded, so the
+converter writes neither element for these colours.
 
 **Tints** are objects of the same class without chunks 0x1F10 and
 0x1F01. Chunk 0x117 is the UID of the base colour, and chunk 0x1F24 holds

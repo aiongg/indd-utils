@@ -93,6 +93,10 @@ pub(super) fn number_style(code: u32) -> Option<&'static str> {
         numbering::ARABIC => Some("Arabic"),
         numbering::LOWER_ROMAN => Some("LowerRoman"),
         numbering::KANJI => Some("Kanji"),
+        numbering::DOUBLE_LEADING_ZEROS => Some("DoubleLeadingZeros"),
+        numbering::UPPER_ROMAN => Some("UpperRoman"),
+        numbering::LOWER_LETTERS => Some("LowerLetters"),
+        numbering::SINGLE_LEADING_ZEROS => Some("SingleLeadingZeros"),
         _ => None,
     }
 }
@@ -124,6 +128,27 @@ pub(super) fn lower_roman(mut n: u32) -> String {
     out
 }
 
+fn upper_roman(n: u32) -> String {
+    lower_roman(n).to_uppercase()
+}
+
+fn single_leading_zeros(n: u32) -> String {
+    format!("{n:02}")
+}
+
+fn double_leading_zeros(n: u32) -> String {
+    format!("{n:03}")
+}
+
+/// The letter of `n` from 1 to 26; other numbers as Arabic numbers, as no
+/// sample shows them.
+fn lower_letter(n: u32) -> String {
+    match n {
+        1..=26 => char::from(b'a' + (n - 1) as u8).to_string(),
+        _ => n.to_string(),
+    }
+}
+
 /// Chinese numeral of `n`, digit by digit (10 is 一〇), as the folios of
 /// a sample with that style show.
 pub(super) fn kanji_digits(n: u32) -> String {
@@ -135,8 +160,7 @@ pub(super) fn kanji_digits(n: u32) -> String {
 }
 
 /// The name of each document page: its number (see `page_numbers`) in
-/// its section's style. Styles other than lower-case Roman and Kanji are
-/// written as Arabic numbers.
+/// its section's style (objects.md, master spread names and sections).
 pub(super) fn page_names(doc: &Document) -> Vec<String> {
     let numbers = page_numbers(doc);
     let mut out: Vec<String> = numbers.iter().map(u32::to_string).collect();
@@ -144,6 +168,10 @@ pub(super) fn page_names(doc: &Document) -> Vec<String> {
         let name: fn(u32) -> String = match s.style {
             numbering::LOWER_ROMAN => lower_roman,
             numbering::KANJI => kanji_digits,
+            numbering::UPPER_ROMAN => upper_roman,
+            numbering::SINGLE_LEADING_ZEROS => single_leading_zeros,
+            numbering::DOUBLE_LEADING_ZEROS => double_leading_zeros,
+            numbering::LOWER_LETTERS => lower_letter,
             _ => continue,
         };
         for i in (first..first + length).filter(|&i| numbers[i] > 0) {

@@ -332,7 +332,17 @@ impl<'a> Reader<'a> {
                 .ok();
             }
         }
-        if ![numbering::ARABIC, numbering::LOWER_ROMAN, numbering::KANJI].contains(&section.style) {
+        if ![
+            numbering::ARABIC,
+            numbering::LOWER_ROMAN,
+            numbering::KANJI,
+            numbering::DOUBLE_LEADING_ZEROS,
+            numbering::UPPER_ROMAN,
+            numbering::LOWER_LETTERS,
+            numbering::SINGLE_LEADING_ZEROS,
+        ]
+        .contains(&section.style)
+        {
             self.warn(format!(
                 "section {uid}: page number style {:#x} is not known; left out",
                 section.style
@@ -467,9 +477,9 @@ impl<'a> Reader<'a> {
         let short = |id: u32| -> Result<Option<u16>, Error> {
             Ok(self.chunk(uid, id)?.and_then(|d| self.enc().u16_at(&d, 0)))
         };
-        let transition = self.chunk(uid, chunk::SPREAD_TRANSITION)?.and_then(|d| {
-            Some((self.enc().u32_at(&d, 0)?, self.enc().u32_at(&d, 8)?))
-        });
+        let transition = self
+            .chunk(uid, chunk::SPREAD_TRANSITION)?
+            .and_then(|d| Some((self.enc().u32_at(&d, 0)?, self.enc().u32_at(&d, 8)?)));
         Ok(Spread {
             transition,
             uid,

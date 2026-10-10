@@ -80,7 +80,12 @@ fn read_topics(c: &mut Cursor) -> Result<Vec<Topic>, Error> {
             return Err(Error::Corrupt(format!("{m} page references")));
         }
         let refs = (0..m).map(|_| c.u32()).collect::<Result<_, _>>()?;
-        c.skip(8)?;
+        // The cross references of the topic (class 0x13007), then a u32.
+        let k = c.u32()? as usize;
+        if k > c.remaining() / 4 {
+            return Err(Error::Corrupt(format!("{k} cross references")));
+        }
+        c.skip(4 * k + 4)?;
         close(&mut stack, &mut out, level - 1);
         stack.push(Topic {
             name,
@@ -181,6 +186,18 @@ mod tests {
         assert_eq!((t[0].name.as_str(), &t[0].refs[..]), ("a", &[7][..]));
         assert_eq!(t[0].children[0].children[0].refs, vec![8, 9]);
         assert_eq!(t[1].name, "d");
+        // A topic with a cross reference: u32 1, its UID, u32 0.
+        let mut x = Vec::new();
+        x.extend(1u32.to_le_bytes());
+        x.extend(0u16.to_le_bytes());
+        x.extend(1u32.to_le_bytes());
+        record(&mut x, 1, 0, "s", &[]);
+        x.truncate(x.len() - 8);
+        x.extend(1u32.to_le_bytes());
+        x.extend(0xC6Du32.to_le_bytes());
+        x.extend(0u32.to_le_bytes());
+        let t = read_topics(&mut enc.cursor(&x)).unwrap();
+        assert_eq!(t[0].name, "s");
         // A level that skips one is an error.
         let mut bad = d[..10].to_vec();
         bad[6..10].copy_from_slice(&1u32.to_le_bytes());

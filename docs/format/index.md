@@ -41,7 +41,8 @@ Topic record:
 | u32 string | Topic text | `Name` |
 | u32 string | Sort order (empty in every sample) | `SortOrder` |
 | u32 *m*, *m* UIDs | The page references (class 0x13006) of this topic | their `ReferencedTopic` |
-| 8 bytes | 0 in every sample | |
+| u32 *k*, *k* UIDs | The topic's cross references (class 0x13007), below | `CrossReference` children |
+| u32 | 0 in every sample | |
 
 - IDML writes the topics as `Topic` children of `Index`, a subtopic as a
   child of its topic: sections in the order of chunk 0x13005, records in
@@ -53,6 +54,20 @@ Topic record:
   2,185 IDML topics of the trustworthy pairs (2,223 in all pairs). In
   one trustworthy pair the INDD has 3 more topics, and 3 more page
   references, than its IDML (below).
+
+**Cross references.** In the corpus after 2026-10, 29 pairs (InDesign
+13.0 and 13.1, from one set of tutorial files) have a topic with *k* = 1.
+Read with a fixed 8 bytes after the page references, these sections
+ended 4 bytes early and were left out. The UID is that of the topic's
+IDML `CrossReference` (`Self="u…"`). The cross reference object has
+chunk 0x1300B (u16 4 for `CrossReferenceType="SeeAlsoHerein"`, u32 UID
+of a class 0x13008 object, u32 0) and chunk 0x13008 (u16 2, u32 the
+section). The class 0x13008 object (chunk 0x1300C) holds the UID of
+the section of the referenced topic, the topic's position in it (1) and
+the cross reference's UID. Every topic of the pairs before 2026-10 has
+*k* = 0. The converter reads the list so that the section's topics are
+written; it does not write `CrossReference` elements, as one sample
+shows one type code.
 
 ## Page references (class 0x13006)
 

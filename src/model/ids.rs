@@ -333,4 +333,8 @@ pub mod numbering {
     pub const LOWER_ROMAN: u32 = 0x4C17;
     /// Chinese numerals, written digit by digit.
     pub const KANJI: u32 = 0x4C12;
+    pub const DOUBLE_LEADING_ZEROS: u32 = 0x4C13;
+    pub const UPPER_ROMAN: u32 = 0x4C16;
+    pub const LOWER_LETTERS: u32 = 0x4C19;
+    pub const SINGLE_LEADING_ZEROS: u32 = 0x4C1A;
 }

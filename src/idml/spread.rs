@@ -932,7 +932,13 @@ impl Writer<'_> {
             };
             let mut items = vec![
                 item("string", s.prefix.clone()),
-                item("enumeration", style.into()),
+                // IDML writes the prefix again in place of this style
+                // (objects.md, master spread names and sections).
+                if s.style == crate::model::numbering::SINGLE_LEADING_ZEROS {
+                    item("string", s.prefix.clone())
+                } else {
+                    item("enumeration", style.into())
+                },
                 item("boolean", s.continue_numbering.to_string()),
                 item("boolean", "false".into()),
                 item("long", number.to_string()),
