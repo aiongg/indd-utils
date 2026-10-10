@@ -274,7 +274,7 @@ composite font holds the UID of a font family (class 0x3E03) whose name
 is the composite font's name; no `AppliedFont` value is the UID of the
 0xCB02 object. The family name can contain escapes `<hhhh>`, four
 hexadecimal digits of a UTF-16 code unit, for characters outside ASCII
-(such as `<5927><6A19>`). Decoded, the name equals the composite font
+(such as `<4E2D><6587>` for 中文). Decoded, the name equals the composite font
 name: in the conversions of the 1,251 trustworthy pairs, families with
 escapes are used in 27 documents, and in 24 their decoded name is one of
 the document's composite fonts. The other escaped names (in 3

@@ -1895,7 +1895,7 @@ mod tests {
             5,
             crate::model::FontFamily {
                 uid: 5,
-                name: "<5927><6A19>".into(),
+                name: "<4E2D><6587>".into(),
                 builtin: false,
                 native_name: String::new(),
                 fonts: Vec::new(),
@@ -1906,7 +1906,7 @@ mod tests {
             uid: 9,
             name: crate::model::Name {
                 builtin: false,
-                name: "\u{5927}\u{6A19}".into(),
+                name: "\u{4E2D}\u{6587}".into(),
             },
             entries: Vec::new(),
         });
@@ -1938,7 +1938,7 @@ mod tests {
         // An empty line style list is left out.
         assert_eq!(names, ["AppliedFont", "AllGREPStyles"]);
         assert_eq!(props[0].1, "object");
-        assert!(matches!(&props[0].2, PropValue::Text(t) if t == "CompositeFont/\u{5927}\u{6A19}"));
+        assert!(matches!(&props[0].2, PropValue::Text(t) if t == "CompositeFont/\u{4E2D}\u{6587}"));
         let PropValue::List(items) = &props[1].2 else {
             panic!("not a list");
         };
