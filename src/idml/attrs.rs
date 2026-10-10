@@ -1511,6 +1511,25 @@ impl Writer<'_> {
                 None => attrs.unknown_code(ids[0], a),
             }
         }
+        // An empty font style is written as the style of the list's font
+        // family named `Regular`, else of its first font
+        // (`docs/format/attributes.md`, empty font styles).
+        if let Some(style) = plain
+            .iter_mut()
+            .find(|(n, v)| *n == "FontStyle" && v.is_empty())
+            .map(|(_, v)| v)
+            && let Some(f) = attrs
+                .get(0x1B2B)
+                .and_then(Value::as_u32)
+                .and_then(|u| self.doc.fonts.get(&u))
+            && let Some(font) = f
+                .fonts
+                .iter()
+                .find(|x| x.style == "Regular")
+                .or(f.fonts.first())
+        {
+            style.clone_from(&font.style);
+        }
         (plain, props)
     }
 

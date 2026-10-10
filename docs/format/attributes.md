@@ -318,7 +318,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | ID | IDML attribute | Encoding | Evidence |
 |---|---|---|---|
 | 0x1B01 | `FillColor` | swatch UID | 354/354 ranges, 226/226 styles |
-| 0x1B02 | `FontStyle` | flag + string | 474/474 ranges, 202/202 styles |
+| 0x1B02 | `FontStyle` | flag + string; empty: below | 474/474 ranges, 202/202 styles |
 | 0x1B03 | `PointSize` | f64 | 1,090/1,090 ranges |
 | 0x1B06 | `HorizontalScale` | fraction ×100 | 2/2 ranges, 75/75 styles |
 | 0x1B07 | `KerningMethod` | code: 15972 Metrics, 79875 Optical, 0x3E65 `$ID/Metrics - Roman Only` (27 styles) | 20/20 ranges, 81/81 styles |
@@ -1117,6 +1117,20 @@ of these pairs aligns:
 
 `NextEvenPage` occurs in no IDML. Its code is not known, and the
 converter leaves other codes out.
+
+**Empty font styles.** A list can store an empty `FontStyle` (0x1B02).
+IDML then writes the style of a font of the list's `AppliedFont` family:
+the font whose style is `Regular`, or the family's first font if none
+is. Over the 1,251 trustworthy pairs, writing the stored empty string
+gave 294 wrong `FontStyle` values (ParagraphStyle 69, CharacterStyle 35,
+TextDefault 11, text ranges 179); with this rule 243 of them match and
+no value that matched before changes. 20 of the 243 come from the
+first-font case (a family of `Light` and `LightItalic`, IDML `Light`).
+So every empty value that IDML also writes empty is in a list without
+an `AppliedFont`, or in a family without a `Regular` font whose first
+font has an empty style. Not explained: 22 empty values that IDML writes as
+`Nothing`, and lists without an `AppliedFont`, which keep the empty
+string.
 
 **Font family names.** `AppliedFont` and `BulletsFont` name a font family
 (class 0x3E03), and IDML writes the family's name. An `AppliedFont`
