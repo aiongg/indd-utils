@@ -1891,42 +1891,52 @@ which is not text in IDML: IDML writes a `PageReference` in its place.
 Its layout and attributes are in `index.md`.
 
 **Anchored object settings (chunk 0x2800).** The anchor object (class
-0x262) and object styles have a 62-byte chunk 0x2800:
+0x262), object styles and the preferences have a 62-byte chunk 0x2800:
 
 | Offset | Contents | IDML `AnchoredObjectSetting` |
 |---|---|---|
 | 0 | f64 | `AnchorYoffset` |
+| 16 | f64 | `AnchorXoffset` |
 | 32 | f64, the negative of the value at 0 in every sample | |
+| 40 | u16: 0 `InlinePosition`, 1 `Anchored`, 2 `AboveLine` | `AnchoredPosition` |
+| 42 | u16: 1 `TextFrame`, 2 `PageMargins`, 3 `PageEdge`, 4 `AnchorLocation` | `HorizontalReferencePoint` |
+| 44 | u16: 2 `PageMargins`, 3 `PageEdge`, 4 `LineBaseline`, 6 `Capheight` | `VerticalReferencePoint` |
+| 46, 50 | u16, u16 (below) | `AnchorPoint` |
+| 48 | u16: 0 `RightAlign`, 1 `CenterAlign`, 2 `LeftAlign` | `HorizontalAlignment` |
 | 52 | u16: 0 `TopAlign`, 1 `CenterAlign`, 2 `BottomAlign` | `VerticalAlignment` |
+| 54 | u16: 0 `false`, 1 `true` | `SpineRelative` |
+| 56 | u16: 0 `false`, 1 `true` | `PinPosition` |
 
-Evidence: 42 anchored items in the pairs (including those whose IDML is
-from an older version), compared with their IDML values or, where the
-item has none, its object style's. `AnchorYoffset`: 42 of 42, 11 of
-them non-zero in 2 files (−3.54 and −111.46). `VerticalAlignment`: 42 of
-42; 4 items in 2 files have 0 and `TopAlign`, the others 2 and
-`BottomAlign`. In the 337 object styles, 312 have 2 and `BottomAlign`,
-25 have 1 and `CenterAlign`, and all have 0 at offset 0 and
-`AnchorYoffset="0"`. IDML writes an item's `AnchoredObjectSetting` with
-the values that differ from its object style (14 of the 42 items); the
-converter does the same.
+`AnchorPoint` from the u16 at 46 and at 50: (0, 2) `BottomRightAnchor`,
+(2, 2) `BottomLeftAnchor`, (2, 0) `TopLeftAnchor`, (0, 0)
+`TopRightAnchor`, (2, 1) `LeftCenterAnchor`. The field at 46 is 0 for a
+right and 2 for a left point, the one at 50 is 0 for top, 1 for centre
+and 2 for bottom, as the alignment codes; the converter writes only
+these five combinations.
 
-Two groups of u16 fields change together in every sample, so each group
-is written as a whole, for the combinations observed only:
+Evidence, corpus of 2026-10: the 6,363 object styles whose name matches
+one IDML style (5,457 in trustworthy pairs), the 1,076 anchored items
+matched by `Self` with their IDML element (944 trustworthy; where the
+item element lacks an attribute, its object style's value), and the
+1,295 preference chunks (`preferences.md`). Every field above matches
+in every one. Codes seen: `AnchoredPosition` `Anchored` in 41 and
+`AboveLine` in 37 styles, in 116 and 2 items; `SpineRelative` `true` in
+2 styles (the only ones with 1 at 54); `HorizontalAlignment`
+`RightAlign` in 24 and `CenterAlign` in 37 styles. On the items, 42 and
+44 are (4, 6) in 4 items, (2, 2) in one, (3, 3) in one and (1, 4) in
+the others. The two fields change together in every sample, so
+which one is the horizontal point is assumed from the order of the IDML
+attributes; codes 2 and 3 mean the same in both.
 
-| u16 at 46, 50, 56 | `AnchorPoint`, `PinPosition` |
-|---|---|
-| 0, 2, 1 | `BottomRightAnchor`, `true` |
-| 2, 0, 0 | `TopLeftAnchor`, `false` |
-
-| u16 at 40, 48 | `AnchoredPosition`, `HorizontalAlignment` |
-|---|---|
-| 0, 2 | `InlinePosition`, `LeftAlign` |
-| 2, 1 | `AboveLine`, `CenterAlign` |
-
-Evidence: 2,858 object styles in the 654 pairs whose IDML style has the
-same name (2,628 and 230 for the first table; 2,821 and 37 for the
-second) and the preferences of 527 files (`preferences.md`). Which
-field holds which attribute is not known.
+IDML writes an anchored item's `AnchoredObjectSetting` by the category
+rule of other object style settings: every value when the item's object
+style turns the category off (`EnableAnchoredObjectOptions`, ID 0xCA2F
+missing from the style's category list; 670 items, all with every
+value), and otherwise the values that differ from its object style (406
+items, of `[None]` or of styles with the category on). Where it writes
+every value, it also writes `LockPosition="false"` and
+`AnchorSpaceAbove="0"`, the values of every such element in the corpus
+(`idml-values.md`).
 
 **Positions count characters.** A text record's run length counts
 UTF-16 code units, but every other position counts characters, a
@@ -2326,8 +2336,9 @@ styles that differ in them (10 without fill, 13 without stroke, 506
 without general options and 531 without baseline options).
 
 **Anchored object settings** are in chunk 0x2800, as for anchors (see
-stories), including the two groups of fields that are written
-together.
+stories). A style without the chunk (6 styles of versions 10.1 and 10.2)
+has the values of preferences without it (`preferences.md`, anchored
+objects).
 The other values of object styles come from IDML observation
 (`idml-values.md`).
 

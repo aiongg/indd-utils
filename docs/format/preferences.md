@@ -235,10 +235,15 @@ Chunk 0x555: u32 `ColumnCount` at 0, f64 `ColumnGutter` at 4 (119 of
 
 ## Anchored objects (`AnchoredObjectSetting`)
 
-Chunk 0x2800, as anchors and object styles have (`objects.md`): 527
-files. `VerticalAlignment` and the two groups of fields described there
-match 527 of 527. The 127 files without the chunk have
-`VerticalAlignment="TopAlign"`.
+Chunk 0x2800, as anchors and object styles have (`objects.md`, anchored
+object settings): every field matches in the 1,295 files with the chunk
+(1,134 trustworthy). The 165 files without it (117 trustworthy) have, in
+every file, `AnchoredPosition="InlinePosition"`, `SpineRelative="false"`,
+`PinPosition="true"`, `AnchorPoint="BottomRightAnchor"`,
+`HorizontalAlignment="LeftAlign"`, `HorizontalReferencePoint="TextFrame"`,
+`VerticalAlignment="TopAlign"`, `VerticalReferencePoint="LineBaseline"`
+and both offsets 0. Object styles without the chunk (6 styles of
+versions 10.1 and 10.2) have the same values.
 
 ## Pasteboard (`PasteboardPreference`)
 

@@ -1183,13 +1183,6 @@ impl Reader<'_> {
             set("MarginPreference", "ColumnGutter", num(gutter));
         }
         let anchor = get(id::ANCHOR)?;
-        if anchor.is_none() {
-            set(
-                "AnchoredObjectSetting",
-                "VerticalAlignment",
-                "TopAlign".into(),
-            );
-        }
 
         // Pasteboard: f64 horizontal and vertical margins.
         let pasteboard = match get(id::PASTEBOARD)? {
@@ -1724,9 +1717,10 @@ impl Reader<'_> {
             values,
             colors,
             text_defaults,
-            anchor: anchor
-                .as_deref()
-                .map(|d| super::AnchorSettings::read(self.enc(), d)),
+            anchor: Some(match anchor {
+                Some(d) => super::AnchorSettings::read(self.enc(), &d),
+                None => super::AnchorSettings::absent(),
+            }),
             item_defaults,
             item_base,
             item_default_entries,

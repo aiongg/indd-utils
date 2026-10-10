@@ -490,9 +490,10 @@ impl<'a> Reader<'a> {
             apply_next: self
                 .chunk(uid, chunk::OBJECT_STYLE_APPLY_NEXT)?
                 .and_then(|d| self.enc().u16_at(&d, 0)),
-            anchor: self
-                .chunk(uid, chunk::ANCHOR_SETTINGS)?
-                .map(|d| AnchorSettings::read(self.enc(), &d)),
+            anchor: Some(match self.chunk(uid, chunk::ANCHOR_SETTINGS)? {
+                Some(d) => AnchorSettings::read(self.enc(), &d),
+                None => AnchorSettings::absent(),
+            }),
             named_grid: self.applied_named_grid(uid)?,
             export: self.style_export(uid)?,
         }))
@@ -501,27 +502,62 @@ impl<'a> Reader<'a> {
 
 /// Anchored object settings (chunk 0x2800, of an anchor, an object style
 /// or the preferences). See `docs/format/objects.md`, anchored objects.
+/// A field is `None` where the chunk is too short for it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AnchorSettings {
-    /// f64 `AnchorYoffset` at 0 and u16 vertical alignment at 52, if the
-    /// chunk has 54 bytes.
-    pub offset: Option<(f64, u16)>,
-    /// The u16 at 46, 50 and 56 (anchor point and pin position) and at
-    /// 40 and 48 (anchored position and horizontal alignment), if the
-    /// chunk has 58 bytes. Each group changes together in every sample.
-    pub fields: Option<([u16; 3], [u16; 2])>,
-    /// f64 `AnchorXoffset` at 16 and the u16 horizontal reference point
-    /// at 42, if the chunk has 58 bytes.
-    pub horizontal: Option<(f64, u16)>,
+    /// f64 at 0: `AnchorYoffset`.
+    pub y_offset: Option<f64>,
+    /// f64 at 16: `AnchorXoffset`.
+    pub x_offset: Option<f64>,
+    /// u16 at 40: `AnchoredPosition`.
+    pub position: Option<u16>,
+    /// u16 at 42: `HorizontalReferencePoint`.
+    pub horizontal_reference: Option<u16>,
+    /// u16 at 44: `VerticalReferencePoint`.
+    pub vertical_reference: Option<u16>,
+    /// u16 at 46 and 50: `AnchorPoint`.
+    pub point: Option<(u16, u16)>,
+    /// u16 at 48: `HorizontalAlignment`.
+    pub horizontal_alignment: Option<u16>,
+    /// u16 at 52: `VerticalAlignment`.
+    pub vertical_alignment: Option<u16>,
+    /// u16 at 54: `SpineRelative`.
+    pub spine_relative: Option<u16>,
+    /// u16 at 56: `PinPosition`.
+    pub pin: Option<u16>,
 }
 
 impl AnchorSettings {
-    pub(super) fn read(enc: Encoding, d: &[u8]) -> AnchorSettings {
-        let u = |o: usize| enc.u16_at(d, o).unwrap_or_default();
+    pub fn read(enc: Encoding, d: &[u8]) -> AnchorSettings {
+        let u = |o: usize| enc.u16_at(d, o);
         AnchorSettings {
-            offset: (d.len() >= 54).then(|| (enc.f64_at(d, 0).unwrap_or_default(), u(52))),
-            fields: (d.len() >= 58).then(|| ([u(46), u(50), u(56)], [u(40), u(48)])),
-            horizontal: (d.len() >= 58).then(|| (enc.f64_at(d, 16).unwrap_or_default(), u(42))),
+            y_offset: enc.f64_at(d, 0),
+            x_offset: enc.f64_at(d, 16),
+            position: u(40),
+            horizontal_reference: u(42),
+            vertical_reference: u(44),
+            point: u(46).zip(u(50)),
+            horizontal_alignment: u(48),
+            vertical_alignment: u(52),
+            spine_relative: u(54),
+            pin: u(56),
+        }
+    }
+
+    /// The settings of preferences and object styles without the chunk
+    /// (`objects.md`, anchored object settings).
+    pub fn absent() -> AnchorSettings {
+        AnchorSettings {
+            y_offset: Some(0.0),
+            x_offset: Some(0.0),
+            position: Some(0),
+            horizontal_reference: Some(1),
+            vertical_reference: Some(4),
+            point: Some((0, 2)),
+            horizontal_alignment: Some(2),
+            vertical_alignment: Some(0),
+            spine_relative: Some(0),
+            pin: Some(1),
         }
     }
 }

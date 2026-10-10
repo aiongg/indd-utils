@@ -136,6 +136,11 @@ WHEN_WRITTEN = {
     "Story": ["UserText"],
     "XmlStory": ["UserText"],
 }
+# Anchored items: IDML writes every setting where the object style turns
+# the category off, and the differing ones otherwise.
+for _t in ("TextFrame", "Rectangle", "Oval", "Polygon", "GraphicLine", "Group"):
+    ELEMENTS.append(f"{_t}/AnchoredObjectSetting")
+    WHEN_WRITTEN[f"{_t}/AnchoredObjectSetting"] = ["LockPosition", "AnchorSpaceAbove"]
 # Elements the converter writes only for one value of an attribute that
 # it reads from the INDD: path -> (attribute, value). Elements on the
 # path with another value are not collected. ClippingPathSettings is

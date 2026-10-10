@@ -392,6 +392,14 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<TextFramePreference VerticalThreshold="0" />
 		</TextFrame>
 	</WhenWritten>
+	<WhenWritten MinimumVersion="8" MaximumVersion="20">
+		<TextFrame>
+			<AnchoredObjectSetting LockPosition="false" AnchorSpaceAbove="0" />
+		</TextFrame>
+		<Oval>
+			<AnchoredObjectSetting LockPosition="false" AnchorSpaceAbove="0" />
+		</Oval>
+	</WhenWritten>
 	<WhenWritten MinimumVersion="8">
 		<TextFrame>
 			<TextFramePreference UseFlexibleColumnWidth="false" />
@@ -401,10 +409,18 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Story UserText="true" />
 		<XmlStory UserText="true" />
 	</WhenWritten>
+	<WhenWritten MinimumVersion="12" MaximumVersion="20">
+		<Rectangle>
+			<AnchoredObjectSetting LockPosition="false" AnchorSpaceAbove="0" />
+		</Rectangle>
+	</WhenWritten>
 	<WhenWritten MinimumVersion="13">
 		<TextFrame>
 			<TextFramePreference FootnotesEnableOverrides="false" FootnotesSpanAcrossColumns="false" />
 		</TextFrame>
+		<GraphicLine>
+			<AnchoredObjectSetting LockPosition="false" AnchorSpaceAbove="0" />
+		</GraphicLine>
 	</WhenWritten>
 	<WhenWritten MinimumVersion="15">
 		<TextFrame>

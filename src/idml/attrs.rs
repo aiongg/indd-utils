@@ -41,56 +41,78 @@ pub(super) const FITTING_ATTRS: [(u32, &str, Kind); 7] = [
     ),
 ];
 
-/// IDML attributes of anchored object settings: `VerticalAlignment`,
-/// `AnchorYoffset`, and the combinations of the other fields observed in
-/// every sample. See `docs/format/objects.md`.
+/// IDML attributes of anchored object settings, in IDML order, for the
+/// codes the samples show. See `docs/format/objects.md`, anchored object
+/// settings.
 pub(super) fn anchored_settings(a: &AnchorSettings) -> Vec<(&'static str, String)> {
-    let mut out = Vec::new();
-    let Some((y, align)) = a.offset else {
-        return out;
+    let code = |v: Option<u16>, codes: &[(u16, &'static str)]| {
+        v.and_then(|v| codes.iter().find(|(c, _)| *c == v).map(|(_, s)| *s))
     };
-    let align = match align {
-        0 => Some("TopAlign"),
-        1 => Some("CenterAlign"),
-        2 => Some("BottomAlign"),
+    let point = match a.point {
+        Some((0, 2)) => Some("BottomRightAnchor"),
+        Some((2, 2)) => Some("BottomLeftAnchor"),
+        Some((2, 0)) => Some("TopLeftAnchor"),
+        Some((0, 0)) => Some("TopRightAnchor"),
+        Some((2, 1)) => Some("LeftCenterAnchor"),
         _ => None,
     };
-    if let Some(a) = align {
-        out.push(("VerticalAlignment", a.to_string()));
-    }
-    out.push(("AnchorYoffset", num(y)));
-    if let Some((x, reference)) = a.horizontal {
-        out.push(("AnchorXoffset", num(x)));
-        match reference {
-            1 => out.push(("HorizontalReferencePoint", "TextFrame".into())),
-            4 => out.push(("HorizontalReferencePoint", "AnchorLocation".into())),
-            _ => {}
-        }
-    }
-    if let Some((point, position)) = a.fields {
-        match point {
-            [0, 2, 1] => {
-                out.push(("AnchorPoint", "BottomRightAnchor".into()));
-                out.push(("PinPosition", "true".into()));
-            }
-            [2, 0, 0] => {
-                out.push(("AnchorPoint", "TopLeftAnchor".into()));
-                out.push(("PinPosition", "false".into()));
-            }
-            _ => {}
-        }
-        match position {
-            [0, 2] => {
-                out.push(("AnchoredPosition", "InlinePosition".into()));
-                out.push(("HorizontalAlignment", "LeftAlign".into()));
-            }
-            [2, 1] => {
-                out.push(("AnchoredPosition", "AboveLine".into()));
-                out.push(("HorizontalAlignment", "CenterAlign".into()));
-            }
-            _ => {}
-        }
-    }
+    let bool_codes: &[(u16, &str)] = &[(0, "false"), (1, "true")];
+    let named = [
+        (
+            "AnchoredPosition",
+            code(
+                a.position,
+                &[(0, "InlinePosition"), (1, "Anchored"), (2, "AboveLine")],
+            ),
+        ),
+        ("SpineRelative", code(a.spine_relative, bool_codes)),
+        ("PinPosition", code(a.pin, bool_codes)),
+        ("AnchorPoint", point),
+        (
+            "HorizontalAlignment",
+            code(
+                a.horizontal_alignment,
+                &[(0, "RightAlign"), (1, "CenterAlign"), (2, "LeftAlign")],
+            ),
+        ),
+        (
+            "HorizontalReferencePoint",
+            code(
+                a.horizontal_reference,
+                &[
+                    (1, "TextFrame"),
+                    (2, "PageMargins"),
+                    (3, "PageEdge"),
+                    (4, "AnchorLocation"),
+                ],
+            ),
+        ),
+        (
+            "VerticalAlignment",
+            code(
+                a.vertical_alignment,
+                &[(0, "TopAlign"), (1, "CenterAlign"), (2, "BottomAlign")],
+            ),
+        ),
+        (
+            "VerticalReferencePoint",
+            code(
+                a.vertical_reference,
+                &[
+                    (2, "PageMargins"),
+                    (3, "PageEdge"),
+                    (4, "LineBaseline"),
+                    (6, "Capheight"),
+                ],
+            ),
+        ),
+    ];
+    let mut out: Vec<(&'static str, String)> = named
+        .into_iter()
+        .filter_map(|(k, v)| Some((k, v?.to_string())))
+        .collect();
+    out.extend(a.x_offset.map(|x| ("AnchorXoffset", num(x))));
+    out.extend(a.y_offset.map(|y| ("AnchorYoffset", num(y))));
     out
 }
 
@@ -1662,6 +1684,34 @@ impl Writer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_anchored_object_settings_field_by_field() {
+        let mut d = vec![0u8; 62];
+        d[0..8].copy_from_slice(&(-3.5f64).to_le_bytes());
+        for (o, v) in [(40, 1u16), (42, 2), (44, 6), (46, 2), (48, 0), (50, 1), (52, 1), (54, 1), (56, 0)] {
+            d[o..o + 2].copy_from_slice(&v.to_le_bytes());
+        }
+        let a = crate::model::AnchorSettings::read(crate::object::Encoding::default(), &d);
+        let get = |k: &str| {
+            anchored_settings(&a)
+                .into_iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v)
+        };
+        assert_eq!(get("AnchoredPosition").as_deref(), Some("Anchored"));
+        assert_eq!(get("HorizontalReferencePoint").as_deref(), Some("PageMargins"));
+        assert_eq!(get("VerticalReferencePoint").as_deref(), Some("Capheight"));
+        assert_eq!(get("AnchorPoint").as_deref(), Some("LeftCenterAnchor"));
+        assert_eq!(get("HorizontalAlignment").as_deref(), Some("RightAlign"));
+        assert_eq!(get("VerticalAlignment").as_deref(), Some("CenterAlign"));
+        assert_eq!(get("SpineRelative").as_deref(), Some("true"));
+        assert_eq!(get("PinPosition").as_deref(), Some("false"));
+        assert_eq!(get("AnchorYoffset").as_deref(), Some("-3.5"));
+        // A short chunk gives the fields it has.
+        let short = crate::model::AnchorSettings::read(crate::object::Encoding::default(), &d[..44]);
+        assert_eq!(anchored_settings(&short).len(), 4);
+    }
 
     #[test]
     fn writes_tab_stops() {

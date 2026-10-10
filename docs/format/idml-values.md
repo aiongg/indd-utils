@@ -199,6 +199,19 @@ and `ExportPolicy="NoAutoExport"`. `RenditionData="Actual"` is on every
 link from DOM 13 on (3,043 of 3,043) and on none before (1,656 of
 1,656); the converter writes it from version 13.
 
+## Anchored object settings of page items
+
+Where IDML writes every anchored object setting of an item (its object
+style turns the category off; `objects.md`, anchored object settings),
+the element also has `LockPosition="false"` and `AnchorSpaceAbove="0"`.
+`tools/element_values.py` collects them as values of the
+`AnchoredObjectSetting` of text frames, rectangles, ovals, polygons,
+graphic lines and groups that have them (`WHEN_WRITTEN`): every such
+element of the corpus IDML files has these two values. The value file
+has them for the DOM versions whose files show them (text frames and
+ovals 8 to 20, rectangles 12 to 20, graphic lines 13); the converter
+writes them from there.
+
 ## Object styles other than the root
 
 `tools/root_values.py` also collects the object styles other than

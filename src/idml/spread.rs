@@ -825,17 +825,37 @@ impl Writer<'_> {
             n.write(x);
         }
         // IDML writes the anchor settings that differ from the object
-        // style's, which is not known for a form field with states.
+        // style's, which is not known for a form field with states; all of
+        // them where the style turns the category off (objects.md,
+        // anchored object settings).
         let unknown_style = form && item.object_style.is_none();
         if let Some(d) = item.anchor.as_ref().filter(|_| !unknown_style) {
             let style = item
                 .object_style
-                .and_then(|u| self.doc.object_styles.get(&u))
-                .and_then(|s| s.anchor.as_ref());
-            let attrs: Vec<_> = anchored_settings(d)
+                .and_then(|u| self.doc.object_styles.get(&u));
+            let off = style
+                .and_then(|s| s.enabled.as_ref())
+                .is_some_and(|on| !on.contains(&0xCA2F));
+            let style = style.and_then(|s| s.anchor.as_ref()).filter(|_| !off);
+            // The values every IDML has where it writes them all
+            // (idml-values.md, anchored object settings).
+            let observed = if off {
+                values::when_written(
+                    &format!("{tag}/AnchoredObjectSetting"),
+                    self.doc.version.major,
+                )
+            } else {
+                Vec::new()
+            };
+            let mut attrs: Vec<(&str, String)> = anchored_settings(d)
                 .into_iter()
                 .filter(|a| style.is_none_or(|s| !anchored_settings(s).contains(a)))
                 .collect();
+            for (k, v) in &observed {
+                if !attrs.iter().any(|(n, _)| n == k) {
+                    attrs.push((k.as_str(), v.clone()));
+                }
+            }
             if !attrs.is_empty() {
                 x.empty("AnchoredObjectSetting", &attrs);
             }
