@@ -431,7 +431,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B29 | `TabList` (Properties) | list; see below | 110/110 styles |
 | 0x1B2A | `Underline` | 1 = true | 81/81 ranges |
 | 0x1B2B | `AppliedFont` (Properties) | font family UID; a composite font as an object (below) | 1,071/1,071 ranges, 236/247 styles |
-| 0x1B2C | `OTFFigureStyle` | 0 TabularLining (23 runs, 5 styles), 1 ProportionalOldstyle, 2 ProportionalLining, 4 Default | 4/4 ranges, 138/138 styles |
+| 0x1B2C | `OTFFigureStyle` | 0 TabularLining (23 runs, 5 styles), 1 ProportionalOldstyle, 2 ProportionalLining, 3 TabularOldstyle (below), 4 Default | 4/4 ranges, 138/138 styles |
 | 0x1B2E | `MaximumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B2F | `MinimumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B31 | `MaximumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
@@ -943,7 +943,7 @@ not listed leaves the attribute out.
 | 0x1B65 | `LastLineIndent` | num | 497 (2) |
 | 0x1B81 | `PositionalForm` | 0 `None`, 1 `Calculate`, 2 `Initial` | 500 (5) |
 | 0x1B87 | `IgnoreEdgeAlignment` | bool | 498 (3) |
-| 0x42AD | `GlyphForm` | 0 `None`, 5 `MonospacedHalfWidthForm`, 9 `ProportionalWidthForm`, 10 `FullWidthForm` | 501 (6) |
+| 0x42AD | `GlyphForm` | 0 `None`, 2 `ExpertForm`, 5 `MonospacedHalfWidthForm`, 9 `ProportionalWidthForm`, 10 `FullWidthForm` | 501 (6); code 2 below |
 | 0x4222 | `LeadingAki` | num (−1 kept) | 502 (7) |
 | 0x4223 | `TrailingAki` | num | 504 (9) |
 | 0x4225 | `KinsokuType` | 0 `KinsokuPushInFirst`, 2 `KinsokuPushOutOnly`, 3 `KinsokuPrioritizeAdjustmentAmount` | 502 (7) |
@@ -1123,6 +1123,15 @@ table; string = flag byte and in-object string.
 `KinsokuHangType` (0x4226) code 1 is `KinsokuHangRegular`: 31 styles and
 120 ranges over all pairs (5 styles, 8 paragraph ranges and 6 story
 ranges in trustworthy pairs), and no other value goes with code 1.
+`GlyphForm` (0x42AD) code 2 is `ExpertForm`. Over the pairs of the
+corpus of 2026-10 that have the value, the converted output of each
+pair has `GlyphForm="ExpertForm"` on as many elements of each kind as
+its IDML: 41 character ranges in 13 pairs, 45 paragraph styles in 31 pairs and 4 text defaults
+(34 pairs with it in styles or text defaults). Codes 1, 3, 4, 11 and 12
+occur only in samples without IDML; the converter leaves them out.
+With both codes, `compare.py` reports no wrong, missing or extra
+`GlyphForm` or `OTFFigureStyle` value in the pairs of the corpus of
+2026-10, in styles, text defaults or ranges.
 
 **How IDs with equal values were told apart.**
 
@@ -1251,8 +1260,10 @@ styles:
   other attributes, in one pair);
 - `TreatIdeographicSpaceAsSpace` and `DiacriticPosition`.
 
-`OTFFigureStyle` code 3 occurs only in a sample without IDML; the
-converter leaves it out.
+`OTFFigureStyle` code 3 is `TabularOldstyle`. One pair has it, on one
+character range, and its IDML has `TabularOldstyle` on that range.
+The value occurs in 3 more IDMLs of the corpus of 2026-10, none with an
+INDD.
 
 **`ParagraphBreakType` (0x1B6A) codes.** The codes are those of
 `StartParagraph`. The evidence is the 112 pairs of the corpus of 2026-10

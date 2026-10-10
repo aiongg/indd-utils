@@ -323,6 +323,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
             (0, "TabularLining"),
             (1, "ProportionalOldstyle"),
             (2, "ProportionalLining"),
+            (3, "TabularOldstyle"),
             (4, "Default"),
         ]),
         false,
@@ -711,6 +712,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
         "GlyphForm",
         Kind::Enum(&[
             (0, "None"),
+            (2, "ExpertForm"),
             (5, "MonospacedHalfWidthForm"),
             (9, "ProportionalWidthForm"),
             (10, "FullWidthForm"),
