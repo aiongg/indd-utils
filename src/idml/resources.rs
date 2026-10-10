@@ -676,6 +676,34 @@ impl Writer<'_> {
             let i = ours_of(&mut ours, v.element);
             ours[i].attrs.push((v.name.to_string(), v.value.clone()));
         }
+        // The column rule (DOM 15 on) and footnote values (13.1 on) of the
+        // default text frame settings, as on frames (objects.md, text frame
+        // preferences of the document).
+        let version = (self.doc.version.major, self.doc.version.minor);
+        if version.0 >= 15 {
+            let i = ours_of(&mut ours, "TextFramePreference");
+            let (width, color) = match prefs.frame_column_rule {
+                Some((w, 0)) => (w, Some("n".to_string())),
+                Some((w, c)) => (w, self.doc.swatches.get(&c).cloned()),
+                None => (1.0, Some("Color/Black".to_string())),
+            };
+            ours[i]
+                .attrs
+                .push(("ColumnRuleStrokeWidth".into(), num(width)));
+            if let Some(c) = color {
+                ours[i].attrs.push(("ColumnRuleStrokeColor".into(), c));
+            }
+        }
+        if self.saved_by((13, 1)) {
+            let i = ours_of(&mut ours, "TextFramePreference");
+            let (span, min, between) = prefs.frame_footnotes.unwrap_or((false, 12.0, 6.0));
+            ours[i].attrs.extend([
+                ("FootnotesEnableOverrides".into(), "false".into()),
+                ("FootnotesSpanAcrossColumns".into(), span.to_string()),
+                ("FootnotesMinimumSpacing".into(), num(min)),
+                ("FootnotesSpaceBetween".into(), num(between)),
+            ]);
+        }
         if let Some(d) = &prefs.anchor {
             let i = ours_of(&mut ours, "AnchoredObjectSetting");
             ours[i].attrs.extend(

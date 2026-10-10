@@ -732,7 +732,8 @@ not listed leaves the attribute out.
 
 `MergeConsecutiveParaBorders` is in IDML from version 13.1 (in none of
 the 3 trustworthy pairs of version 13.0, in all 46 of 13.1); the
-converter writes it from 13.1.
+converter writes it when the header or the last session of the save
+history is 13.1 or later (`objects.md`, save history).
 
 Evidence over the converter's output (trustworthy pairs): 121,196
 values of these attributes in paragraph and character styles, text

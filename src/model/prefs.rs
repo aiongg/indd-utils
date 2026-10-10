@@ -61,6 +61,13 @@ pub struct Prefs {
     /// The colour of baseline frame grids, for the preferences and every
     /// object style.
     pub baseline_frame_grid_color: Option<FrameGridColor>,
+    /// Column rule of the default text frame settings (chunk 0x22646, as
+    /// frames): f64 width at 28, u32 swatch UID at 36.
+    pub frame_column_rule: Option<(f64, u32)>,
+    /// Footnote settings of the default text frame settings (chunk
+    /// 0x22608, as frames): u16 span at 2, f64 minimum spacing at 4, f64
+    /// space between at 12.
+    pub frame_footnotes: Option<(bool, f64, f64)>,
 }
 
 /// The colour of baseline frame grids (`preferences.md`, baseline frame
@@ -1690,8 +1697,19 @@ impl Reader<'_> {
                 Attrs::parse_text(&mut c, n, List::Style, self.db.recorder()),
             );
         }
+        let frame_column_rule = get(chunk::FRAME_COLUMN_RULE)?
+            .and_then(|d| Some((self.enc().f64_at(&d, 28)?, self.enc().u32_at(&d, 36)?)));
+        let frame_footnotes = get(chunk::FRAME_FOOTNOTES)?.and_then(|d| {
+            Some((
+                self.enc().u16_at(&d, 2)? == 1,
+                self.enc().f64_at(&d, 4)?,
+                self.enc().f64_at(&d, 12)?,
+            ))
+        });
         Ok(Prefs {
             baseline_frame_grid_color,
+            frame_column_rule,
+            frame_footnotes,
             values,
             colors,
             text_defaults,

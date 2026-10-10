@@ -230,6 +230,8 @@ pub mod chunk {
     pub const XML_TAG_COLOR: u32 = 0x117;
     /// Bullet characters, in the preferences object.
     pub const BULLETS: u32 = 0x1A488;
+    /// Baseline frame grid of a multi-column frame (24 bytes).
+    pub const FRAME_BASELINE_GRID: u32 = 0x2834;
     pub const FRAME_COLUMNS: u32 = 0x2D1;
     pub const FRAME_COLUMN_RULE: u32 = 0x22646;
     pub const FRAME_COLUMN_RULE_OVERRIDE: u32 = 0x2265A;

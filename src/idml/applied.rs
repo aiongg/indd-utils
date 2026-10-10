@@ -18,6 +18,11 @@ pub(super) struct StyleValues {
     pub enabled: Option<Vec<u32>>,
     /// Transparency attributes (chunk 0x1B92C) by attribute-list ID.
     pub transparency: Vec<(u32, crate::model::Value)>,
+    /// Footnote values of the text frame settings (span, minimum
+    /// spacing, space between).
+    pub footnote: Option<(bool, f64, f64)>,
+    /// Baseline frame grid of the text frame settings.
+    pub baseline: Option<crate::model::BaselineGrid>,
 }
 
 impl StyleValues {
@@ -98,6 +103,16 @@ impl Writer<'_> {
             }
             // A style without text frame settings takes them from the
             // style it is based on.
+            if let Some(f) = &s.frame {
+                if out.footnote.is_none()
+                    && let Some((span, a, b)) = f.footnotes
+                {
+                    out.footnote = Some((span == 1, a, b));
+                }
+                if out.baseline.is_none() {
+                    out.baseline = f.baseline_grid;
+                }
+            }
             if (s.frame.is_some() || is_root)
                 && let Some(t) = node.child("TextFramePreference")
             {

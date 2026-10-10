@@ -450,6 +450,8 @@ pub struct ObjectStyleFrame {
     /// u16 at 120 and f64 at 122 (minimum height), u16 at 130 and f64 at
     /// 132 (minimum width).
     pub minimum_sizes: Option<([bool; 2], [f64; 2])>,
+    /// Baseline frame grid at 82, in the layout of frames' chunk 0x2834.
+    pub baseline_grid: Option<super::BaselineGrid>,
 }
 
 impl ObjectStyleFrame {
@@ -471,6 +473,7 @@ impl ObjectStyleFrame {
             vertical_justification: code(74),
             auto_sizing: (|| Some((code(116)?, code(118)?)))(),
             minimum_sizes: (|| Some(([flag(120)?, flag(130)?], [f(122)?, f(132)?])))(),
+            baseline_grid: super::BaselineGrid::read(enc, d, 82),
         }
     }
 }

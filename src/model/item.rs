@@ -340,8 +340,10 @@ pub struct TextFramePreferences {
     pub first_baseline_offset: u16,
     pub vertical_justification: u16,
     pub vertical_balance_columns: bool,
-    pub auto_sizing_type: u16,
-    pub auto_sizing_reference_point: u16,
+    /// Chunk 0x2CE u16 at 22 and 24; `None` for a chunk of 22 to 27
+    /// bytes, which has no auto-sizing fields.
+    pub auto_sizing_type: Option<u16>,
+    pub auto_sizing_reference_point: Option<u16>,
     /// Chunk 0x2D1: u8 at 12 and, in 40-byte chunks, f64 at 32.
     pub use_fixed_width: bool,
     pub max_width: Option<f64>,
@@ -355,13 +357,57 @@ pub struct TextFramePreferences {
     pub column_rule: Option<(f64, u32)>,
     /// Chunk 0x2265A: all zero in every sample but one.
     pub column_rule_override: Option<bool>,
-    /// Footnote options (chunk 0x22608): u32, f64 minimum spacing, f64
-    /// space between.
+    /// Footnote options (chunk 0x22608): u16, u16 span across columns,
+    /// f64 minimum spacing, f64 space between.
     pub footnotes: Option<[f64; 2]>,
+    /// Chunk 0x22608, u16 at 2: footnotes span across columns.
+    pub footnote_span: bool,
+    /// Baseline frame grid (chunk 0x2834); `None` without the chunk.
+    pub baseline_grid: Option<BaselineGrid>,
+    /// The interface colour that the grid's colour UID names.
+    pub baseline_rgb: Option<[f64; 3]>,
     /// Inset spacing (the frame's chunk 0x3723): top, left, bottom, right.
     pub inset: [f64; 4],
     /// A frame grid (chunk 0xCD41 starts with u16 1).
     pub frame_grid: bool,
+}
+
+/// Baseline frame grid settings: chunk 0x2834 of a multi-column frame,
+/// and the text frame settings of an object style at 82
+/// (`docs/format/objects.md`, baseline frame grid of text frames).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BaselineGrid {
+    /// u16 at 0, 1 = true: `UseCustomBaselineFrameGrid`.
+    pub use_custom: bool,
+    /// f64 at 2: `StartingOffsetForBaselineFrameGrid`.
+    pub start: f64,
+    /// u16 at 10: `BaselineFrameGridRelativeOption` code.
+    pub relative: u16,
+    /// f64 at 12: `BaselineFrameGridIncrement`.
+    pub increment: f64,
+    /// u32 at 20: UID of an interface colour; 0 for the document's colour.
+    pub color: u32,
+}
+
+impl BaselineGrid {
+    /// The values of a frame or style without the settings.
+    pub const DEFAULT: BaselineGrid = BaselineGrid {
+        use_custom: false,
+        start: 0.0,
+        relative: 3,
+        increment: 12.0,
+        color: 0,
+    };
+
+    pub(super) fn read(enc: Encoding, d: &[u8], at: usize) -> Option<BaselineGrid> {
+        Some(BaselineGrid {
+            use_custom: enc.u16_at(d, at)? == 1,
+            start: enc.f64_at(d, at + 2)?,
+            relative: enc.u16_at(d, at + 10)?,
+            increment: enc.f64_at(d, at + 12)?,
+            color: enc.u32_at(d, at + 20)?,
+        })
+    }
 }
 
 /// Groups nested deeper than this are left out, with a warning, so that a
@@ -460,15 +506,30 @@ impl<'a> Reader<'a> {
         frame: u32,
         mcf: u32,
     ) -> Result<Option<TextFramePreferences>, Error> {
-        let (Some(cols), Some(just)) = (
-            self.chunk(mcf, chunk::FRAME_COLUMNS)?,
-            self.chunk(mcf, chunk::FRAME_JUSTIFICATION)?,
-        ) else {
+        let Some(cols) = self.chunk(mcf, chunk::FRAME_COLUMNS)? else {
             return Ok(None);
         };
-        if cols.len() < 22 || just.len() < 28 {
+        // A frame without chunk 0x2CE has codes 0, reference point 4 and
+        // no minimum sizes (objects.md, text frame preferences).
+        let just = match self.chunk(mcf, chunk::FRAME_JUSTIFICATION)? {
+            Some(d) => d,
+            None => {
+                let mut d = vec![0u8; 48];
+                d[24..26].copy_from_slice(&self.enc().u16_bytes(4));
+                d
+            }
+        };
+        if cols.len() < 22 || just.len() < 22 {
             return Ok(None);
         }
+        let auto_sizing = just.len() >= 26;
+        let baseline_grid = self
+            .chunk(mcf, chunk::FRAME_BASELINE_GRID)?
+            .and_then(|d| BaselineGrid::read(self.enc(), &d, 0));
+        let baseline_rgb = match baseline_grid {
+            Some(g) if g.color != 0 => self.ui_color(g.color)?,
+            _ => None,
+        };
         let minimum_sizes = (just.len() >= 48).then(|| {
             let flag = |at| self.enc().u16_at(&just, at).is_some_and(|v| v != 0);
             (
@@ -487,8 +548,9 @@ impl<'a> Reader<'a> {
             },
             None => None,
         };
-        let footnotes = match self.chunk(mcf, chunk::FRAME_FOOTNOTES)? {
-            Some(d) => match (self.enc().f64_at(&d, 4), self.enc().f64_at(&d, 12)) {
+        let footnote_chunk = self.chunk(mcf, chunk::FRAME_FOOTNOTES)?;
+        let footnotes = match &footnote_chunk {
+            Some(d) => match (self.enc().f64_at(d, 4), self.enc().f64_at(d, 12)) {
                 (Some(a), Some(b)) => Some([a, b]),
                 _ => None,
             },
@@ -510,8 +572,12 @@ impl<'a> Reader<'a> {
             first_baseline_offset: self.cursor(&just).u16()?,
             vertical_justification: self.cursor(&just[2..]).u16()?,
             vertical_balance_columns: self.cursor(&just[20..]).u16()? != 0,
-            auto_sizing_type: self.cursor(&just[22..]).u16()?,
-            auto_sizing_reference_point: self.cursor(&just[24..]).u16()?,
+            auto_sizing_type: auto_sizing
+                .then(|| self.enc().u16_at(&just, 22))
+                .flatten(),
+            auto_sizing_reference_point: auto_sizing
+                .then(|| self.enc().u16_at(&just, 24))
+                .flatten(),
             use_fixed_width: cols.get(12).is_some_and(|&b| b != 0),
             max_width: if cols.len() >= 40 {
                 self.enc().f64_at(&cols, 32)
@@ -528,6 +594,11 @@ impl<'a> Reader<'a> {
                 .chunk(mcf, chunk::FRAME_COLUMN_RULE_OVERRIDE)?
                 .map(|d| d.iter().any(|&b| b != 0)),
             footnotes,
+            footnote_span: footnote_chunk
+                .and_then(|d| self.enc().u16_at(&d, 2))
+                == Some(1),
+            baseline_grid,
+            baseline_rgb,
             inset,
             frame_grid: self
                 .chunk(mcf, chunk::FRAME_GRID)?

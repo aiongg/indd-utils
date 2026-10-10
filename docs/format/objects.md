@@ -142,7 +142,30 @@ the language edition of the application of that session:
   same values as 0x0100 in all 12 pairs that have it.
 
 The converter reads the code of the last record only, and only uses
-whether it is 0x0101. The record count is checked against the chunk
+whether it is 0x0101.
+
+**Application version.** The version string of the last record can be
+later than the version in the header: InDesign 13.1 saved files whose
+header says 13.0. IDML writes some values only from 13.1, and follows
+the application, not the header. Over the trustworthy pairs of version
+12.0 to 14.0 (corpus after 2026-10), the document's
+`TextFramePreference` has the `Footnotes…` values:
+
+| Header | Last session | IDML `DOMVersion` | Pairs | With the values |
+|---|---|---|---:|---:|
+| 12.0, 12.1 | same | same | 72 | 0 |
+| 13.0 | 13.0 | 13.0 | 42 | 0 |
+| 13.0 | 13.0 | 13.1 | 16 | 16 |
+| 13.0 | 13.1 | 13.1 | 93 | 93 |
+| 13.1 | 13.1 | 13.1 | 148 | 148 |
+| 14.0 | 14.0 or 14.3 | 14.0 | 43 | 43 |
+
+The 16 were exported by InDesign 13.1 without saving, which the INDD
+cannot show. The converter takes a 13.1 boundary as reached when the
+header or the last session is at least 13.1: for the `Footnotes…`
+values of the document, of text frames and of object styles, and for
+`MergeConsecutiveParaBorders`. This adds 93 to 253 values for each of
+these keys and no wrong or extra value. The record count is checked against the chunk
 size; a chunk that does not parse gives no code.
 
 **Values that follow the language of the last session.** Over all 803
@@ -2096,7 +2119,31 @@ From the frame's multi-column frame object (class 0x263):
 | 0x2D1 | f64 32 | `TextColumnMaxWidth` (in 40-byte chunks) |
 | 0x3730 | u16 | `IgnoreWrap` |
 | 0x22646 | f64 28, u32 36 | `ColumnRuleStrokeWidth`, `ColumnRuleStrokeColor` (a swatch; 0 = `n`) |
-| 0x22608 | f64 4, f64 12 | `FootnotesMinimumSpacing`, `FootnotesSpaceBetween` |
+| 0x22608 | u16 2, f64 4, f64 12 | `FootnotesSpanAcrossColumns` (1 = true), `FootnotesMinimumSpacing`, `FootnotesSpaceBetween` |
+| 0x2834 | 24 bytes | `BaselineFrameGridOption` (below) |
+
+**Span of footnotes.** The u16 at 2 of chunk 0x22608 is
+`FootnotesSpanAcrossColumns`. Before 2026-10, 2,655 frames with 0 have
+`false` in IDML; the 22 frames with 1 (8 documents) all have an object
+style with span `true` and the footnote category on, and IDML leaves the
+attribute out, as for any value equal to the style's. Writing it from
+the chunk removes the 82 extra `FootnotesSpanAcrossColumns` values of
+the trustworthy pairs after 2026-10 and adds no wrong value.
+
+**Frames without chunk 0x2CE, and the 22-byte chunk.** Frames of
+InDesign 14.0 and 15.0 can lack chunk 0x2CE (517 frames in 24 documents
+before 2026-10). Their IDML has `FirstBaselineOffset="LeadingOffset"`
+on all 517, although their styles have `AscentOffset`; where IDML writes
+the other values they are `TopAlign`, `false`, `Off`, `CenterPoint`,
+minimums off and 0, and no line breaks off. These are codes 0, reference
+point 4 and no minimums. InDesign 7.0 frames can have a 22-byte chunk
+0x2CE (125 frames, 4 documents): offsets 0, 2 and 20 are as in the
+longer chunk (11 of 11, 11 of 11 and 13 of 13 values); it has no
+auto-sizing fields, and DOM 7 IDML has no auto-sizing attributes. The
+converter writes these frames' `TextFramePreference` with those values:
+over the trustworthy pairs after 2026-10, 670 more elements, with no
+wrong or extra value (`FirstBaselineOffset` 2,731 of 2,731,
+`AutoSizingType` 16,202 of 16,202).
 
 The frame itself (class 0x6201) holds the inset spacing in chunk 0x3723
 (44 bytes): f64, u32, then four f64 (left, top, right, bottom). IDML
@@ -2165,6 +2212,50 @@ keeps the 200,434 it has, and leaves out one value that the IDML has (a
 pairs except one, whose IDML has `true`; the converter writes `false`
 for zero chunks and frames without it (7,247 of 7,248).
 
+**Baseline frame grid of text frames.** Chunk 0x2834 of the
+multi-column frame (24 bytes) holds the frame's baseline grid:
+
+| Offset | Type | `BaselineFrameGridOption` attribute |
+|---|---|---|
+| 0 | u16, 1 = true | `UseCustomBaselineFrameGrid` |
+| 2 | f64 | `StartingOffsetForBaselineFrameGrid` |
+| 10 | u16: 0 `TopOfPage`, 1 `TopOfMargin`, 2 `TopOfFrame`, 3 `TopOfInset` | `BaselineFrameGridRelativeOption` |
+| 12 | f64 | `BaselineFrameGridIncrement` |
+| 20 | u32 | UID of an interface colour (class 0x1F11), 0 for the document's colour: `BaselineFrameGridColor` |
+
+Without the chunk the values are `false`, 0, `TopOfInset`, 12 and the
+document's colour (187 of 187 frames before 2026-10). The text frame
+settings of an object style (chunk 0x1B924) hold the same fields at
+offset 82 (u16 82, f64 84, u16 92, f64 94, u32 102).
+
+IDML writes the element by the category rule above with category
+0xADC8: when the category is off in the applied style, or the frame has
+no style object, it writes all four attributes and the colour; otherwise
+each attribute whose value differs from the style's, and the colour when
+the frame's colour UID differs from the style's. A frame with nothing to
+write has no element. The colour is the document's baseline frame grid
+colour (`preferences.md`) for UID 0, otherwise the interface colour named
+as for layers. The element has the colour as its only `Properties`
+child and follows `TextFramePreference`.
+
+Evidence before 2026-10: all 23,940 text frames of the 606 trustworthy
+pairs (category off: 749 of 749 with every value; no style object: 4 of
+4; category on with values that differ: 269 of 269 with exactly those
+values; only the colour UID differs: 32 of 32; nothing differs: no
+element in 22,886 of 22,886). One frame with offset 118 places the
+starting offset at 2. Object styles: 1,412 of 1,412 match their
+`ObjectStyle/BaselineFrameGridOption`.
+
+Over the 1,251 trustworthy pairs after 2026-10, the converter's elements
+by this rule are 1,961 of the 1,961 reference elements on the frames it
+writes (the other 372 are on frames it does not write), with no extra
+element. All attributes are reproduced (1,692 to 1,915 each); 1,685 of
+1,727 colours are, and the 42 others are on frames with UID 0 in
+documents whose document colour the converter gets wrong
+(`preferences.md`). The object styles' four values are reproduced in
+5,556 of 5,556 styles; code 1 `TopOfMargin` occurs in 6 styles of 6
+documents, with `UseCustomBaselineFrameGrid="true"`.
+
 **Text orientation (chunk 0x2DE).** The multi-column frame holds a
 matrix (six f64) in chunk 0x2DE. Its first four values are 1 0 0 1 for
 horizontal text and 0 1 −1 0 (a quarter turn) for vertical text. IDML
@@ -2231,6 +2322,20 @@ vertically with the same print PDF:
   centred on half the cap height (0.325 + 0.5).
 
 The converter leaves out codes other than 0 to 3.
+
+**Text frame defaults of the document.** The preferences object (class
+0x2202) has chunks 0x22646 and 0x22608 with the frame layouts, for the
+document's `TextFramePreference`: f64 at 28 `ColumnRuleStrokeWidth` and
+u32 at 36 `ColumnRuleStrokeColor` (a swatch UID; 195 of 195 documents
+before 2026-10), and u16 at 2, f64 at 4 and f64 at 12 the footnote
+span and spacings. Without chunk 0x22646 the values are 1 and
+`Color/Black`. Every chunk 0x22608 in the corpus holds 0, 0, 12 and 6,
+and every IDML has `false`, `false`, 12 and 6, so its offsets rest on the
+frame layout. IDML writes the column rule values from DOM 15 and the
+four `Footnotes…` values from 13.1 (save history, above). Over the
+trustworthy pairs after 2026-10: column rule width and colour 576 of
+576 each; footnote values 860 of 876 each (the other 16 were exported by
+InDesign 13.1 from a document the INDD shows as saved by 13.0).
 
 ## Kinsoku and mojikumi tables
 

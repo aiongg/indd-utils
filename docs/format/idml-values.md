@@ -236,10 +236,11 @@ these vary in a few styles of a few documents. The converter reads many
 of them from the INDD.
 
 `TextFramePreference` `FootnotesEnableOverrides="false"` is on every
-object style, `[None]` included, from InDesign 13.1 (INDD header
-version): 1,392 of 1,392 styles of the trustworthy pairs, none before.
-The value file has it only from DOM 14, since it is generated per major
-version; the converter writes it from 13.1.
+object style, `[None]` included, from InDesign 13.1: 1,392 of 1,392
+styles of the trustworthy pairs before 2026-10, none before. The value
+file has it only from DOM 14, since it is generated per major version;
+the converter writes it when the header or the last session of the save
+history is 13.1 or later (`objects.md`, save history).
 
 ## Composite font entries
 

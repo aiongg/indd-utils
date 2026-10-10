@@ -4,7 +4,7 @@
 //! Evidence: `docs/format/objects.md` (styles and style groups),
 //! `attributes.md`, `tables.md` and `idml-values.md`.
 
-use super::spread::{FIRST_BASELINE, JUSTIFY, POINTS, SIZING};
+use super::spread::{BASELINE_RELATIVE, FIRST_BASELINE, JUSTIFY, POINTS, SIZING};
 use super::*;
 
 /// `KeyboardShortcut` and `ExtendedKeyboardShortcut` of a style, from its
@@ -547,7 +547,7 @@ impl Writer<'_> {
                 let span = (span == 1).to_string();
                 // In `TextFramePreference` from 13.1 (objects.md, object
                 // style settings).
-                if version >= (13, 1) {
+                if self.saved_by((13, 1)) {
                     tf.push(("FootnotesSpanAcrossColumns", span.clone()));
                     tf.push(("FootnotesMinimumSpacing", num(min)));
                     tf.push(("FootnotesSpaceBetween", num(between)));
@@ -594,13 +594,28 @@ impl Writer<'_> {
                         .collect(),
                 });
             }
+            // The style's baseline frame grid (objects.md, baseline frame
+            // grid of text frames); the colour stays the preferences'.
+            if let Some(g) = fr.baseline_grid
+                && node.child("BaselineFrameGridOption").is_some()
+            {
+                let mut attrs = vec![
+                    ("UseCustomBaselineFrameGrid", g.use_custom.to_string()),
+                    ("StartingOffsetForBaselineFrameGrid", num(g.start)),
+                ];
+                if let Some(r) = BASELINE_RELATIVE.get(g.relative as usize).copied().flatten() {
+                    attrs.push(("BaselineFrameGridRelativeOption", r.to_string()));
+                }
+                attrs.push(("BaselineFrameGridIncrement", num(g.increment)));
+                node.set(&["BaselineFrameGridOption"], attrs);
+            }
             if !footnote.is_empty() && node.child("TextFrameFootnoteOptionsObject").is_some() {
                 node.set(&["TextFrameFootnoteOptionsObject"], footnote);
             }
         }
         // Every object style has it from 13.1 (idml-values.md, object
         // styles other than the root).
-        if version >= (13, 1) {
+        if self.saved_by((13, 1)) {
             node.merge(&Node {
                 tag: "ObjectStyle".into(),
                 children: vec![Node {

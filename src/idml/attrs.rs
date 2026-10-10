@@ -1318,11 +1318,10 @@ impl Writer<'_> {
     pub(super) fn text_attrs(&self, attrs: &Attrs) -> (Vec<(&'static str, String)>, Vec<Property>) {
         let mut plain = Vec::new();
         let mut props = Vec::new();
-        let v = &self.doc.version;
         for &(id, name, kind, in_props) in TEXT_ATTRS {
             // IDML has `MergeConsecutiveParaBorders` from version 13.1
             // (attributes.md).
-            if id == 0x1DF1F && (v.major, v.minor) < (13, 1) {
+            if id == 0x1DF1F && !self.saved_by((13, 1)) {
                 continue;
             }
             let Some(v) = attrs.get(id) else { continue };

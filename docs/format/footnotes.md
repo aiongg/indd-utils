@@ -136,19 +136,42 @@ In the trustworthy pairs every `FootnoteOption` value is now reproduced
 DOM 12, with `EnableOverrides`, `SpanFootnotesAcross`,
 `MinimumSpacingOption` and `SpaceBetweenFootnotes`: the frame's
 `FootnotesEnableOverrides`, `FootnotesSpanAcrossColumns`,
-`FootnotesMinimumSpacing` and `FootnotesSpaceBetween`. In DOM 14 and
-later IDML writes it on exactly the frames whose `TextFramePreference`
-has `FootnotesEnableOverrides`; in DOM 12, 1,215 frames have it and 508
-do not, and no chunk of the frame or of its multi-column object separates
-the two groups (314 frames of 6 trustworthy pairs, by chunk presence).
+`FootnotesMinimumSpacing` and `FootnotesSpaceBetween`.
 
-The converter writes it from DOM 14 on the frames whose
-`TextFramePreference` it writes with `FootnotesEnableOverrides`, with the
-four values of that preference, after `TextFramePreference`. In the
-trustworthy pairs this gives 3,778 elements, all in the reference with
-all four values, and no extra element. The DOM 12 and 13 frames, and
-frames whose preference the converter writes without
-`FootnotesEnableOverrides`, are still missing (1,949 elements).
+IDML writes it on a frame of DOM 12 or later when one of these holds:
+
+- the frame's applied object style lacks category 0xADCA (footnotes) in
+  its category list (chunk 0x1B92E; `objects.md`, text frame
+  preferences);
+- the frame's footnote values (span, minimum spacing, space between)
+  differ from the style's;
+- the frame has no object style object.
+
+This is the rule `TextFramePreference` follows for its `Footnotes…`
+attributes, applied from DOM 12 although `TextFramePreference` has no
+footnote values before 13.1. The frame's values are in chunk 0x22608 of
+its multi-column frame (`objects.md`, text frame preferences): u16 at 2
+the span (1 = true), f64 at 4 and 12 the spacings. Without the chunk they
+are `false`, 12 and 6. The style's values are those of its text frame
+settings (chunk 0x1B924: u16 at 144, f64 at 146 and 154), or of the
+style it is based on, or `false`, 12 and 6.
+
+Evidence: measured on 16,900 text frames of DOM 12 or later in 606
+trustworthy pairs before 2026-10 (every frame with the category off or
+without a style has the element, 6,011 of 6,011; every frame with the
+category on and equal values has none, 10,888 of 10,888; the one frame
+with the category on and other values has it). Over the 1,251
+trustworthy pairs after 2026-10, the converter's elements by this rule
+are 20,096 of the 20,096 reference elements on the frames it writes, with
+all four values, and no element that the reference lacks; the other 255
+are on frames it does not write. Three
+elements of the output have an `EnableOverrides` that the reference
+element lacks (not explained).
+
+`EnableOverrides` is `false` in every element. Chunk 0x22608 has a u16 0
+at offset 0 in every sample; it is probably that flag, which no sample
+shows set. The converter writes `false`. The element follows
+`TextFramePreference` and the frame's `BaselineFrameGridOption`.
 
 ## Endnotes
 

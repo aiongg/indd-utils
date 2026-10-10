@@ -121,6 +121,14 @@ pub(super) const POINTS: [&str; 9] = [
     "BottomCenterPoint",
     "BottomRightPoint",
 ];
+/// `BaselineFrameGridRelativeOption` codes (objects.md, baseline frame
+/// grid of text frames).
+pub(super) const BASELINE_RELATIVE: [Option<&str>; 4] = [
+    Some("TopOfPage"),
+    Some("TopOfMargin"),
+    Some("TopOfFrame"),
+    Some("TopOfInset"),
+];
 /// `VerticalJustification` codes.
 pub(super) const JUSTIFY: [&str; 4] = ["TopAlign", "CenterAlign", "BottomAlign", "JustifyAlign"];
 /// `FirstBaselineOffset` codes (objects.md, text frame preferences).
@@ -251,10 +259,13 @@ impl Writer<'_> {
             "VerticalBalanceColumns",
             p.vertical_balance_columns.to_string(),
         ));
-        if let Some(v) = SIZING.get(p.auto_sizing_type as usize) {
+        if let Some(v) = p.auto_sizing_type.and_then(|c| SIZING.get(c as usize)) {
             attrs.push(("AutoSizingType", v.to_string()));
         }
-        if let Some(v) = POINTS.get(p.auto_sizing_reference_point as usize) {
+        if let Some(v) = p
+            .auto_sizing_reference_point
+            .and_then(|c| POINTS.get(c as usize))
+        {
             attrs.push(("AutoSizingReferencePoint", v.to_string()));
         }
         if let Some(w) = p.max_width {
@@ -276,7 +287,7 @@ impl Writer<'_> {
         // settings exist (idml-values.md). Footnote values from 13.1.
         let written = values::when_written("TextFrame/TextFramePreference", major);
         let has = |k: &str| written.iter().any(|(n, _)| n == k);
-        let footnotes = (major, v.minor) >= (13, 1);
+        let footnotes = self.saved_by((13, 1));
         if has("ColumnRuleOffset") {
             let (width, color) = match p.column_rule {
                 Some((w, c)) => (w, swatch(c)),
@@ -293,6 +304,7 @@ impl Writer<'_> {
         }
         if has("FootnotesEnableOverrides") && footnotes {
             let [spacing, between] = p.footnotes.unwrap_or([12.0, 6.0]);
+            attrs.push(("FootnotesSpanAcrossColumns", p.footnote_span.to_string()));
             attrs.push(("FootnotesMinimumSpacing", num(spacing)));
             attrs.push(("FootnotesSpaceBetween", num(between)));
         }
@@ -314,57 +326,139 @@ impl Writer<'_> {
                     || !s.frame(k).is_some_and(|sv| applied::same_value(sv, val))
             });
         }
-        if attrs.is_empty() && major < 11 {
-            return;
-        }
-        // From DOM 14 IDML writes the frame's footnote options again as
-        // TextFrameFootnoteOptionsObject on the frames whose preference has
-        // FootnotesEnableOverrides (footnotes.md).
-        let get = |k: &str| attrs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone());
-        let footnote_options = (major >= 14)
-            .then(|| get("FootnotesEnableOverrides"))
-            .flatten()
-            .map(|on| {
-                [
-                    ("EnableOverrides", Some(on)),
-                    ("SpanFootnotesAcross", get("FootnotesSpanAcrossColumns")),
-                    ("MinimumSpacingOption", get("FootnotesMinimumSpacing")),
-                    ("SpaceBetweenFootnotes", get("FootnotesSpaceBetween")),
-                ]
-            });
-        x.start("TextFramePreference");
-        for (k, val) in attrs {
-            x.attr(k, val);
-        }
-        if major >= 11 {
-            let [top, left, bottom, right] = p.inset;
-            let item = |v: f64| Node {
-                tag: "ListItem".into(),
-                attrs: vec![("type".into(), "unit".into())],
-                text: Some(num(v)),
-                children: Vec::new(),
-            };
-            Self::properties_with(
-                x,
-                &[],
-                &[Node {
-                    tag: "InsetSpacing".into(),
-                    attrs: vec![("type".into(), "list".into())],
-                    text: None,
-                    children: vec![item(top), item(left), item(bottom), item(right)],
-                }],
-            );
-        }
-        x.end();
-        if let Some(o) = footnote_options {
-            x.start("TextFrameFootnoteOptionsObject");
-            for (k, v) in o {
-                if let Some(v) = v {
-                    x.attr(k, v);
-                }
+        // A category is off when the applied style's list lacks its ID, or
+        // the frame has no style (objects.md, text frame preferences).
+        let off = |id: u32| {
+            style.is_none_or(|s| !s.enabled.as_ref().is_some_and(|on| on.contains(&id)))
+        };
+        let footnote_options = self.frame_footnote_options(p, style, off(0xADCA));
+        let baseline = self.frame_baseline_grid(p, style, off(0xADC8));
+        // Before DOM 11 IDML gives a frame without values no element.
+        if !attrs.is_empty() || major >= 11 {
+            x.start("TextFramePreference");
+            for (k, val) in attrs {
+                x.attr(k, val);
+            }
+            if major >= 11 {
+                let [top, left, bottom, right] = p.inset;
+                let item = |v: f64| Node {
+                    tag: "ListItem".into(),
+                    attrs: vec![("type".into(), "unit".into())],
+                    text: Some(num(v)),
+                    children: Vec::new(),
+                };
+                Self::properties_with(
+                    x,
+                    &[],
+                    &[Node {
+                        tag: "InsetSpacing".into(),
+                        attrs: vec![("type".into(), "list".into())],
+                        text: None,
+                        children: vec![item(top), item(left), item(bottom), item(right)],
+                    }],
+                );
             }
             x.end();
         }
+        if let Some(n) = baseline {
+            n.write(x);
+        }
+        if let Some(o) = footnote_options {
+            x.empty("TextFrameFootnoteOptionsObject", &o);
+        }
+    }
+
+    /// `TextFrameFootnoteOptionsObject` of a text frame: from DOM 12, when
+    /// the footnote category is off or the frame's footnote values differ
+    /// from its style's (footnotes.md, text frame footnote options).
+    fn frame_footnote_options(
+        &self,
+        p: &TextFramePreferences,
+        style: Option<&applied::StyleValues>,
+        off: bool,
+    ) -> Option<[(&'static str, String); 4]> {
+        if self.doc.version.major < 12 {
+            return None;
+        }
+        // Without chunk 0x22608 the values are false, 12 and 6.
+        let [min, between] = p.footnotes.unwrap_or([12.0, 6.0]);
+        let (span, smin, sbetween) = style
+            .and_then(|s| s.footnote)
+            .unwrap_or((false, 12.0, 6.0));
+        let differ = p.footnote_span != span
+            || !applied::same_value(&num(min), &num(smin))
+            || !applied::same_value(&num(between), &num(sbetween));
+        (off || differ).then(|| {
+            [
+                ("EnableOverrides", "false".to_string()),
+                ("SpanFootnotesAcross", p.footnote_span.to_string()),
+                ("MinimumSpacingOption", num(min)),
+                ("SpaceBetweenFootnotes", num(between)),
+            ]
+        })
+    }
+
+    /// `BaselineFrameGridOption` of a text frame: every value when the
+    /// baseline category is off, else the values that differ from the
+    /// style's; `None` when there is nothing to write (objects.md,
+    /// baseline frame grid of text frames).
+    fn frame_baseline_grid(
+        &self,
+        p: &TextFramePreferences,
+        style: Option<&applied::StyleValues>,
+        all: bool,
+    ) -> Option<Node> {
+        use crate::model::BaselineGrid;
+        let g = p.baseline_grid.unwrap_or(BaselineGrid::DEFAULT);
+        let sg = style
+            .and_then(|s| s.baseline)
+            .unwrap_or(BaselineGrid::DEFAULT);
+        let mut n = Node {
+            tag: "BaselineFrameGridOption".into(),
+            ..Node::default()
+        };
+        let mut push = |differs: bool, k: &str, v: String| {
+            if all || differs {
+                n.attrs.push((k.into(), v));
+            }
+        };
+        push(
+            g.use_custom != sg.use_custom,
+            "UseCustomBaselineFrameGrid",
+            g.use_custom.to_string(),
+        );
+        push(
+            !applied::same_value(&num(g.start), &num(sg.start)),
+            "StartingOffsetForBaselineFrameGrid",
+            num(g.start),
+        );
+        if let Some(r) = BASELINE_RELATIVE.get(g.relative as usize).copied().flatten() {
+            push(
+                g.relative != sg.relative,
+                "BaselineFrameGridRelativeOption",
+                r.to_string(),
+            );
+        }
+        push(
+            !applied::same_value(&num(g.increment), &num(sg.increment)),
+            "BaselineFrameGridIncrement",
+            num(g.increment),
+        );
+        if all || g.color != sg.color {
+            let color = if g.color == 0 {
+                self.doc
+                    .prefs
+                    .baseline_frame_grid_color
+                    .and_then(frame_grid_color)
+            } else {
+                p.baseline_rgb
+                    .and_then(|rgb| ui_color_property("BaselineFrameGridColor", rgb))
+            };
+            if let Some(c) = color {
+                set_property(&mut n, c);
+            }
+        }
+        (!n.attrs.is_empty() || !n.children.is_empty()).then_some(n)
     }
 
     /// `TextWrapPreference` from an item's text wrap chunk. An item without

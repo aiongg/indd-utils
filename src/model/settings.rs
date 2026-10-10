@@ -252,13 +252,13 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
-    /// The code of the last record of the save history (chunk 0x1D8 of
-    /// the document): u32 count, then per session u16 kind, u16 platform,
-    /// two u16, u16 code, a flag byte and the application version string,
-    /// u16 build and a FILETIME (two u32). `None` when the chunk is
-    /// missing or empty or does not parse. See `docs/format/objects.md`,
-    /// save history.
-    pub(super) fn last_session_code(&self, doc: u32) -> Option<u16> {
+    /// The code and application version string of the last record of
+    /// the save history (chunk 0x1D8 of the document): u32 count, then
+    /// per session u16 kind, u16 platform, two u16, u16 code, a flag byte
+    /// and the application version string, u16 build and a FILETIME (two
+    /// u32). `None` when the chunk is missing or empty or does not parse.
+    /// See `docs/format/objects.md`, save history.
+    pub(super) fn last_session(&self, doc: u32) -> Option<(u16, String)> {
         let d = self.chunk(doc, chunk::DOC_HISTORY).ok()??;
         let mut c = self.cursor(&d);
         let n = c.u32().ok()? as usize;
@@ -266,19 +266,20 @@ impl<'a> Reader<'a> {
         if n == 0 || n > d.len() / 25 {
             return None;
         }
-        let mut code = None;
+        let mut last = None;
         for _ in 0..n {
             for _ in 0..4 {
                 c.u16().ok()?;
             }
-            code = Some(c.u16().ok()?);
+            let code = c.u16().ok()?;
             c.flag().ok()?;
-            c.string().ok()?;
+            let version = c.string().ok()?;
             c.u16().ok()?;
             c.u32().ok()?;
             c.u32().ok()?;
+            last = Some((code, version));
         }
-        code
+        last
     }
 
     /// The script byte of the last document user's name: the second byte
@@ -543,7 +544,7 @@ mod tests {
         let objects = [(1, class::DOCUMENT, chunks)];
         let bytes = synthetic::image(&objects);
         let db = synthetic::database(&bytes, &objects);
-        Reader::new(&db).last_session_code(1)
+        Reader::new(&db).last_session(1).map(|(code, _)| code)
     }
 
     fn applied_grid(chunk: Option<Vec<u8>>) -> Option<Option<u32>> {

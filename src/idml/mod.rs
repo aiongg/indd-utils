@@ -85,6 +85,15 @@ impl Writer<'_> {
     /// Whether the last session in the save history was one of a
     /// Japanese or Chinese edition (code 0x0101); `None` when the history
     /// cannot be read. Values that follow the exporting InDesign's
+    /// Whether the document's version, or the application version of its
+    /// last session, is at least `v`. IDML follows the exporting
+    /// application, which can be later than the version in the header
+    /// (objects.md, save history).
+    pub(super) fn saved_by(&self, v: (u32, u32)) -> bool {
+        let d = &self.doc.version;
+        (d.major, d.minor) >= v || self.doc.last_session_version.is_some_and(|s| s >= v)
+    }
+
     /// language depend on it (`docs/format/objects.md`, save history).
     pub(super) fn japanese_session(&self) -> Option<bool> {
         self.doc.last_session_code.map(|c| c == 0x0101)
