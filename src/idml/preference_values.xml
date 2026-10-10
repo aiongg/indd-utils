@@ -9,110 +9,75 @@ by tools/root_values.py; evidence in docs/format/idml-values.md.
 <PreferenceValues>
 	<Values>
 		<ButtonPreference Name="" />
-		<PrintPreference PrintFile="" Copies="1" Collating="false" ReverseOrder="false" Sequence="All" PrintSpreads="false" PrintMasterPages="false" PrintNonprinting="false" PrintBlankPages="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" ScaleMode="ScaleWidthHeight" ScaleWidth="100" ScaleHeight="100" ScaleProportional="true" Thumbnails="false" Tile="false" TilingType="Auto" TilingOverlap="108" AllPrinterMarks="false" BleedMarks="false" ColorBars="false" MarkLineWeight="P25pt" BleedTop="0" BleedBottom="0" BleedInside="0" BleedOutside="0" IncludeSlugToPrint="false" TextAsBlack="false" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" YellowAngle="0" PrintBlack="true" BlackAngle="45" FontDownloading="Complete" DownloadPPDFonts="true" SourceSpace="UseDocument" Intent="AbsoluteColorimetric" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" FlattenerPresetName="$ID/kFlSt_MediumDefaultName" IgnoreSpreadOverrides="false" CompositeScreening="$ID/kDefault" BleedChain="false" BitmapResolution="300" PrintLayers="VisiblePrintableLayers">
+		<PrintPreference PrintFile="" Collating="false" ReverseOrder="false" Sequence="All" PrintMasterPages="false" PrintNonprinting="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" PrintBlack="true" SourceSpace="UseDocument" Intent="AbsoluteColorimetric" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" IgnoreSpreadOverrides="false" CompositeScreening="$ID/kDefault" PrintLayers="VisiblePrintableLayers">
 			<Properties>
 				<PaperHeight type="enumeration">Auto</PaperHeight>
 				<PaperWidth type="enumeration">Auto</PaperWidth>
-				<MarkType type="enumeration">Default</MarkType>
 				<Screening type="enumeration">Default</Screening>
-				<Profile type="enumeration">UseDocument</Profile>
 				<CRD type="enumeration">Default</CRD>
-				<PageRange type="enumeration">AllPages</PageRange>
 			</Properties>
 		</PrintPreference>
-		<PrintBookletOption BookletType="TwoUpSaddleStitch" SpaceBetweenPages="0" BleedBetweenPages="0" Creep="0" SignatureSize="SignatureSize4" TopMargin="36" BottomMargin="36" LeftMargin="36" RightMargin="36" AutoAdjustMargins="true" MarginsUniformSize="false" PrintBlankPrinterSpreads="true">
+		<PrintBookletOption BookletType="TwoUpSaddleStitch" SpaceBetweenPages="0" BleedBetweenPages="0" Creep="0" SignatureSize="SignatureSize4" AutoAdjustMargins="true" MarginsUniformSize="false" PrintBlankPrinterSpreads="true">
 			<Properties>
 				<PageRange type="enumeration">AllPages</PageRange>
 			</Properties>
 		</PrintBookletOption>
-		<PrintBookletPrintPreference PrinterList="" PPDList="" PaperSizeList="" ScreeningList="" PrintFile="" Copies="1" Collating="false" ReverseOrder="false" PrintNonprinting="false" PrintBlankPages="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" PagePosition="UpperLeft" ScaleMode="ScaleWidthHeight" ScaleWidth="100" ScaleHeight="100" ScaleProportional="true" PrintLayers="VisiblePrintableLayers" AllPrinterMarks="false" CropMarks="false" BleedMarks="false" RegistrationMarks="false" ColorBars="false" PageInformationMarks="false" MarkLineWeight="P25pt" MarkOffset="6" UseDocumentBleedToPrint="true" BleedTop="0" BleedBottom="0" BleedInside="0" BleedOutside="0" BleedChain="false" TextAsBlack="false" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" YellowAngle="0" PrintBlack="true" BlackAngle="45" FontDownloading="Complete" DownloadPPDFonts="true" SourceSpace="UseDocument" Intent="AbsoluteColorimetric" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" FlattenerPresetName="$ID/kFlSt_MediumDefaultName" IgnoreSpreadOverrides="false" BitmapResolution="300" CompositeScreening="$ID/kDefault" SpotAngle="45">
+		<PrintBookletPrintPreference PrinterList="" PPDList="" PaperSizeList="" ScreeningList="" PrintFile="" Copies="1" Collating="false" ReverseOrder="false" PrintNonprinting="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" ScaleWidth="100" ScaleHeight="100" ScaleProportional="true" PrintLayers="VisiblePrintableLayers" UseDocumentBleedToPrint="true" TextAsBlack="false" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" PrintBlack="true" DownloadPPDFonts="true" SourceSpace="UseDocument" Intent="AbsoluteColorimetric" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" IgnoreSpreadOverrides="false" CompositeScreening="$ID/kDefault">
 			<Properties>
 				<PaperHeight type="enumeration">Auto</PaperHeight>
 				<PaperWidth type="enumeration">Auto</PaperWidth>
-				<MarkType type="enumeration">Default</MarkType>
 				<Screening type="enumeration">Default</Screening>
 				<Profile type="enumeration">UseDocument</Profile>
 				<CRD type="enumeration">Default</CRD>
-				<ActivePrinterPreset type="enumeration">Default</ActivePrinterPreset>
 			</Properties>
 		</PrintBookletPrintPreference>
-		<PageItemDefault FillColor="Swatch/None" FillTint="-1" MiterLimit="4" EndCap="ButtEndCap" EndJoin="MiterEndJoin" StrokeType="StrokeStyle/$ID/Solid" LeftLineEnd="None" RightLineEnd="None" StrokeColor="Swatch/None" StrokeTint="-1" GradientFillAngle="0" GradientStrokeAngle="0" GapColor="Swatch/None" GapTint="-1" StrokeAlignment="CenterAlignment" Nonprinting="false" />
-		<FrameFittingOption AutoFit="false" BottomCrop="0" FittingOnEmptyFrame="None" />
-		<StoryPreference OpticalMarginAlignment="false" OpticalMarginSize="12" FrameType="TextFrameType" StoryOrientation="Horizontal" StoryDirection="LeftToRightDirection" />
-		<TextFramePreference TextColumnCount="1" TextColumnFixedWidth="144" UseFixedColumnWidth="false" FirstBaselineOffset="AscentOffset" MinimumFirstBaselineOffset="0" VerticalJustification="TopAlign" VerticalThreshold="0" IgnoreWrap="false" VerticalBalanceColumns="false">
+		<PageItemDefault FillColor="Swatch/None" EndJoin="MiterEndJoin" GapTint="-1" />
+		<StoryPreference StoryDirection="LeftToRightDirection" />
+		<TextFramePreference TextColumnFixedWidth="144" UseFixedColumnWidth="false" MinimumFirstBaselineOffset="0" VerticalJustification="TopAlign" VerticalThreshold="0" IgnoreWrap="false" VerticalBalanceColumns="false">
 			<Properties>
 				<InsetSpacing type="list"><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem><ListItem type="unit">0</ListItem></InsetSpacing>
 			</Properties>
 		</TextFramePreference>
-		<TextPreference HighlightHjViolations="false" HighlightKeeps="false" HighlightSubstitutedGlyphs="false" HighlightCustomSpacing="false" HighlightSubstitutedFonts="true" UseOpticalSize="true" UseParagraphLeading="false" SuperscriptSize="58.3" SuperscriptPosition="33.3" SubscriptSize="58.3" SmallCap="70" JustifyTextWraps="false" AbutTextToTextWrap="true" LinkTextFilesWhenImporting="false" HighlightKinsoku="false" UseNewVerticalScaling="false" UseCidMojikumi="false" EnableStylePreviewMode="false" AddPages="EndOfStory" LimitToMasterTextFrames="true" PreserveFacingPageSpreads="false" DeleteEmptyPages="false" />
-		<TextDefault RightIndent="0" SpaceBefore="0" Justification="LeftAlign" SingleWordJustification="FullyJustified" AutoLeading="120" DropCapLines="0" DropCapCharacters="0" KeepLinesTogether="false" KeepAllLinesTogether="false" KeepWithNext="0" KeepFirstLines="2" KeepLastLines="2" StartParagraph="Anywhere" MinimumWordSpacing="80" MaximumWordSpacing="133" DesiredWordSpacing="100" MinimumLetterSpacing="0" MaximumLetterSpacing="0" DesiredLetterSpacing="0" MinimumGlyphScaling="100" MaximumGlyphScaling="100" DesiredGlyphScaling="100" RuleAbove="false" RuleAboveOverprint="false" RuleAboveTint="-1" RuleAboveLeftIndent="0" RuleAboveRightIndent="0" RuleAboveWidth="ColumnWidth" RuleAboveGapTint="-1" RuleAboveGapOverprint="false" RuleBelow="false" RuleBelowLeftIndent="0" RuleBelowRightIndent="0" RuleBelowWidth="ColumnWidth" RuleBelowGapTint="-1" HyphenateCapitalizedWords="true" HyphenateBeforeLast="2" HyphenateAfterFirst="2" HyphenateWordsLongerThan="5" HyphenateLadderLimit="3" HyphenWeight="5" KerningMethod="$ID/Metrics" Position="Normal" Underline="false" StrikeThru="false" NoBreak="false" HorizontalScale="100" VerticalScale="100" BaselineShift="0" Skew="0" StrokeTint="-1" OverprintStroke="false" OverprintFill="false" OTFOrdinal="false" OTFFraction="false" OTFDiscretionaryLigature="false" OTFTitling="false" OTFSwash="false" UnderlineTint="-1" UnderlineGapTint="-1" UnderlineOverprint="false" UnderlineGapOverprint="false" UnderlineOffset="-9999" UnderlineWeight="-9999" StrikeThroughTint="-1" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" StrikeThroughGapOverprint="false" StrikeThroughOffset="-9999" StrikeThroughWeight="-9999" StrokeColor="Swatch/None" KeepWithPrevious="false" SpanColumnType="SingleColumn" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" SpanColumnMinSpaceAfter="0" LastLineIndent="0" HyphenateLastWord="true" OTFSlashedZero="false" OTFHistorical="false" OTFStylisticSets="0" GradientFillLength="-1" GradientFillAngle="0" GradientStrokeLength="-1" GradientStrokeAngle="0" GradientFillStart="0 0" GradientStrokeStart="0 0" RuleBelowOverprint="false" RuleBelowGapOverprint="false" HyphenateAcrossColumns="true" KeepRuleAboveInFrame="false" IgnoreEdgeAlignment="false" OTFMark="true" OTFLocale="true" PositionalForm="None" ParagraphDirection="LeftToRightDirection" ParagraphJustification="DefaultJustification" StrokeAlignment="OutsideAlignment" EndJoin="MiterEndJoin" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" CharacterDirection="DefaultDirection" KeyboardDirection="DefaultDirection" DigitsType="DefaultDigits" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" ParagraphBreakType="Anywhere" PageNumberType="AutoPageNumber" CharacterAlignment="AlignEmCenter" Tsume="0" LeadingAki="-1" TrailingAki="-1" CharacterRotation="0" Jidori="0" ShataiMagnification="0" ShataiDegreeAngle="4500" ShataiAdjustRotation="false" ShataiAdjustTsume="true" Tatechuyoko="false" TatechuyokoXOffset="0" TatechuyokoYOffset="0" KentenTint="-1" KentenStrokeTint="-1" KentenWeight="-1" KentenOverprintFill="Auto" KentenOverprintStroke="Auto" KentenKind="None" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenFontSize="-1" KentenXScale="100" KentenYScale="100" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" RubyTint="-1" RubyWeight="-1" RubyOverprintFill="Auto" RubyOverprintStroke="Auto" RubyStrokeTint="-1" RubyFontSize="-1" RubyOpenTypePro="true" RubyXScale="100" RubyYScale="100" RubyType="PerCharacterRuby" RubyAlignment="RubyJIS" RubyPosition="AboveRight" RubyXOffset="0" RubyYOffset="0" RubyParentSpacing="RubyParent121Aki" RubyAutoAlign="true" RubyOverhang="false" RubyAutoScaling="false" RubyParentScalingPercent="66" RubyParentOverhangAmount="RubyOverhangOneRuby" Warichu="false" WarichuSize="50" WarichuLines="2" WarichuLineSpacing="0" WarichuAlignment="Auto" WarichuCharsAfterBreak="2" WarichuCharsBeforeBreak="2" OTFProportionalMetrics="false" OTFHVKana="false" OTFRomanItalics="false" ScaleAffectsLineHeight="false" CjkGridTracking="false" GlyphForm="None" GridAlignFirstLineOnly="false" GridAlignment="None" GridGyoudori="0" AutoTcy="0" AutoTcyIncludeRoman="false" KinsokuType="KinsokuPushInFirst" KinsokuHangType="None" BunriKinshi="true" Rensuuji="true" RotateSingleByteCharacters="false" LeadingModel="LeadingModelAkiBelow" RubyAutoTcyDigits="0" RubyAutoTcyIncludeRoman="false" RubyAutoTcyAutoScale="true" AllowArbitraryHyphenation="false" ParagraphGyoudori="false" NumberingExpression="^#.^t" BulletsTextAfter="^t" NumberingLevel="1" NumberingContinue="true" NumberingStartAt="1" NumberingApplyRestartPolicy="true" BulletsAlignment="LeftAlign" NumberingAlignment="LeftAlign" AppliedNamedGrid="n">
+		<TextPreference UseOpticalSize="true" JustifyTextWraps="false" HighlightKinsoku="false" AddPages="EndOfStory" />
+		<TextDefault DesiredGlyphScaling="100" RuleAboveOverprint="false" RuleAboveGapTint="-1" RuleAboveGapOverprint="false" RuleBelowGapTint="-1" Position="Normal" StrikeThru="false" Skew="0" StrokeTint="-1" OverprintStroke="false" OverprintFill="false" OTFOrdinal="false" OTFFraction="false" OTFDiscretionaryLigature="false" OTFTitling="false" OTFSwash="false" UnderlineGapTint="-1" UnderlineOverprint="false" UnderlineGapOverprint="false" StrikeThroughTint="-1" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" StrikeThroughGapOverprint="false" StrikeThroughWeight="-9999" KeepWithPrevious="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" SpanColumnMinSpaceAfter="0" LastLineIndent="0" OTFSlashedZero="false" OTFHistorical="false" GradientStrokeLength="-1" GradientStrokeAngle="0" GradientStrokeStart="0 0" RuleBelowOverprint="false" RuleBelowGapOverprint="false" KeepRuleAboveInFrame="false" IgnoreEdgeAlignment="false" OTFMark="true" OTFLocale="true" PositionalForm="None" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection" DigitsType="DefaultDigits" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" ParagraphBreakType="Anywhere" PageNumberType="AutoPageNumber" LeadingAki="-1" TrailingAki="-1" CharacterRotation="0" Jidori="0" ShataiMagnification="0" ShataiDegreeAngle="4500" ShataiAdjustRotation="false" ShataiAdjustTsume="true" Tatechuyoko="false" TatechuyokoXOffset="0" TatechuyokoYOffset="0" KentenTint="-1" KentenStrokeTint="-1" KentenWeight="-1" KentenOverprintFill="Auto" KentenOverprintStroke="Auto" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenXScale="100" KentenYScale="100" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" RubyTint="-1" RubyWeight="-1" RubyOverprintFill="Auto" RubyOverprintStroke="Auto" RubyStrokeTint="-1" RubyOpenTypePro="true" RubyXScale="100" RubyYScale="100" RubyPosition="AboveRight" RubyXOffset="0" RubyYOffset="0" RubyAutoAlign="true" RubyOverhang="false" RubyAutoScaling="false" RubyParentScalingPercent="66" Warichu="false" WarichuSize="50" WarichuLines="2" WarichuLineSpacing="0" WarichuAlignment="Auto" WarichuCharsAfterBreak="2" WarichuCharsBeforeBreak="2" OTFHVKana="false" OTFRomanItalics="false" AutoTcyIncludeRoman="false" RubyAutoTcyAutoScale="true" ParagraphGyoudori="false" NumberingLevel="1" NumberingContinue="true" NumberingStartAt="1" NumberingApplyRestartPolicy="true" AppliedNamedGrid="n">
 			<Properties>
-				<BalanceRaggedLines type="enumeration">NoBalancing</BalanceRaggedLines>
-				<RuleAboveColor type="string">Text Color</RuleAboveColor>
 				<RuleAboveGapColor type="object">Swatch/None</RuleAboveGapColor>
-				<RuleAboveType type="object">StrokeStyle/$ID/Solid</RuleAboveType>
 				<RuleBelowGapColor type="object">Swatch/None</RuleBelowGapColor>
 				<RuleBelowType type="object">StrokeStyle/$ID/Solid</RuleBelowType>
-				<UnderlineColor type="string">Text Color</UnderlineColor>
-				<UnderlineGapColor type="object">Swatch/None</UnderlineGapColor>
-				<UnderlineType type="object">StrokeStyle/$ID/Solid</UnderlineType>
 				<StrikeThroughColor type="string">Text Color</StrikeThroughColor>
 				<StrikeThroughGapColor type="object">Swatch/None</StrikeThroughGapColor>
 				<StrikeThroughType type="object">StrokeStyle/$ID/Solid</StrikeThroughType>
-				<SpanSplitColumnCount type="enumeration">All</SpanSplitColumnCount>
-				<KentenFillColor type="string">Text Color</KentenFillColor>
 				<KentenStrokeColor type="string">Text Color</KentenStrokeColor>
 				<KentenFont type="string">$ID/</KentenFont>
 				<KentenFontStyle type="enumeration">Nothing</KentenFontStyle>
 				<RubyFill type="string">Text Color</RubyFill>
 				<RubyStroke type="string">Text Color</RubyStroke>
-				<RubyFont type="string">$ID/</RubyFont>
-				<RubyFontStyle type="enumeration">Nothing</RubyFontStyle>
-				<BulletChar BulletCharacterType="UnicodeOnly" BulletCharacterValue="8226" />
-				<BulletsFont type="string">$ID/</BulletsFont>
-				<BulletsFontStyle type="enumeration">Nothing</BulletsFontStyle>
-				<NumberingCharacterStyle type="object">CharacterStyle/$ID/[No character style]</NumberingCharacterStyle>
-				<AppliedNumberingList type="object">NumberingList/$ID/[Default]</AppliedNumberingList>
 				<NumberingFormat type="string">1, 2, 3, 4...</NumberingFormat>
 				<NumberingRestartPolicies RestartPolicy="AnyPreviousLevel" LowerLevel="0" UpperLevel="0" />
 			</Properties>
 		</TextDefault>
-		<DictionaryPreference RecomposeWhenChanged="true" />
+		<DictionaryPreference MergeUserDictionary="false" />
 		<AnchoredObjectDefault AnchorContent="Unassigned" InitialAnchorHeight="72" InitialAnchorWidth="72" AnchoredParagraphStyle="ParagraphStyle/$ID/[No paragraph style]" AnchoredObjectStyle="ObjectStyle/$ID/[None]" />
-		<AnchoredObjectSetting AnchoredPosition="InlinePosition" SpineRelative="false" LockPosition="false" PinPosition="true" AnchorPoint="BottomRightAnchor" HorizontalAlignment="LeftAlign" HorizontalReferencePoint="TextFrame" VerticalReferencePoint="LineBaseline" AnchorXoffset="0" AnchorYoffset="0" AnchorSpaceAbove="0" />
-		<BaselineFrameGridOption UseCustomBaselineFrameGrid="false" StartingOffsetForBaselineFrameGrid="0" BaselineFrameGridRelativeOption="TopOfInset" BaselineFrameGridIncrement="12">
+		<AnchoredObjectSetting LockPosition="false" HorizontalReferencePoint="TextFrame" VerticalReferencePoint="LineBaseline" AnchorXoffset="0" AnchorSpaceAbove="0" />
+		<BaselineFrameGridOption UseCustomBaselineFrameGrid="false" StartingOffsetForBaselineFrameGrid="0" BaselineFrameGridRelativeOption="TopOfInset" BaselineFrameGridIncrement="12" />
+		<FootnoteOption FootnoteFirstBaselineOffset="LeadingOffset" RuleGapTint="100" RuleGapOverprint="false" RuleOverprint="false" ContinuingRuleTint="100" ContinuingRuleGapTint="100" ContinuingRuleOverprint="false" ContinuingRuleGapOverprint="false" ContinuingRuleLeftIndent="0" ContinuingRuleWidth="288" ContinuingRuleOffset="0">
 			<Properties>
-				<BaselineFrameGridColor type="enumeration">LightBlue</BaselineFrameGridColor>
-			</Properties>
-		</BaselineFrameGridOption>
-		<FootnoteOption StartAt="1" Prefix="" Suffix="" FootnoteMarkerStyle="CharacterStyle/$ID/[No character style]" SeparatorText="&#9;" SpaceBetween="0" Spacer="0" FootnoteFirstBaselineOffset="LeadingOffset" FootnoteMinimumFirstBaselineOffset="0" EosPlacement="false" NoSplitting="false" RuleOn="true" RuleLineWeight="1" RuleTint="100" RuleGapTint="100" RuleGapOverprint="false" RuleOverprint="false" RuleLeftIndent="0" RuleWidth="72" RuleOffset="0" ContinuingRuleOn="true" ContinuingRuleLineWeight="1" ContinuingRuleTint="100" ContinuingRuleGapTint="100" ContinuingRuleOverprint="false" ContinuingRuleGapOverprint="false" ContinuingRuleLeftIndent="0" ContinuingRuleWidth="288" ContinuingRuleOffset="0">
-			<Properties>
-				<FootnoteNumberingStyle type="enumeration">Arabic</FootnoteNumberingStyle>
-				<RestartNumbering type="enumeration">DontRestart</RestartNumbering>
-				<ShowPrefixSuffix type="enumeration">NoPrefixSuffix</ShowPrefixSuffix>
-				<MarkerPositioning type="enumeration">SuperscriptMarker</MarkerPositioning>
-				<RuleType type="object">StrokeStyle/$ID/Solid</RuleType>
-				<RuleColor type="object">Color/Black</RuleColor>
 				<RuleGapColor type="object">Swatch/None</RuleGapColor>
 				<ContinuingRuleType type="object">StrokeStyle/$ID/Solid</ContinuingRuleType>
 				<ContinuingRuleColor type="object">Color/Black</ContinuingRuleColor>
 				<ContinuingRuleGapColor type="object">Swatch/None</ContinuingRuleGapColor>
 			</Properties>
 		</FootnoteOption>
-		<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None">
-			<Properties>
-				<TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" />
-			</Properties>
-			<ContourOption ContourType="SameAsClipping" IncludeInsideEdges="false" ContourPathName="$ID/" />
+		<TextWrapPreference Inverse="false" TextWrapSide="BothSides">
+			<ContourOption IncludeInsideEdges="false" ContourPathName="$ID/" />
 		</TextWrapPreference>
-		<MojikumiUiPreference MojikumiUiSettings="16383" />
-		<XMLImportPreference ImportStyle="MergeImport" CreateLinkToXML="false" IgnoreUnmatchedIncoming="false" IgnoreWhitespace="false">
+		<XMLImportPreference ImportToSelected="true" ImportStyle="MergeImport" RepeatTextElements="true" IgnoreUnmatchedIncoming="false" ImportTextIntoTables="true" IgnoreWhitespace="false" RemoveUnmatchedExisting="false" AllowTransform="false" ImportCALSTables="true">
 			<Properties>
 				<TransformFilename type="enumeration">StylesheetInXML</TransformFilename>
 				<TransformParameters></TransformParameters>
 			</Properties>
 		</XMLImportPreference>
-		<XMLExportPreference ViewAfterExport="false" ExportFromSelected="false" FileEncoding="UTF8" Ruby="false" ExcludeDtd="true" CopyOriginalImages="false" CopyOptimizedImages="false" CopyFormattedImages="false" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="Medium" JPEGOptionsFormat="BaselineEncoding" AllowTransform="false" CharacterReferences="false" ExportUntaggedTablesFormat="CALS">
+		<XMLExportPreference ExportFromSelected="false" FileEncoding="UTF8" Ruby="false" ExcludeDtd="true" CopyOriginalImages="false" CopyOptimizedImages="false" CopyFormattedImages="false" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="Medium" JPEGOptionsFormat="BaselineEncoding" AllowTransform="false" CharacterReferences="false" ExportUntaggedTablesFormat="CALS">
 			<Properties>
 				<PreferredBrowser type="enumeration">Nothing</PreferredBrowser>
 				<TransformFilename type="enumeration">StylesheetInXML</TransformFilename>
@@ -123,47 +88,24 @@ by tools/root_values.py; evidence in docs/format/idml-values.md.
 				<DefaultStoryTagColor type="enumeration">BrickRed</DefaultStoryTagColor>
 				<DefaultTableTagColor type="enumeration">DarkBlue</DefaultTableTagColor>
 				<DefaultCellTagColor type="enumeration">GrassGreen</DefaultCellTagColor>
-				<DefaultImageTagColor type="enumeration">Violet</DefaultImageTagColor>
 			</Properties>
 		</XMLPreference>
 		<ExportForWebPreference CopyFormattedImages="false" CopyOptimizedImages="false" CopyOriginalImages="false" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="Medium" JPEGOptionsFormat="BaselineEncoding" />
-		<IndexOptions TitleStyle="ParagraphStyle/$ID/[No paragraph style]" ReplaceExistingIndex="true" IncludeBookDocuments="false" IncludeHiddenEntries="false" IndexFormat="NestedFormat" IncludeSectionHeadings="true" IncludeEmptyIndexSections="false" Level1Style="ParagraphStyle/$ID/[No paragraph style]" Level2Style="ParagraphStyle/$ID/[No paragraph style]" Level3Style="ParagraphStyle/$ID/[No paragraph style]" Level4Style="ParagraphStyle/$ID/[No paragraph style]" SectionHeadingStyle="ParagraphStyle/$ID/[No paragraph style]" PageNumberStyle="CharacterStyle/$ID/[No character style]" CrossReferenceStyle="CharacterStyle/$ID/[No character style]" CrossReferenceTopicStyle="CharacterStyle/$ID/[No character style]" FollowingTopicSeparator="  " BetweenEntriesSeparator="; " PageRangeSeparator="^=" BetweenPageNumbersSeparator=", " BeforeCrossReferenceSeparator=". " EntryEndSeparator="" />
-		<IndexHeaderSetting HeaderSetName="$ID/" HeaderSetLanguage="256" IndexHeaderSetHandler="77882" IndexHeaderSetGroupValue="0" IndexHeaderSetGroupOptionValue="0" />
+		<IndexOptions IncludeHiddenEntries="false" IndexFormat="NestedFormat" IncludeEmptyIndexSections="false" Level2Style="ParagraphStyle/$ID/[No paragraph style]" Level3Style="ParagraphStyle/$ID/[No paragraph style]" Level4Style="ParagraphStyle/$ID/[No paragraph style]" CrossReferenceStyle="CharacterStyle/$ID/[No character style]" CrossReferenceTopicStyle="CharacterStyle/$ID/[No character style]" FollowingTopicSeparator="  " PageRangeSeparator="^=" BetweenPageNumbersSeparator=", " BeforeCrossReferenceSeparator=". " EntryEndSeparator="" />
+		<IndexHeaderSetting HeaderSetName="$ID/" HeaderSetLanguage="256" />
 		<TinDocumentDataObject>
 			<Properties>
 				<GaijiRefMaps>/////wAAAAAAAAAA</GaijiRefMaps>
 			</Properties>
 		</TinDocumentDataObject>
-		<ChapterNumberPreference ChapterNumber="1" ChapterNumberSource="ContinueFromPreviousDocument">
-			<Properties>
-				<ChapterNumberFormat type="string">1, 2, 3, 4...</ChapterNumberFormat>
-			</Properties>
-		</ChapterNumberPreference>
-		<DocumentPreference PagesPerDocument="1" DocumentBleedUniformSize="true" SlugTopOffset="0" SlugBottomOffset="0" SlugRightOrOutsideOffset="0" DocumentSlugUniformSize="false" PreserveLayoutWhenShuffling="true" AllowPageShuffle="true" OverprintBlack="true" PageBinding="LeftToRight" ColumnDirection="Horizontal" SnippetImportUsesOriginalLocation="false">
-			<Properties>
-				<ColumnGuideColor type="enumeration">Violet</ColumnGuideColor>
-				<MarginGuideColor type="enumeration">Magenta</MarginGuideColor>
-			</Properties>
-		</DocumentPreference>
-		<GridPreference DocumentGridShown="false" DocumentGridSnapto="false" BaselineGridRelativeOption="TopOfPageOfBaselineGridRelativeOption">
-			<Properties>
-				<GridColor type="enumeration">LightGray</GridColor>
-				<BaselineColor type="enumeration">LightBlue</BaselineColor>
-			</Properties>
-		</GridPreference>
-		<GuidePreference GuidesInBack="false" GuidesShown="true" GuidesSnapto="true" RulerGuidesViewThreshold="5">
-			<Properties>
-				<RulerGuidesColor type="enumeration">Cyan</RulerGuidesColor>
-			</Properties>
-		</GuidePreference>
-		<MarginPreference ColumnDirection="Horizontal" />
+		<DocumentPreference PagesPerDocument="1" PreserveLayoutWhenShuffling="true" OverprintBlack="true" SnippetImportUsesOriginalLocation="false" />
+		<GuidePreference RulerGuidesViewThreshold="5" />
 		<PasteboardPreference>
 			<Properties>
 				<BleedGuideColor type="enumeration">Fiesta</BleedGuideColor>
-				<SlugGuideColor type="enumeration">GridBlue</SlugGuideColor>
 			</Properties>
 		</PasteboardPreference>
-		<ViewPreference GuideSnaptoZone="4" TypographicMeasurementUnits="Points" TextSizeMeasurementUnits="Points" PointsPerInch="72" HorizontalCustomPoints="12" VerticalCustomPoints="12" />
+		<ViewPreference PointsPerInch="72" HorizontalCustomPoints="12" VerticalCustomPoints="12" />
 		<TransparencyPreference GlobalLightAngle="120" GlobalLightAltitude="30" />
 		<TransparencyDefaultContainerObject>
 			<TransparencySetting>
@@ -215,40 +157,65 @@ by tools/root_values.py; evidence in docs/format/idml-values.md.
 				<GradientFeatherSetting Applied="false" Type="Linear" Angle="0" Length="0" GradientStart="0 0" HiliteAngle="0" HiliteLength="0" />
 			</ContentTransparencySetting>
 		</TransparencyDefaultContainerObject>
-		<LayoutGridDataInformation PointSize="12" CharacterAki="0" LineAki="9" HorizontalScale="100" VerticalScale="100" />
-		<StoryGridDataInformation PointSize="12" CharacterAki="0" LineAki="9" HorizontalScale="100" VerticalScale="100" LineAlignment="LeftOrTopLineJustify" GridAlignment="AlignEmCenter" CharacterAlignment="AlignEmCenter" GridView="GridViewEnum" CharacterCountLocation="BottomAlign" CharacterCountSize="9.21259842519685" />
-		<CjkGridPreference ShowAllLayoutGrids="false" ShowAllFrameGrids="true" MinimumScale="50" SnapToLayoutGrid="false" ColorEveryNthCell="10" SingleLineColorMode="true" ICFMode="false" UseCircularCells="false" ShowCharacterCount="true">
+		<LayoutGridDataInformation CharacterAki="0" HorizontalScale="100" VerticalScale="100" />
+		<StoryGridDataInformation CharacterAki="0" HorizontalScale="100" VerticalScale="100" LineAlignment="LeftOrTopLineJustify" GridAlignment="AlignEmCenter" CharacterAlignment="AlignEmCenter" GridView="GridViewEnum" CharacterCountLocation="BottomAlign" />
+		<CjkGridPreference MinimumScale="50" ColorEveryNthCell="10" SingleLineColorMode="true" ICFMode="false" UseCircularCells="false">
 			<Properties>
 				<LayoutGridColorIndex type="enumeration">GridGreen</LayoutGridColorIndex>
 			</Properties>
 		</CjkGridPreference>
 		<DataMergeOption FittingOption="Proportional" CenterImage="false" LinkImages="true" RemoveBlankLines="false" CreateNewDocument="false" DocumentSize="50" />
-		<LayoutAdjustmentPreference EnableLayoutAdjustment="false" AllowGraphicsToResize="true" AllowRulerGuidesToMove="true" IgnoreRulerGuideAlignments="false" IgnoreObjectOrLayerLocks="true" />
-		<EPubExportPreference EpubPublisher="" ExportOrder="LayoutOrder" EpubCover="FirstPage" CoverImageFile="" BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" PreserveLayoutAppearence="true" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" IgnoreObjectConversionSettings="false" BreakDocument="false" ParagraphStyleName="$ID/NormalParagraphStyle" StripSoftReturn="false" PreserveLocalOverride="true" EmbedFont="true" IncludeDocumentMetadata="true" Level="5" CSSExportOption="EmbeddedCSS" Format="true" UseTocStyle="false" IncludeCSSDefinition="true" FootnoteFollowParagraph="false" />
-		<HTMLExportPreference ExportOrder="LayoutOrder" BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ViewDocumentAfterExport="true" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" PreserveLayoutAppearence="false" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" PreserveLocalOverride="true" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" />
+		<LayoutAdjustmentPreference AllowGraphicsToResize="true" AllowRulerGuidesToMove="true" IgnoreRulerGuideAlignments="false" IgnoreObjectOrLayerLocks="true" />
 	</Values>
-	<Values MinimumVersion="12">
+	<Values MinimumVersion="8">
+		<TextFramePreference UseFlexibleColumnWidth="false" TextColumnMaxWidth="0" AutoSizingType="Off" AutoSizingReferencePoint="CenterPoint" UseMinimumHeightForAutoSizing="false" MinimumHeightForAutoSizing="0" UseMinimumWidthForAutoSizing="false" MinimumWidthForAutoSizing="0" UseNoLineBreaksForAutoSizing="false" />
+		<TextDefault ParagraphKashidaWidth="2" />
+		<EPubExportPreference BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" IgnoreObjectConversionSettings="false" StripSoftReturn="false" PreserveLocalOverride="true" IncludeDocumentMetadata="true" Level="5" MarginUnit="CssPixel" SpaceUnit="CssPixel" CSSExportOption="EmbeddedCSS" Format="true" ExternalCSSPath="$ID/" IncludeCSSDefinition="true" ApplyImageAlignmentToAnchoredObjectSettings="true" FootnoteFollowParagraph="false" ExternalStyleSheets="" Javascripts="" />
+		<HTMLExportPreference ExportSelection="false" BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" SpaceUnit="CssPixel" ExternalCSSPath="$ID/" LinkToJavascript="true" JavascriptURL="$ID/" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" ApplyImageAlignmentToAnchoredObjectSettings="true" ExternalStyleSheets="" Javascripts="" />
+	</Values>
+	<Values MinimumVersion="9">
+		<EPubExportPreference GenerateCascadeStyleSheet="true" />
+		<HTMLExportPreference GenerateCascadeStyleSheet="true" />
+	</Values>
+	<Values MinimumVersion="10">
 		<PrintPreference PDFPassthrough="false" />
 		<PrintBookletPrintPreference PDFPassthrough="false" />
-		<PageItemDefault ArrowHeadAlignment="InsidePath" LeftArrowHeadScale="100" RightArrowHeadScale="100" />
-		<TextFramePreference UseFlexibleColumnWidth="false" TextColumnMaxWidth="0" AutoSizingType="Off" AutoSizingReferencePoint="CenterPoint" UseMinimumHeightForAutoSizing="false" MinimumHeightForAutoSizing="0" UseMinimumWidthForAutoSizing="false" MinimumWidthForAutoSizing="0" UseNoLineBreaksForAutoSizing="false" />
-		<TextDefault ParagraphShadingLeftOffset="0" ParagraphShadingRightOffset="0" ParagraphShadingTopOffset="0" ParagraphShadingBottomOffset="0" ParagraphShadingWidth="ColumnWidth" ParagraphShadingTopOrigin="AscentTopOrigin" ParagraphShadingBottomOrigin="DescentBottomOrigin" ParagraphShadingClipToFrame="false" ParagraphShadingSuppressPrinting="false" ParagraphShadingOn="false" ParagraphShadingOverprint="false" ParagraphKashidaWidth="2" />
-		<PasteboardPreference MatchPreviewBackgroundToThemeColor="false" />
-		<EPubExportPreference ExternalStyleSheets="" Javascripts="" GenerateCascadeStyleSheet="true" FootnotePlacement="FootnoteAfterStory" UseOriginalImageOnExport="false" EpubTitle="" EpubCreator="" EpubSubject="" EpubDescription="" EpubDate="" EpubRights="" UseExistingImageOnExport="false" />
-		<HTMLExportPreference ExternalStyleSheets="" Javascripts="" GenerateCascadeStyleSheet="true" />
-		<EPubFixedLayoutExportPreference Level="5" EpubPublisher="" Id="urn:uuid:29d919dd-24f5-4384-be78-b447c9dc299b" EpubCover="FirstPage" CoverImageFile="" ImageExportResolution="Ppi150" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" TocStyleName="$ID/" ExternalStyleSheets="" Javascripts="" EpubTitle="" EpubCreator="" EpubSubject="" EpubDescription="" EpubDate="" EpubRights="" EpubPageRange="" EpubPageRangeFormat="ExportAllPages" EpubSpreadControlOptions="SpreadsBasedOnDoc" EpubNavigationStyles="NoNavigation" />
+		<EPubFixedLayoutExportPreference Level="5" ImageExportResolution="Ppi150" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" ExternalStyleSheets="" Javascripts="" EpubPageRange="" EpubPageRangeFormat="ExportAllPages" EpubSpreadControlOptions="SpreadsBasedOnDoc" />
 	</Values>
-	<Values MinimumVersion="15">
-		<TextFramePreference FootnotesEnableOverrides="false" FootnotesSpanAcrossColumns="false" FootnotesMinimumSpacing="12" FootnotesSpaceBetween="6" ColumnRuleOverride="false" ColumnRuleOffset="0" ColumnRuleTopInset="0" ColumnRuleInsetChainOverride="true" ColumnRuleBottomInset="0" ColumnRuleStrokeWidth="1" ColumnRuleStrokeType="StrokeStyle/$ID/Solid" ColumnRuleStrokeTint="100" ColumnRuleOverprintOverride="false" />
-		<TextDefault ParagraphBorderOn="false" ParagraphBorderOverprint="false" ParagraphBorderTint="-1" ParagraphBorderGapOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderStrokeEndCap="ButtEndCap" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphShadingTopLeftCornerOption="None" ParagraphShadingTopRightCornerOption="None" ParagraphShadingBottomLeftCornerOption="None" ParagraphShadingBottomRightCornerOption="None" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphBorderWidth="ColumnWidth" ParagraphBorderTopOrigin="AscentTopOrigin" ParagraphBorderBottomOrigin="DescentBottomOrigin" ParagraphBorderLeftOffset="0" ParagraphBorderRightOffset="0" ParagraphBorderTopOffset="0" ParagraphBorderBottomOffset="0" ParagraphBorderDisplayIfSplits="false" ProviderHyphenationStyle="HyphAll" MergeConsecutiveParaBorders="true">
+	<Values MinimumVersion="11">
+		<TextDefault ParagraphShadingSuppressPrinting="false" />
+	</Values>
+	<Values MinimumVersion="12">
+		<PageItemDefault ArrowHeadAlignment="InsidePath" />
+	</Values>
+	<Values MinimumVersion="13">
+		<TextDefault ParagraphBorderOverprint="false" ParagraphBorderTint="-1" ParagraphBorderGapOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderStrokeEndCap="ButtEndCap" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphShadingTopLeftCornerOption="None" ParagraphShadingTopRightCornerOption="None" ParagraphShadingBottomLeftCornerOption="None" ParagraphShadingBottomRightCornerOption="None" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphBorderWidth="ColumnWidth" ParagraphBorderDisplayIfSplits="false" ProviderHyphenationStyle="HyphAll">
 			<Properties>
-				<ParagraphBorderColor type="object">Color/Black</ParagraphBorderColor>
 				<ParagraphBorderGapColor type="object">Swatch/None</ParagraphBorderGapColor>
-				<ParagraphBorderType type="object">StrokeStyle/$ID/Solid</ParagraphBorderType>
 			</Properties>
 		</TextDefault>
 		<XMLPreference DeleteElementOnContentDeletion="false" />
-		<EPubExportPreference IncludeClassesInHTML="true" UseSVGAs="EmbedCode" />
-		<HTMLExportPreference IncludeClassesInHTML="true" UseSVGAs="EmbedCode" />
+		<EPubExportPreference IncludeClassesInHTML="true" />
+		<HTMLExportPreference IncludeClassesInHTML="true" />
+	</Values>
+	<Values MinimumVersion="14">
+		<TextFramePreference FootnotesEnableOverrides="false" FootnotesSpanAcrossColumns="false" FootnotesMinimumSpacing="12" FootnotesSpaceBetween="6" />
+	</Values>
+	<Values MinimumVersion="15">
+		<TextFramePreference ColumnRuleOverride="false" ColumnRuleOffset="0" ColumnRuleTopInset="0" ColumnRuleInsetChainOverride="true" ColumnRuleBottomInset="0" ColumnRuleStrokeType="StrokeStyle/$ID/Solid" ColumnRuleStrokeTint="100" ColumnRuleOverprintOverride="false" />
+		<EPubExportPreference UseSVGAs="EmbedCode" />
+		<HTMLExportPreference UseSVGAs="EmbedCode" />
+	</Values>
+	<Values MinimumVersion="18">
+		<PageItemDefault GapColor="Swatch/None" />
+		<XMLPreference>
+			<Properties>
+				<DefaultImageTagColor type="enumeration">Violet</DefaultImageTagColor>
+			</Properties>
+		</XMLPreference>
+	</Values>
+	<Values MinimumVersion="20">
+		<EPubExportPreference EpubAccessibilityFeature="" EpubAccessibilityHazard="" EpubAccessibilityMode="" EpubAccessibilityModeSufficient="" EpubAccessibilitySummary="" EpubAccessibilityConformsTo="" EpubAccessibilityCertifiedBy="" EpubAccessibilityCredentials="" EpubAccessibilityReportLink="" EpubCreatePageNavigation="true" />
+		<EPubFixedLayoutExportPreference EpubAccessibilityFeature="" EpubAccessibilityHazard="" EpubAccessibilityMode="" EpubAccessibilityModeSufficient="" EpubAccessibilitySummary="" EpubAccessibilityConformsTo="" EpubAccessibilityCertifiedBy="" EpubAccessibilityCredentials="" EpubAccessibilityReportLink="" />
 	</Values>
 </PreferenceValues>

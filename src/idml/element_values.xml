@@ -21,12 +21,12 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			</ObjectExportOption>
 			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
 		</Rectangle>
-		<Polygon StoryTitle="$ID/" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0">
+		<Polygon StoryTitle="$ID/" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0">
 			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
 		</Polygon>
 		<GraphicLine LockState="None" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
-		<Group GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
-		<Spread PageTransitionType="None" PageTransitionDirection="NotApplicable" PageTransitionDuration="Medium" ShowMasterItems="true" FlattenerOverride="Default">
+		<Group LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" />
+		<Spread PageTransitionDuration="Medium" ShowMasterItems="true" FlattenerOverride="Default">
 			<FlattenerPreference ClipComplexRegions="false" ConvertAllStrokesToOutlines="false" ConvertAllTextToOutlines="false">
 				<Properties>
 					<RasterVectorBalance type="double">50</RasterVectorBalance>
@@ -43,11 +43,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				<PreviewColor type="enumeration">Nothing</PreviewColor>
 			</Properties>
 		</ParagraphStyle>
-		<CharacterStyle>
-			<Properties>
-				<PreviewColor type="enumeration">Nothing</PreviewColor>
-			</Properties>
-		</CharacterStyle>
 		<TOCStyle RunIn="false" IncludeHidden="false" />
 		<Assignment UserName="$ID/" ExportOptions="AssignedSpreads" IncludeLinksWhenPackage="true" FilePath="$ID/">
 			<Properties>
@@ -59,7 +54,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<ConditionalTextPreference Present="true" ShowConditionIndicators="ShowIndicators" ActiveConditionSet="n" />
 			<LinkedStoryOption UpdateWhileSaving="false" WarnOnUpdateOfEditedStory="true" RemoveForcedLineBreaks="false" />
 			<WatermarkPreference Present="true" WatermarkVisibility="false" WatermarkDoPrint="false" WatermarkDrawInBack="true" WatermarkText="" WatermarkFontPointSize="48" WatermarkOpacity="50" WatermarkRotation="0" WatermarkHorizontalPosition="WatermarkHCenter" WatermarkHorizontalOffset="0" WatermarkVerticalPosition="WatermarkVCenter" WatermarkVerticalOffset="0" />
-			<TaggedPDFPreference StructureOrder="UseXMLStructure" />
 		</Document>
 		<Story TrackChanges="false">
 			<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
@@ -73,7 +67,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		</PDF>
 		<Ink PrintInk="true" InkType="Normal" />
 		<Preferences>
-			<PrintPreference PrintFile="" Collating="false" ReverseOrder="false" Sequence="All" PrintMasterPages="false" PrintNonprinting="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" TilingType="Auto" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" PrintBlack="true" SourceSpace="UseDocument" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" IgnoreSpreadOverrides="false" CompositeScreening="$ID/kDefault" PrintLayers="VisiblePrintableLayers">
+			<PrintPreference PrintFile="" Collating="false" ReverseOrder="false" Sequence="All" PrintMasterPages="false" PrintNonprinting="false" PrintGuidesGrids="false" PaperOffset="0" PaperGap="0" PaperTransverse="false" Trapping="Off" Flip="None" Negative="false" SimulateOverprint="false" PrintCyan="true" PrintMagenta="true" PrintYellow="true" PrintBlack="true" SourceSpace="UseDocument" OPIImageReplacement="false" OmitEPS="false" OmitPDF="false" OmitBitmaps="false" IgnoreSpreadOverrides="false" CompositeScreening="$ID/kDefault" PrintLayers="VisiblePrintableLayers">
 				<Properties>
 					<PaperHeight type="enumeration">Auto</PaperHeight>
 					<PaperWidth type="enumeration">Auto</PaperWidth>
@@ -95,7 +89,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 					<CRD type="enumeration">Default</CRD>
 				</Properties>
 			</PrintBookletPrintPreference>
-			<PageItemDefault AppliedGridObjectStyle="ObjectStyle/$ID/[Normal Grid]" FillColor="Swatch/None" EndJoin="MiterEndJoin" GapTint="-1" Nonprinting="false" />
+			<PageItemDefault AppliedGridObjectStyle="ObjectStyle/$ID/[Normal Grid]" FillColor="Swatch/None" GapTint="-1" />
 			<StoryPreference StoryDirection="LeftToRightDirection" />
 			<TextFramePreference TextColumnFixedWidth="144" UseFixedColumnWidth="false" MinimumFirstBaselineOffset="0" VerticalJustification="TopAlign" VerticalThreshold="0" IgnoreWrap="false" VerticalBalanceColumns="false">
 				<Properties>
@@ -103,34 +97,28 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</TextFramePreference>
 			<TextPreference UseOpticalSize="true" HighlightKinsoku="false" AddPages="EndOfStory" />
-			<TextDefault KeepAllLinesTogether="false" KeepFirstLines="2" KeepLastLines="2" DesiredGlyphScaling="100" RuleAboveOverprint="false" RuleAboveGapTint="-1" RuleAboveGapOverprint="false" RuleBelowLeftIndent="0" RuleBelowRightIndent="0" RuleBelowGapTint="-1" Position="Normal" StrikeThru="false" Skew="0" StrokeTint="-1" OverprintStroke="false" OverprintFill="false" OTFOrdinal="false" OTFFraction="false" OTFDiscretionaryLigature="false" OTFTitling="false" OTFSwash="false" UnderlineGapTint="-1" UnderlineOverprint="false" UnderlineGapOverprint="false" StrikeThroughTint="-1" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" StrikeThroughGapOverprint="false" StrikeThroughWeight="-9999" KeepWithPrevious="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" SpanColumnMinSpaceAfter="0" LastLineIndent="0" OTFSlashedZero="false" OTFHistorical="false" GradientFillLength="-1" GradientFillAngle="0" GradientStrokeLength="-1" GradientStrokeAngle="0" GradientFillStart="0 0" GradientStrokeStart="0 0" RuleBelowOverprint="false" RuleBelowGapOverprint="false" KeepRuleAboveInFrame="false" IgnoreEdgeAlignment="false" OTFMark="true" OTFLocale="true" PositionalForm="None" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection" DigitsType="DefaultDigits" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" ParagraphBreakType="Anywhere" PageNumberType="AutoPageNumber" LeadingAki="-1" TrailingAki="-1" CharacterRotation="0" Jidori="0" ShataiMagnification="0" ShataiDegreeAngle="4500" ShataiAdjustRotation="false" ShataiAdjustTsume="true" Tatechuyoko="false" TatechuyokoXOffset="0" TatechuyokoYOffset="0" KentenTint="-1" KentenStrokeTint="-1" KentenWeight="-1" KentenOverprintFill="Auto" KentenOverprintStroke="Auto" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenXScale="100" KentenYScale="100" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" RubyTint="-1" RubyWeight="-1" RubyOverprintFill="Auto" RubyOverprintStroke="Auto" RubyStrokeTint="-1" RubyOpenTypePro="true" RubyXScale="100" RubyYScale="100" RubyType="PerCharacterRuby" RubyAlignment="RubyJIS" RubyPosition="AboveRight" RubyXOffset="0" RubyYOffset="0" RubyParentSpacing="RubyParent121Aki" RubyAutoAlign="true" RubyOverhang="false" RubyAutoScaling="false" RubyParentScalingPercent="66" RubyParentOverhangAmount="RubyOverhangOneRuby" Warichu="false" WarichuSize="50" WarichuLines="2" WarichuLineSpacing="0" WarichuAlignment="Auto" WarichuCharsAfterBreak="2" WarichuCharsBeforeBreak="2" OTFHVKana="false" OTFRomanItalics="false" AutoTcyIncludeRoman="false" RubyAutoTcyIncludeRoman="false" RubyAutoTcyAutoScale="true" AllowArbitraryHyphenation="false" ParagraphGyoudori="false" BulletsTextAfter="^t" NumberingLevel="1" NumberingContinue="true" NumberingStartAt="1" NumberingApplyRestartPolicy="true" AppliedNamedGrid="n">
+			<TextDefault DesiredGlyphScaling="100" RuleAboveOverprint="false" RuleAboveGapTint="-1" RuleAboveGapOverprint="false" RuleBelowGapTint="-1" Position="Normal" StrikeThru="false" Skew="0" StrokeTint="-1" OverprintStroke="false" OverprintFill="false" OTFOrdinal="false" OTFFraction="false" OTFDiscretionaryLigature="false" OTFTitling="false" OTFSwash="false" UnderlineGapTint="-1" UnderlineOverprint="false" UnderlineGapOverprint="false" StrikeThroughTint="-1" StrikeThroughGapTint="-1" StrikeThroughOverprint="false" StrikeThroughGapOverprint="false" StrikeThroughWeight="-9999" KeepWithPrevious="false" SplitColumnOutsideGutter="0" SpanColumnMinSpaceBefore="0" SpanColumnMinSpaceAfter="0" LastLineIndent="0" OTFSlashedZero="false" OTFHistorical="false" GradientStrokeLength="-1" GradientStrokeAngle="0" GradientStrokeStart="0 0" RuleBelowOverprint="false" RuleBelowGapOverprint="false" KeepRuleAboveInFrame="false" IgnoreEdgeAlignment="false" OTFMark="true" OTFLocale="true" PositionalForm="None" OTFOverlapSwash="false" OTFStylisticAlternate="false" OTFJustificationAlternate="false" OTFStretchedAlternate="false" KeyboardDirection="DefaultDirection" DigitsType="DefaultDigits" Kashidas="DefaultKashidas" XOffsetDiacritic="0" YOffsetDiacritic="0" ParagraphBreakType="Anywhere" PageNumberType="AutoPageNumber" LeadingAki="-1" TrailingAki="-1" CharacterRotation="0" Jidori="0" ShataiMagnification="0" ShataiDegreeAngle="4500" ShataiAdjustRotation="false" ShataiAdjustTsume="true" Tatechuyoko="false" TatechuyokoXOffset="0" TatechuyokoYOffset="0" KentenTint="-1" KentenStrokeTint="-1" KentenWeight="-1" KentenOverprintFill="Auto" KentenOverprintStroke="Auto" KentenPlacement="0" KentenAlignment="AlignKentenCenter" KentenPosition="AboveRight" KentenXScale="100" KentenYScale="100" KentenCustomCharacter="" KentenCharacterSet="CharacterInput" RubyTint="-1" RubyWeight="-1" RubyOverprintFill="Auto" RubyOverprintStroke="Auto" RubyStrokeTint="-1" RubyOpenTypePro="true" RubyXScale="100" RubyYScale="100" RubyPosition="AboveRight" RubyXOffset="0" RubyYOffset="0" RubyAutoAlign="true" RubyOverhang="false" RubyAutoScaling="false" RubyParentScalingPercent="66" Warichu="false" WarichuSize="50" WarichuLines="2" WarichuLineSpacing="0" WarichuAlignment="Auto" WarichuCharsAfterBreak="2" WarichuCharsBeforeBreak="2" OTFHVKana="false" OTFRomanItalics="false" AutoTcyIncludeRoman="false" RubyAutoTcyAutoScale="true" ParagraphGyoudori="false" NumberingLevel="1" NumberingContinue="true" NumberingStartAt="1" NumberingApplyRestartPolicy="true" AppliedNamedGrid="n">
 				<Properties>
 					<RuleAboveGapColor type="object">Swatch/None</RuleAboveGapColor>
-					<RuleAboveType type="object">StrokeStyle/$ID/Solid</RuleAboveType>
 					<RuleBelowGapColor type="object">Swatch/None</RuleBelowGapColor>
 					<RuleBelowType type="object">StrokeStyle/$ID/Solid</RuleBelowType>
 					<StrikeThroughColor type="string">Text Color</StrikeThroughColor>
 					<StrikeThroughGapColor type="object">Swatch/None</StrikeThroughGapColor>
 					<StrikeThroughType type="object">StrokeStyle/$ID/Solid</StrikeThroughType>
-					<KentenFillColor type="string">Text Color</KentenFillColor>
 					<KentenStrokeColor type="string">Text Color</KentenStrokeColor>
 					<KentenFont type="string">$ID/</KentenFont>
 					<KentenFontStyle type="enumeration">Nothing</KentenFontStyle>
 					<RubyFill type="string">Text Color</RubyFill>
 					<RubyStroke type="string">Text Color</RubyStroke>
-					<RubyFont type="string">$ID/</RubyFont>
-					<RubyFontStyle type="enumeration">Nothing</RubyFontStyle>
-					<BulletsFont type="string">$ID/</BulletsFont>
-					<BulletsFontStyle type="enumeration">Nothing</BulletsFontStyle>
 					<NumberingFormat type="string">1, 2, 3, 4...</NumberingFormat>
 					<NumberingRestartPolicies RestartPolicy="AnyPreviousLevel" LowerLevel="0" UpperLevel="0" />
 				</Properties>
 			</TextDefault>
-			<DictionaryPreference MergeUserDictionary="false" RecomposeWhenChanged="true" />
+			<DictionaryPreference MergeUserDictionary="false" />
 			<AnchoredObjectDefault AnchorContent="Unassigned" InitialAnchorHeight="72" InitialAnchorWidth="72" AnchoredParagraphStyle="ParagraphStyle/$ID/[No paragraph style]" AnchoredObjectStyle="ObjectStyle/$ID/[None]" />
-			<AnchoredObjectSetting SpineRelative="false" LockPosition="false" HorizontalReferencePoint="TextFrame" VerticalReferencePoint="LineBaseline" AnchorXoffset="0" AnchorYoffset="0" AnchorSpaceAbove="0" />
+			<AnchoredObjectSetting LockPosition="false" HorizontalReferencePoint="TextFrame" VerticalReferencePoint="LineBaseline" AnchorXoffset="0" AnchorSpaceAbove="0" />
 			<BaselineFrameGridOption UseCustomBaselineFrameGrid="false" StartingOffsetForBaselineFrameGrid="0" BaselineFrameGridRelativeOption="TopOfInset" BaselineFrameGridIncrement="12" />
-			<FootnoteOption FootnoteFirstBaselineOffset="LeadingOffset" FootnoteMinimumFirstBaselineOffset="0" EosPlacement="false" RuleGapTint="100" RuleGapOverprint="false" RuleOverprint="false" RuleLeftIndent="0" ContinuingRuleTint="100" ContinuingRuleGapTint="100" ContinuingRuleOverprint="false" ContinuingRuleGapOverprint="false" ContinuingRuleLeftIndent="0" ContinuingRuleWidth="288" ContinuingRuleOffset="0">
+			<FootnoteOption FootnoteFirstBaselineOffset="LeadingOffset" RuleGapTint="100" RuleGapOverprint="false" RuleOverprint="false" ContinuingRuleTint="100" ContinuingRuleGapTint="100" ContinuingRuleOverprint="false" ContinuingRuleGapOverprint="false" ContinuingRuleLeftIndent="0" ContinuingRuleWidth="288" ContinuingRuleOffset="0">
 				<Properties>
 					<RuleGapColor type="object">Swatch/None</RuleGapColor>
 					<ContinuingRuleType type="object">StrokeStyle/$ID/Solid</ContinuingRuleType>
@@ -138,7 +126,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 					<ContinuingRuleGapColor type="object">Swatch/None</ContinuingRuleGapColor>
 				</Properties>
 			</FootnoteOption>
-			<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" />
+			<TextWrapPreference Inverse="false" TextWrapSide="BothSides" />
 			<XMLImportPreference ImportToSelected="true" ImportStyle="MergeImport" RepeatTextElements="true" IgnoreUnmatchedIncoming="false" ImportTextIntoTables="true" IgnoreWhitespace="false" RemoveUnmatchedExisting="false" AllowTransform="false" ImportCALSTables="true">
 				<Properties>
 					<TransformFilename type="enumeration">StylesheetInXML</TransformFilename>
@@ -155,12 +143,11 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 					<DefaultStoryTagColor type="enumeration">BrickRed</DefaultStoryTagColor>
 					<DefaultTableTagColor type="enumeration">DarkBlue</DefaultTableTagColor>
 					<DefaultCellTagColor type="enumeration">GrassGreen</DefaultCellTagColor>
-					<DefaultImageTagColor type="enumeration">Violet</DefaultImageTagColor>
 				</Properties>
 			</XMLPreference>
 			<ExportForWebPreference CopyFormattedImages="false" CopyOptimizedImages="false" CopyOriginalImages="false" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="Medium" JPEGOptionsFormat="BaselineEncoding" />
 			<IndexOptions IncludeHiddenEntries="false" IndexFormat="NestedFormat" IncludeEmptyIndexSections="false" Level2Style="ParagraphStyle/$ID/[No paragraph style]" Level3Style="ParagraphStyle/$ID/[No paragraph style]" Level4Style="ParagraphStyle/$ID/[No paragraph style]" CrossReferenceStyle="CharacterStyle/$ID/[No character style]" CrossReferenceTopicStyle="CharacterStyle/$ID/[No character style]" FollowingTopicSeparator="  " PageRangeSeparator="^=" EntryEndSeparator="" />
-			<IndexHeaderSetting HeaderSetName="$ID/" HeaderSetLanguage="256" IndexHeaderSetGroupOptionValue="0" />
+			<IndexHeaderSetting HeaderSetName="$ID/" HeaderSetLanguage="256" />
 			<TinDocumentDataObject>
 				<Properties>
 					<GaijiRefMaps>/////wAAAAAAAAAA</GaijiRefMaps>
@@ -184,15 +171,12 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			</CjkGridPreference>
 			<DataMergeOption FittingOption="Proportional" CenterImage="false" LinkImages="true" RemoveBlankLines="false" CreateNewDocument="false" DocumentSize="50" />
 			<LayoutAdjustmentPreference AllowRulerGuidesToMove="true" IgnoreRulerGuideAlignments="false" IgnoreObjectOrLayerLocks="true" />
-			<EPubExportPreference ExportOrder="LayoutOrder" BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportResolution="Ppi150" PreserveLayoutAppearence="true" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" IgnoreObjectConversionSettings="false" BreakDocument="false" StripSoftReturn="false" PreserveLocalOverride="true" IncludeDocumentMetadata="true" Level="5" CSSExportOption="EmbeddedCSS" Format="true" IncludeCSSDefinition="true" FootnoteFollowParagraph="false" />
-			<HTMLExportPreference ExportOrder="LayoutOrder" BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" PreserveLayoutAppearence="false" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" PreserveLocalOverride="true" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" />
+			<EPubExportPreference BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" IgnoreObjectConversionSettings="false" StripSoftReturn="false" PreserveLocalOverride="true" IncludeDocumentMetadata="true" Level="5" CSSExportOption="EmbeddedCSS" Format="true" IncludeCSSDefinition="true" FootnoteFollowParagraph="false" />
+			<HTMLExportPreference BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" />
 		</Preferences>
 	</Values>
 	<Values MinimumVersion="8" MaximumVersion="20">
 		<EPSText OverriddenPageItemProps="" Visible="true" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" MiterLimit="10" GradientFillStart="0 0" GradientFillLength="0" GradientFillAngle="0" GradientStrokeStart="0 0" GradientStrokeLength="0" GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" AppliedObjectStyle="ObjectStyle/$ID/[None]" ParentInterfaceChangeCount="" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="" />
-		<EPS>
-			<ClippingPathSettings ClippingType="None" InvertPath="false" IncludeInsideEdges="false" RestrictToFrame="false" UseHighResolutionImage="true" Threshold="25" Tolerance="2" InsetFrame="0" AppliedPathName="$ID/" Index="-1" />
-		</EPS>
 	</Values>
 	<Values MinimumVersion="8">
 		<Rectangle TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
@@ -223,14 +207,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</ObjectExportOption>
 		</GraphicLine>
-		<Group OverriddenPageItemProps="" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
-			<ObjectExportOption ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
-				<Properties>
-					<AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
-					<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
-				</Properties>
-			</ObjectExportOption>
-		</Group>
 		<TextFrame>
 			<ObjectExportOption ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
 				<Properties>
@@ -239,14 +215,26 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 				</Properties>
 			</ObjectExportOption>
 		</TextFrame>
+		<Group>
+			<ObjectExportOption ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
+				<Properties>
+					<AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+					<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+				</Properties>
+			</ObjectExportOption>
+		</Group>
 		<Page SnapshotBlendingMode="IgnoreLayoutSnapshots" OptionalPage="false" />
-		<Tint ColorOverride="Normal" AlternateSpace="NoAlternateColor" AlternateColorValue="" ColorEditable="true" ColorRemovable="true" Visible="true" SwatchCreatorID="7937" />
+		<Tint ColorOverride="Normal" ColorEditable="true" ColorRemovable="true" Visible="true" SwatchCreatorID="7937" />
+		<TOCStyleEntry SortAlphabet="false" />
 		<CellStyle KeyboardShortcut="0 0" />
 		<Document>
 			<LinkedStoryOption Present="true" ApplyStyleMappings="false" />
 			<LinkedPageItemOption Present="true" UpdateLinkWhileSaving="false" WarnOnUpdateOfEditedPageItem="true" PreserveSizeAndShape="false" PreserveAppearance="false" PreserveInteractivity="false" PreserveFrameContent="false" PreserveOthers="false" />
 			<TaggedPDFPreference Present="true" />
 		</Document>
+		<EPS>
+			<ClippingPathSettings ClippingType="None" InvertPath="false" IncludeInsideEdges="false" RestrictToFrame="false" UseHighResolutionImage="true" Threshold="25" Tolerance="2" InsetFrame="0" AppliedPathName="$ID/" Index="-1" />
+		</EPS>
 		<Preferences>
 			<TextFramePreference UseFlexibleColumnWidth="false" TextColumnMaxWidth="0" AutoSizingType="Off" AutoSizingReferencePoint="CenterPoint" UseMinimumHeightForAutoSizing="false" MinimumHeightForAutoSizing="0" UseMinimumWidthForAutoSizing="false" MinimumWidthForAutoSizing="0" UseNoLineBreaksForAutoSizing="false" />
 			<TextDefault ParagraphKashidaWidth="2" />
@@ -256,14 +244,13 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 	</Values>
 	<Values MinimumVersion="9">
 		<ObjectStyle>
-			<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
+			<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing">
 				<Properties>
 					<AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
 					<ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
 				</Properties>
 			</ObjectExportOption>
 		</ObjectStyle>
-		<TOCStyleEntry SortAlphabet="false" />
 		<Preferences>
 			<EPubExportPreference GenerateCascadeStyleSheet="true" />
 			<HTMLExportPreference GenerateCascadeStyleSheet="true" />
@@ -297,17 +284,16 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Preferences>
 			<PrintPreference PDFPassthrough="false" />
 			<PrintBookletPrintPreference PDFPassthrough="false" />
-			<EPubExportPreference EpubSubject="" EpubDate="" EpubRights="" UseExistingImageOnExport="false" />
-			<EPubFixedLayoutExportPreference Level="5" EpubPublisher="" Id="urn:uuid:29d919dd-24f5-4384-be78-b447c9dc299b" EpubCover="FirstPage" CoverImageFile="" ImageExportResolution="Ppi150" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" TocStyleName="$ID/" ExternalStyleSheets="" Javascripts="" EpubTitle="" EpubCreator="" EpubSubject="" EpubDescription="" EpubDate="" EpubRights="" EpubPageRange="" EpubPageRangeFormat="ExportAllPages" EpubSpreadControlOptions="SpreadsBasedOnDoc" EpubNavigationStyles="NoNavigation" />
+			<EPubFixedLayoutExportPreference Level="5" ImageExportResolution="Ppi150" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" ExternalStyleSheets="" Javascripts="" EpubPageRange="" EpubPageRangeFormat="ExportAllPages" EpubSpreadControlOptions="SpreadsBasedOnDoc" />
 		</Preferences>
 	</Values>
 	<Values MinimumVersion="11">
 		<Document>
 			<HTMLFXLExportPreference Present="true" />
-			<PublishExportPreference Present="true" PublishCover="FirstPage" CoverImageFile="" PublishPageRange="" PublishPageRangeFormat="ExportAllPages" ImageConversion="Automatic" PublishDescription="" PublishFileName="" PublishFormat="PublishByPages" CoverPage="$ID/" GIFOptionsPalette="AdaptivePalette" JPEGOptionsQuality="High" />
+			<PublishExportPreference Present="true" PublishCover="FirstPage" CoverImageFile="" PublishPageRangeFormat="ExportAllPages" ImageConversion="Automatic" PublishFormat="PublishByPages" GIFOptionsPalette="AdaptivePalette" JPEGOptionsQuality="High" />
 		</Document>
 		<Preferences>
-			<TextDefault ParagraphShadingSuppressPrinting="false" ParagraphShadingOverprint="false" />
+			<TextDefault ParagraphShadingSuppressPrinting="false" />
 		</Preferences>
 	</Values>
 	<Values MinimumVersion="12">
@@ -336,10 +322,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		</Document>
 		<XmlStory IsEndnoteStory="false" />
 		<Preferences>
-			<TextDefault ParagraphBorderOverprint="false" ParagraphBorderGapOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderStrokeEndCap="ButtEndCap" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphBorderWidth="ColumnWidth" ParagraphBorderRightOffset="0" ParagraphBorderDisplayIfSplits="false" ProviderHyphenationStyle="HyphAll">
+			<TextDefault ParagraphBorderOverprint="false" ParagraphBorderGapOverprint="false" ParagraphBorderGapTint="-1" ParagraphBorderStrokeEndCap="ButtEndCap" ParagraphBorderStrokeEndJoin="MiterEndJoin" ParagraphBorderTopLeftCornerOption="None" ParagraphBorderTopRightCornerOption="None" ParagraphBorderBottomLeftCornerOption="None" ParagraphBorderBottomRightCornerOption="None" ParagraphBorderWidth="ColumnWidth" ParagraphBorderDisplayIfSplits="false" ProviderHyphenationStyle="HyphAll">
 				<Properties>
 					<ParagraphBorderGapColor type="object">Swatch/None</ParagraphBorderGapColor>
-					<ParagraphBorderType type="object">StrokeStyle/$ID/Solid</ParagraphBorderType>
 				</Properties>
 			</TextDefault>
 			<XMLPreference DeleteElementOnContentDeletion="false" />
@@ -353,7 +338,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		</Document>
 	</Values>
 	<Values MinimumVersion="15">
-		<CharacterStyle ExtendedKeyboardShortcut="0 0 0" />
 		<TableStyle ExtendedKeyboardShortcut="0 0 0" />
 		<CellStyle ExtendedKeyboardShortcut="0 0 0" />
 		<Preferences>
@@ -362,7 +346,7 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<HTMLExportPreference UseSVGAs="EmbedCode" />
 		</Preferences>
 	</Values>
-	<Values MinimumVersion="18">
+	<Values MinimumVersion="17">
 		<Tint ConvertToHsb="false" />
 	</Values>
 	<Values MinimumVersion="19">
@@ -430,6 +414,8 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Language Name="$ID/Bulgarian" SingleQuotes="‚‘" DoubleQuotes="„“" />
 		<Language Name="$ID/Catalan" SingleQuotes="‘’" DoubleQuotes="“”" />
 		<Language Name="$ID/Chinese: Simplified" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/Chinese: Taiwan" SingleQuotes="''" DoubleQuotes='""' />
+		<Language Name="$ID/Chinese: Traditional" SingleQuotes="''" DoubleQuotes='""' />
 		<Language Name="$ID/Croatian" SingleQuotes="‘’" DoubleQuotes="“”" />
 		<Language Name="$ID/Czech" SingleQuotes="‚‘" DoubleQuotes="„“" />
 		<Language Name="$ID/Danish" SingleQuotes="’’" DoubleQuotes="””" />
@@ -450,7 +436,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Language Name="$ID/Greek" SingleQuotes="‘’" DoubleQuotes="«»" />
 		<Language Name="$ID/Hungarian" SingleQuotes="‚’" DoubleQuotes="„”" />
 		<Language Name="$ID/Italian" SingleQuotes="‘’" DoubleQuotes="“”" />
-		<Language Name="$ID/Korean" SingleQuotes="''" DoubleQuotes='""' />
 		<Language Name="$ID/Latvian" SingleQuotes="‘’" DoubleQuotes="“”" />
 		<Language Name="$ID/Lithuanian" SingleQuotes="‚‘" DoubleQuotes="„“" />
 		<Language Name="$ID/Norwegian: Bokmal" SingleQuotes="’’" DoubleQuotes="””" />

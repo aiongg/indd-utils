@@ -151,10 +151,8 @@ How they work:
 - The files are committed. Regenerate them with `--write` after the
   corpus changes, and review the diff: a value that varies in new
   samples disappears.
-- `root_values.py` collects the root styles from the pairs that
-  `compare.py` compares. The object styles other than `[None]` and the
-  preferences are pinned to an earlier part of the corpus (`SOURCE` in
-  the tool); see `idml-values.md` for why.
+- `root_values.py` collects the root styles, the other object styles
+  and the preferences from the pairs that `compare.py` compares.
 
 **Precedence.** A value read from the INDD always wins over an observed
 value. The XML writer (`src/idml/xml.rs`) keeps the attributes of an

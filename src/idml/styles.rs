@@ -598,21 +598,6 @@ impl Writer<'_> {
                 node.set(&["TextFrameFootnoteOptionsObject"], footnote);
             }
         }
-        // The text frame values every object style has from DOM 12 hold
-        // from DOM 8 (idml-values.md, object styles other than the root).
-        if (8..12).contains(&major)
-            && let Some(t) = values::object_style(12).child("TextFramePreference")
-        {
-            node.merge(&Node {
-                tag: "ObjectStyle".into(),
-                children: vec![Node {
-                    tag: "TextFramePreference".into(),
-                    attrs: t.attrs.clone(),
-                    ..Node::default()
-                }],
-                ..Node::default()
-            });
-        }
         // Every object style has it from 13.1 (idml-values.md, object
         // styles other than the root).
         if version >= (13, 1) {
