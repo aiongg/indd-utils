@@ -78,8 +78,8 @@ fn category_off(name: &str, on: &[u32]) -> bool {
     let off = |id: u32| !on.contains(&id);
     let corners = off(0x1B935) && off(0x1B936);
     match name {
-        "FillColor" | "FillTint" => off(0x1B933),
-        "StrokeColor" => off(0x1B934),
+        "FillColor" | "FillTint" | "OverprintFill" => off(0x1B933),
+        "StrokeColor" | "OverprintStroke" => off(0x1B934),
         "StrokeType" | "StrokeTint" | "GapColor" | "GapTint" => off(0x1B934) && corners,
         _ => corners,
     }
@@ -684,6 +684,9 @@ impl Writer<'_> {
                 }
             }
         }
+        if tag != "Group" {
+            self.item_overprint(x, item, applied.as_deref(), &forced);
+        }
         // An item without an object style refers to none, `n`
         // (attributes.md, values an item does not store).
         let style_ref = item.object_style.and_then(|u| self.object_style_ref(u));
@@ -800,6 +803,62 @@ impl Writer<'_> {
             self.placed_graphic(x, g, &item.transform.then(outer));
         }
         x.end();
+    }
+
+    /// `OverprintFill` and `OverprintStroke` of a page item, where its
+    /// fill or stroke puts ink on the page (objects.md, page item
+    /// overprint).
+    fn item_overprint(
+        &self,
+        x: &mut Xml,
+        item: &PageItem,
+        applied: Option<&applied::StyleValues>,
+        forced: &dyn Fn(&str) -> bool,
+    ) {
+        for (name, color, color_name, tint, tint_name, flag) in [
+            (
+                "OverprintFill",
+                0x6E68,
+                "FillColor",
+                0x6E69,
+                "FillTint",
+                0x6E6A,
+            ),
+            (
+                "OverprintStroke",
+                0x6E64,
+                "StrokeColor",
+                0x6E66,
+                "StrokeTint",
+                0x6E67,
+            ),
+        ] {
+            let ink = match item.attrs.get(color).and_then(Value::as_u32) {
+                Some(c) => self.carries_ink(c),
+                None => applied
+                    .and_then(|a| a.item(color_name))
+                    .is_some_and(|r| self.reference_carries_ink(r)),
+            };
+            let tint = match item.attrs.get(tint).and_then(Value::as_f64) {
+                Some(t) => Some(t),
+                None => applied
+                    .and_then(|a| a.item(tint_name))
+                    .and_then(|t| t.parse().ok()),
+            };
+            if !ink || tint == Some(0.0) {
+                continue;
+            }
+            let style = applied.and_then(|a| a.item(name));
+            let value = match item.attrs.get(flag).and_then(Value::as_u32) {
+                Some(v @ 0..=1) => (v == 1).to_string(),
+                Some(_) => continue,
+                None if forced(name) => "false".to_string(),
+                None => continue,
+            };
+            if forced(name) || style != Some(value.as_str()) {
+                x.attr(name, value);
+            }
+        }
     }
 
     /// `FrameFittingOption` of a rectangle, oval or polygon. When the

@@ -368,7 +368,7 @@ impl Writer<'_> {
     /// Whether swatch `uid` puts ink on the page: a swatch other than
     /// `None` and `Paper`, and not a white process colour (CMYK 0 0 0 0 or
     /// RGB 255 255 255; objects.md, object style overprint).
-    fn carries_ink(&self, uid: u32) -> bool {
+    pub(super) fn carries_ink(&self, uid: u32) -> bool {
         let Some(r) = self.doc.swatches.get(&uid) else {
             return false;
         };
@@ -385,6 +385,16 @@ impl Writer<'_> {
                     _ => false,
                 }
         })
+    }
+
+    /// Whether the swatch with IDML reference `r` puts ink on the page
+    /// (`carries_ink`).
+    pub(super) fn reference_carries_ink(&self, r: &str) -> bool {
+        self.doc
+            .swatches
+            .iter()
+            .find(|(_, s)| s.as_str() == r)
+            .is_some_and(|(&uid, _)| self.carries_ink(uid))
     }
 
     /// An object style as a values node: the values every exported IDML

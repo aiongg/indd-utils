@@ -901,6 +901,26 @@ from the object style's, so items with `[None]` (stroke weight 0) have
 it. Groups vary (1,166 without the attribute, 625 with 1 and 30 with
 other values, in 200 of the pairs) and get none.
 
+**Overprint.** The attribute list of a page item holds the overprint
+flags of the fill (0x6E6A) and the stroke (0x6E67), u16 1 `true`, as in
+object styles (object style settings). IDML writes `OverprintFill` on a
+rectangle, oval, polygon, graphic line, text frame or EPS text when its
+fill puts ink on the page, by the object style rule: the fill colour
+(the item's 0x6E68, else its object style's) is not `None`, `Paper` or a
+white process colour, and the tint is not 0. The value is the item's
+flag; an item without the flag has `false`, which IDML writes only when
+the object style turns the fill category off (as for the fill colour,
+attributes.md, values an item does not store). `OverprintStroke`
+follows the same rule with the stroke colour (0x6E64), tint (0x6E66)
+and category. Trustworthy pairs: the rule reproduces all 3,315
+`Polygon`, 64 `Rectangle`, 33 `TextFrame`, 33 `EPSText` and 3 `Oval`
+`OverprintFill` values and all 68, 30, 20, 2 and 1 `OverprintStroke`
+values of polygons, graphic lines, rectangles, ovals and text frames,
+with no extra value. Of the items that store 0x6E6A, 27 have a `Paper`
+fill and no `OverprintFill`. Groups (313 `OverprintFill` values) are
+not written: a group stores no flag, and its value is not the one its
+children share (75 groups with `true` have children that differ).
+
 ## Object export options
 
 Page items (class 0x6201 and groups, 0x401) may have chunk 0x1E206, the
@@ -1980,10 +2000,7 @@ reproduces 235 of 235 `OverprintFill`, 1,512 of 1,512 `OverprintStroke`
 and 49 of 49 `OverprintGap` values with no extra value. The white RGB
 case rests on 2 styles of two pairs of one 13.1 document (89 other RGB
 fills and strokes are written). Every object style flag in the corpus
-is 0; page item lists use the same IDs, where a stored 1 is `true` in
-IDML (3,387 `OverprintFill` and 64 `OverprintStroke` values of the
-trustworthy pairs). When IDML writes the flags on page items is not
-established, and the converter does not write them there.
+is 0. Page items use the same IDs (page item settings, overprint).
 
 **Export settings (chunk 0x28F0).** Object styles have the chunk of
 paragraph and character styles (styles, export settings). IDML writes
