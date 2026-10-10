@@ -187,8 +187,8 @@ pub struct ObjectStyle {
     pub direction: Option<u16>,
     /// Text wrap (chunk 0x3776, the layout of chunk 0x3703).
     pub text_wrap: Option<TextWrap>,
-    /// Contour type of the text wrap (chunk 0x3777).
-    pub contour_type: Option<u32>,
+    /// The contour of the text wrap (chunk 0x3777).
+    pub contour: Option<Contour>,
     /// IDs of the setting categories the style turns on (chunk 0x1B92E).
     pub enabled: Option<Vec<u32>>,
     /// Paragraph style applied to text frames (chunk 0x1B946).
@@ -650,7 +650,10 @@ impl<'a> Reader<'a> {
                 }
                 _ => None,
             },
-            contour_type: u32_chunk(chunk::OBJECT_STYLE_CONTOUR)?,
+            contour: match self.chunk(uid, chunk::OBJECT_STYLE_CONTOUR)? {
+                Some(d) => Contour::read(self.enc(), &d),
+                None => None,
+            },
             enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
                 Some(d) => Some(self.cursor(&d).u32_list()?),
                 None => None,

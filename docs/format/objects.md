@@ -1208,8 +1208,8 @@ chunk 0x3703 (44 bytes):
 The wrap path object holds the contour as path geometry (chunk 0x162B,
 as for page items) and names the item in chunk 0x3709.
 
-Placed graphics also have chunk 0x373D. Its first u32 is the contour
-type: 5 = `SameAsClipping`.
+Placed graphics also have chunk 0x373D, the contour (IDML
+`ContourOption`). See "Contour" below.
 
 **Evidence from the pairs.** For every element with a `Self` in the
 corpus pairs, the IDML `TextWrapPreference` was compared with chunk
@@ -1226,6 +1226,66 @@ the pairs whose IDML is from an older version:
 | Offsets as left, top, right, bottom | `TextWrapOffset` | 2,631 of 2,631 | 616 of 616 |
 | u32 at 40 = 1 (little-endian) | `Inverse="false"`, `ApplyToMasterPageOnly="false"`, `TextWrapSide="BothSides"` | 2,630 of 2,630 | 616 of 616 |
 | 0x373D type 5 | `ContourType="SameAsClipping"` | 224 of 225 (1 has no `ContourOption`) | 75 of 75 |
+
+**Contour.** Chunk 0x373D of placed graphics (29 bytes) holds the
+contour that IDML writes as `ContourOption`. The preferences chunk 0x373F
+(`preferences.md`) and the object style chunk 0x3777 (object style
+settings, below) have the same layout.
+
+| Offset | Contents |
+|---|---|
+| 0 | u32 contour type: 0 `BoundingBox`, 1 `DetectEdges`, 2 `AlphaChannel`, 5 `SameAsClipping`, 6 `SelectSubject` |
+| 4 | f64: 5 in every placed graphic and the preferences, 5 or 8 in object styles |
+| 12 | u8: 25 everywhere |
+| 13 | `00 00 FF FF` everywhere |
+| 17 | u8 `IncludeInsideEdges`: 0 `false`, 1 `true` |
+| 18 | 11 zero bytes |
+
+Evidence, over the placed graphics of the 1,251 trustworthy pairs (corpus
+of 2026-10) whose IDML has a `ContourOption`:
+
+| INDD | IDML | Graphics |
+|---|---|---|
+| Type 5 | `ContourType="SameAsClipping"` | 2,693 of 2,698 (5 have no `ContourType`, below) |
+| Type 2 | `AlphaChannel` | 13 of 13 |
+| Type 1 | `DetectEdges` | 8 of 8 |
+| Type 0 | `BoundingBox` | 4 of 4 |
+| Type 6 | `SelectSubject` | 1 of 1 |
+| Byte 17 = 1 | `IncludeInsideEdges="true"` | 1 of 1 (type 2) |
+| Byte 17 = 0 | `IncludeInsideEdges="false"` | every other graphic with `ContourType` |
+
+No placed graphic of the pairs has another type, so the converter
+leaves the `ContourOption` of other types out. IDML from DOM 21.4 also
+writes `ContourTolerance="5"`, `ContourThreshold="25"`,
+`ContourAlphaIndex="0"` and `ContourPathIndex="-1"` (on 211 elements of
+the trustworthy pairs).
+They may be the f64 at 4, the u8 at 12 and two i16 at 13 and 15, but no
+sample has another value, so the converter does not write them.
+`ContourPathName` (`$ID/`, or the name of the alpha channel for type 2)
+is not in the chunk and is not written either.
+
+A graphic without chunk 0x373D has the contour of the preferences chunk
+0x373F, and without that chunk, type 5 and `IncludeInsideEdges="false"`.
+Of the 9,535 graphics (images, EPS, PDF, SVG and imported pages) whose
+`ContourOption` the converter writes and the trustworthy IDMLs have,
+`ContourType` and `IncludeInsideEdges` are equal in all; this includes
+the 319 images without the chunk that have `DetectEdges` because their
+document's chunk 0x373F has type 1.
+
+A frame with one placed graphic (`Rectangle`, `Oval`, `Polygon`) has the
+contour of its graphic, unless its object style turns the text wrap
+category on (all of 0x1B942, 0x37C8 and 0x37C9 in chunk 0x1B92E, IDML
+`EnableTextWrapAndOthers="true"`). Then its `ContourOption` has only
+`ContourPathName`: 517 of 518 such frames in the trustworthy pairs. The
+converter writes no `ContourOption` for them. The 8,965 other frames with
+`ContourType` take their graphic's type and `IncludeInsideEdges` in all
+cases. Frames without a graphic have no `ContourOption` (all but one).
+
+The IDML has no `ContourType` and `IncludeInsideEdges` on 14 graphics:
+5 with type 5 in chunk 0x373D and 9 without the chunk. 12 of them are in
+frames whose object style turns the text wrap category on, but 495
+graphics in such frames have both attributes. No INDD field is known
+that separates them, and the converter writes the type for all 14.
 
 **Master page flag and side.** The 4 bytes at 40 are two u16 in the
 file's byte order. The big-endian pair shows it: its 261 page items
@@ -2568,7 +2628,12 @@ not used.
 **Text wrap.** 234 styles have chunk 0x3776 with mode 0, offsets 0 and
 the u32 at 40 = 1, and chunk 0x3777 type 5: IDML `None` with
 `ContourType="SameAsClipping"`. 103 styles have neither chunk and IDML
-`None`.
+`None`. Chunk 0x3777 is the contour with the layout of chunk 0x373D
+(text wrap, contour). In the trustworthy pairs of the corpus of 2026-10,
+3,965 object styles have it: 3,964 with type 5 and one with type 0, whose
+IDML style is the only one with `ContourType="BoundingBox"`. Every other
+IDML object style, with or without the chunk, has `SameAsClipping`
+(5,555 of 5,556 styles), so a style without the chunk takes type 5.
 
 **Categories (chunk 0x1B92E).** An ID in the list means the attribute is
 `true`. Over the 1,684 object styles other than `[None]` of the

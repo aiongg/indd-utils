@@ -151,6 +151,19 @@ pub(super) fn text_wrap_side(code: u16) -> Option<&'static str> {
     })
 }
 
+/// IDML `ContourType` of a contour code (`Contour::kind`); `None` for a
+/// code without a sample. See `docs/format/objects.md`, text wrap.
+pub(super) fn contour_type(code: u32) -> Option<&'static str> {
+    Some(match code {
+        0 => "BoundingBox",
+        1 => "DetectEdges",
+        2 => "AlphaChannel",
+        5 => "SameAsClipping",
+        6 => "SelectSubject",
+        _ => return None,
+    })
+}
+
 /// IDML `TextWrapOffset` attributes of a text wrap (0 without one).
 pub(super) fn text_wrap_offsets(wrap: Option<&TextWrap>) -> Vec<(&'static str, String)> {
     let [left, top, right, bottom] = wrap.map_or([0.0; 4], |w| w.offsets);

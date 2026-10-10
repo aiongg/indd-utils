@@ -533,14 +533,14 @@ impl Writer<'_> {
         (!n.attrs.is_empty() || !n.children.is_empty()).then_some(n)
     }
 
-    /// `TextWrapPreference` from an item's text wrap chunk. An item without
-    /// the chunk has no wrap. Values not identified yet are left out: the
-    /// whole element for an unknown mode, and the side and inverse settings
-    /// for flags other than 1.
+    /// `TextWrapPreference` from an item's text wrap chunk and contour. An
+    /// item without the chunk has no wrap. Values not identified yet are
+    /// left out: the whole element for an unknown mode, and the side and
+    /// inverse settings for flags other than 1.
     pub(super) fn text_wrap_preference(
         x: &mut Xml,
         wrap: Option<&TextWrap>,
-        contour_type: Option<u32>,
+        contour: Option<Contour>,
     ) {
         let Some(mode) = text_wrap_mode(wrap) else {
             return;
@@ -565,8 +565,14 @@ impl Writer<'_> {
         x.start("Properties")
             .empty("TextWrapOffset", &text_wrap_offsets(wrap));
         x.end();
-        if contour_type == Some(5) {
-            x.empty("ContourOption", &[("ContourType", "SameAsClipping".into())]);
+        if let Some(c) = contour
+            && let Some(t) = contour_type(c.kind)
+        {
+            x.start("ContourOption").attr("ContourType", t);
+            if let Some(inside) = c.inside_edges {
+                x.attr("IncludeInsideEdges", inside.to_string());
+            }
+            x.end();
         }
         x.end();
     }
@@ -948,7 +954,15 @@ impl Writer<'_> {
                 x.empty("AnchoredObjectSetting", &attrs);
             }
         }
-        Self::text_wrap_preference(x, item.text_wrap.as_ref(), None);
+        // A frame has the contour of its graphic, unless its object style
+        // turns the text wrap category on (objects.md, text wrap).
+        let style_wrap =
+            on.is_some_and(|on| [0x1B942, 0x37C8, 0x37C9].iter().all(|id| on.contains(id)));
+        let contour = match item.graphics.as_slice() {
+            [g] if !style_wrap => self.graphic_contour(g),
+            _ => None,
+        };
+        Self::text_wrap_preference(x, item.text_wrap.as_ref(), contour);
         if frame {
             // The values every IDML has (idml-values.md, page items).
             let observed = self.observed(&format!("{tag}/InCopyExportOption"));
@@ -1686,6 +1700,8 @@ fn primary_text_frame(s: &Spread) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Encoding;
+    use crate::header::{ByteOrder, Version};
 
     #[test]
     fn stroke_categories_turn_off_their_own_attributes() {
@@ -1739,6 +1755,36 @@ mod tests {
         assert!(out.contains("TextWrapMode=\"BoundingBoxTextWrap\""));
         assert!(out.contains("ApplyToMasterPageOnly=\"true\" TextWrapSide=\"LargestArea\""));
         assert!(out.contains("<TextWrapOffset Top=\"2\" Left=\"1\" Bottom=\"4\" Right=\"3\" />"));
+        assert!(!out.contains("ContourOption"));
+    }
+
+    #[test]
+    fn reads_and_writes_contours() {
+        let enc = Encoding::new(ByteOrder::Little, Version::default());
+        let mut chunk = [0u8; 29];
+        chunk[0] = 2;
+        chunk[17] = 1;
+        let alpha = Contour::read(enc, &chunk).unwrap();
+        assert_eq!(alpha.inside_edges, Some(true));
+        // A damaged chunk is left out.
+        assert_eq!(Contour::read(enc, &chunk[..17]), None);
+        let write = |c: Contour| {
+            let mut x = Xml::new();
+            Writer::text_wrap_preference(&mut x, None, Some(c));
+            x.finish()
+        };
+        let out = write(alpha);
+        let at = out
+            .find("<ContourOption ContourType=\"AlphaChannel\" IncludeInsideEdges=\"true\" />")
+            .unwrap();
+        // The schema puts `ContourOption` after `Properties`.
+        assert!(out.find("</Properties>").unwrap() < at);
+        // A code without a sample leaves the contour out.
+        let unknown = Contour {
+            kind: 4,
+            inside_edges: Some(false),
+        };
+        assert!(!write(unknown).contains("ContourOption"));
     }
 
     #[test]

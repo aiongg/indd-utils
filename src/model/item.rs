@@ -336,6 +336,38 @@ pub struct Link {
 /// The bytes of a file stored in the document, if there is one.
 pub(super) type EmbeddedFile = Option<Vec<u8>>;
 
+/// The contour of a text wrap: chunk 0x373D of placed graphics, 0x373F of
+/// the preferences and 0x3777 of object styles (29 bytes each). See
+/// `docs/format/objects.md`, text wrap.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Contour {
+    /// Contour type code (u32 at 0).
+    pub kind: u32,
+    /// `IncludeInsideEdges` (u8 at 17); `None` for a byte other than 0 or 1.
+    pub inside_edges: Option<bool>,
+}
+
+impl Contour {
+    /// The contour of a graphic without chunk 0x373D and of preferences
+    /// without chunk 0x373F: `SameAsClipping` without inside edges.
+    pub const DEFAULT: Contour = Contour {
+        kind: 5,
+        inside_edges: Some(false),
+    };
+
+    /// A contour chunk; `None` if it is shorter than 18 bytes.
+    pub fn read(enc: Encoding, data: &[u8]) -> Option<Contour> {
+        Some(Contour {
+            kind: enc.u32_at(data, 0)?,
+            inside_edges: match *data.get(17)? {
+                0 => Some(false),
+                1 => Some(true),
+                _ => None,
+            },
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Graphic {
     pub uid: u32,
@@ -348,8 +380,8 @@ pub struct Graphic {
     /// a graphic pasted without a link. IDML writes it as `Contents`.
     pub contents: Option<Vec<u8>>,
     pub text_wrap: Option<TextWrap>,
-    /// Contour type code of the text wrap (chunk 0x373D): 5 = SameAsClipping.
-    pub contour_type: Option<u32>,
+    /// The contour of the text wrap (chunk 0x373D).
+    pub contour: Option<Contour>,
     /// Clipping path settings (chunk 0x2C1A), if stored.
     pub clipping: Option<ClippingPath>,
     /// Name, visibility, change counts and the other page item settings.
@@ -1277,9 +1309,9 @@ impl<'a> Reader<'a> {
             link,
             contents,
             text_wrap: self.text_wrap(uid)?,
-            contour_type: match self.chunk(uid, chunk::CONTOUR_OPTION)? {
-                Some(d) if d.len() >= 4 => Some(self.cursor(&d).u32()?),
-                _ => None,
+            contour: match self.chunk(uid, chunk::CONTOUR_OPTION)? {
+                Some(d) => Contour::read(self.enc(), &d),
+                None => None,
             },
             clipping: match self.chunk(uid, chunk::CLIPPING_PATH)? {
                 Some(d) if d.len() >= 26 => {

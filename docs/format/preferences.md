@@ -345,6 +345,14 @@ the 42 files with the chunk (20 with mode 0 and `true`, 13 with mode 0
 and `false`, 4 bounding box, 4 jump object, 1 contour). The 1,418 files
 without it have `None`, offsets 0 and `false`.
 
+Chunk 0x373F (29 bytes) is the contour of new placed graphics, with the
+layout of the graphic chunk 0x373D (`objects.md`, text wrap, contour). Its
+type is the `ContourType` of the preferences' `TextWrapPreference` in the
+4 trustworthy pairs (corpus of 2026-10) that have the chunk: type 5
+`SameAsClipping` in 2, type 1 `DetectEdges` in 2. The 1,247 without it
+have `SameAsClipping`. Placed graphics without their own contour chunk
+take this one.
+
 ## Other settings in their own chunks
 
 | Chunk | Attribute | Evidence (corpus of 2026-10) |

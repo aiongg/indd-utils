@@ -798,11 +798,15 @@ impl Writer<'_> {
                 &["TextWrapPreference", "Properties", "TextWrapOffset"],
                 text_wrap_offsets(os.text_wrap.as_ref()),
             );
-            if os.contour_type == Some(5) {
-                node.set(
-                    &["TextWrapPreference", "ContourOption"],
-                    vec![("ContourType", "SameAsClipping".into())],
-                );
+            // A style without chunk 0x3777 has the default contour
+            // (objects.md, object style settings).
+            let c = os.contour.unwrap_or(Contour::DEFAULT);
+            if let Some(t) = contour_type(c.kind) {
+                let mut attrs = vec![("ContourType", t.into())];
+                if let Some(inside) = c.inside_edges {
+                    attrs.push(("IncludeInsideEdges", inside.to_string()));
+                }
+                node.set(&["TextWrapPreference", "ContourOption"], attrs);
             }
         }
         let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();

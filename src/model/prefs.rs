@@ -2,7 +2,7 @@
 //! colour settings, view, grid, guide and document setup values, the
 //! watermark and the text defaults. See `docs/format/preferences.md`.
 
-use super::{Attrs, Reader, chunk, class};
+use super::{Attrs, Contour, Reader, chunk, class};
 use crate::Error;
 use crate::audit::List;
 use crate::object::{Cursor, Encoding, builtin_key};
@@ -53,6 +53,9 @@ pub struct Prefs {
     /// Default paragraph and character style UIDs (chunks 0x28D4 and
     /// 0x28D5, u32 at 8).
     pub default_styles: [Option<u32>; 2],
+    /// The contour of new placed graphics (chunk 0x373F, else
+    /// `Contour::DEFAULT`; `preferences.md`, text wrap).
+    pub contour: Option<Contour>,
     /// Default graphic, text and grid object style UIDs (chunk 0x1B959).
     pub default_object_styles: Option<[u32; 3]>,
     /// Layout and story grid defaults: element, grid settings and, for
@@ -837,6 +840,9 @@ mod id {
     /// Text wrap of new page items: the page item chunk 0x3703 without
     /// the path UID.
     pub const ITEM_TEXT_WRAP: u32 = 0x3720;
+    /// Contour of new placed graphics: the layout of page item chunk
+    /// 0x373D.
+    pub const ITEM_CONTOUR: u32 = 0x373F;
 }
 
 /// Interface colours that preferences without their chunk have
@@ -2467,6 +2473,10 @@ impl Reader<'_> {
                 None => None,
             },
             default_styles,
+            contour: match get(id::ITEM_CONTOUR)? {
+                Some(d) => Contour::read(self.enc(), &d),
+                None => Some(Contour::DEFAULT),
+            },
             default_object_styles,
             grids,
             index_options: match get(id::INDEX_OPTIONS)? {

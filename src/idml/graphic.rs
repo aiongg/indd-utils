@@ -208,6 +208,12 @@ impl Writer<'_> {
     }
 
     /// `outer` is the transform from the graphic's parent to the spread.
+    /// The contour of a graphic's text wrap: its own (chunk 0x373D), else
+    /// that of new graphics in the preferences (objects.md, text wrap).
+    pub(super) fn graphic_contour(&self, g: &Graphic) -> Option<Contour> {
+        g.contour.or(self.doc.prefs.contour)
+    }
+
     pub(super) fn placed_graphic(&self, x: &mut Xml, g: &Graphic, outer: &Matrix) {
         let major = self.doc.version.major;
         let tag = match g.kind {
@@ -335,7 +341,7 @@ impl Writer<'_> {
         {
             self.graphic_layers(x, g);
         }
-        Self::text_wrap_preference(x, g.text_wrap.as_ref(), g.contour_type);
+        Self::text_wrap_preference(x, g.text_wrap.as_ref(), self.graphic_contour(g));
         if let Some(link) = &g.link {
             self.link(x, link);
         }
