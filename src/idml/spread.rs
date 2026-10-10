@@ -38,6 +38,35 @@ fn pages_extent(pages: &[Page]) -> Option<[f64; 4]> {
         })
 }
 
+/// The IDML element of a form field kind.
+fn form_tag(kind: FormKind) -> &'static str {
+    match kind {
+        FormKind::Button => "Button",
+        FormKind::CheckBox => "CheckBox",
+        FormKind::RadioButton => "RadioButton",
+        FormKind::TextBox => "TextBox",
+        FormKind::ComboBox => "ComboBox",
+        FormKind::SignatureField => "SignatureField",
+        FormKind::MultiState => "MultiStateObject",
+    }
+}
+
+/// `Statetype` of a button, check box or radio button state, by state ID
+/// (objects.md, form fields).
+fn state_type(id: u32) -> Option<&'static str> {
+    Some(match id {
+        0 => "Up",
+        1 => "Rollover",
+        2 => "Down",
+        3 => "UpOn",
+        4 => "UpOff",
+        6 => "RolloverOff",
+        7 => "DownOn",
+        8 => "DownOff",
+        _ => return None,
+    })
+}
+
 /// Page item attributes that IDML writes only when they differ from the
 /// applied object style (attributes.md, page item attributes).
 const STYLE_COMPARED: &[&str] = &[
@@ -594,6 +623,7 @@ impl Writer<'_> {
             ItemKind::Shape(Shape::Polygon) => "Polygon",
             ItemKind::Shape(Shape::GraphicLine) => "GraphicLine",
             ItemKind::EpsText(_) => "EPSText",
+            ItemKind::Form(f) => form_tag(f.kind),
         };
         x.start(tag).attr("Self", uref(Some(item.uid)));
         if let ItemKind::TextFrame {
@@ -643,7 +673,15 @@ impl Writer<'_> {
             };
             item.attrs.get(id).and_then(Value::as_f64) == Some(100.0)
         };
-        for (name, v) in self.item_attr_values(&item.attrs) {
+        // A form field's fill, stroke and corner values are not those of
+        // its attribute list (objects.md, form fields).
+        let form = matches!(item.kind, ItemKind::Form(_));
+        let own = if form {
+            Vec::new()
+        } else {
+            self.item_attr_values(&item.attrs)
+        };
+        for (name, v) in own {
             // Fill, stroke and corner values equal to the object style's
             // are left out (attributes.md, page item attributes).
             let same = STYLE_COMPARED.contains(&name)
@@ -663,6 +701,7 @@ impl Writer<'_> {
         // without an object style (attributes.md, values an item does not
         // store). Groups vary.
         if tag != "Group"
+            && !form
             && (applied.is_some() || item.object_style.is_none())
             && let Some(base) = &self.doc.prefs.item_base
         {
@@ -684,16 +723,19 @@ impl Writer<'_> {
                 }
             }
         }
-        if tag != "Group" {
+        if tag != "Group" && !form {
             self.item_overprint(x, item, applied.as_deref(), &forced);
         }
         // An item without an object style refers to none, `n`
-        // (attributes.md, values an item does not store).
+        // (attributes.md, values an item does not store). Where a form
+        // field with states keeps its style is not known.
         let style_ref = item.object_style.and_then(|u| self.object_style_ref(u));
-        x.attr(
-            "AppliedObjectStyle",
-            style_ref.unwrap_or_else(|| "n".into()),
-        );
+        if !form || style_ref.is_some() {
+            x.attr(
+                "AppliedObjectStyle",
+                style_ref.unwrap_or_else(|| "n".into()),
+            );
+        }
         // Only items directly on a spread have `ItemLayer` (objects.md,
         // page item settings).
         if let Some(layer) = item.layer.filter(|_| !nested) {
@@ -701,6 +743,9 @@ impl Writer<'_> {
         }
         x.attr("ItemTransform", matrix(&item.transform));
         self.item_settings(x, item, nested);
+        if let ItemKind::Form(f) = &item.kind {
+            Self::form_attrs(x, f);
+        }
         // An endnote text frame has the values of a text frame.
         let observed = if tag == "EndnoteTextFrame" {
             "TextFrame"
@@ -708,7 +753,24 @@ impl Writer<'_> {
             tag
         };
         x.attrs_missing(self.observed(observed).iter());
-        Self::path_geometry(x, &item.paths);
+        if let ItemKind::Form(f) = &item.kind {
+            // A form field has the bounds of what it shows in place of
+            // paths (objects.md, form fields).
+            if let Some([l, t, r, b]) = f.bounds {
+                x.start("Properties").empty(
+                    "PathBoundingBox",
+                    &[
+                        ("Left", num(l)),
+                        ("Top", num(t)),
+                        ("Right", num(r)),
+                        ("Bottom", num(b)),
+                    ],
+                );
+                x.end();
+            }
+        } else {
+            Self::path_geometry(x, &item.paths);
+        }
         // A frame grid (objects.md, frame grids).
         if let ItemKind::TextFrame {
             preferences: Some(p),
@@ -754,14 +816,18 @@ impl Writer<'_> {
         if frame {
             self.frame_fitting(x, item);
         }
-        // EPS text has no export options (objects.md, EPS text).
-        if !matches!(item.kind, ItemKind::EpsText(_))
+        // EPS text and form fields have no export options (objects.md,
+        // EPS text and form fields).
+        if !matches!(item.kind, ItemKind::EpsText(_) | ItemKind::Form(_))
             && let Some(n) =
                 export::object_export_option(self.doc.version, item.export.as_ref(), false)
         {
             n.write(x);
         }
-        if let Some(d) = &item.anchor {
+        // IDML writes the anchor settings that differ from the object
+        // style's, which is not known for a form field with states.
+        let unknown_style = form && item.object_style.is_none();
+        if let Some(d) = item.anchor.as_ref().filter(|_| !unknown_style) {
             let style = item
                 .object_style
                 .and_then(|u| self.doc.object_styles.get(&u))
@@ -799,10 +865,83 @@ impl Writer<'_> {
         for child in &item.children {
             self.page_item(x, child, true, &item.transform.then(outer));
         }
+        if let ItemKind::Form(f) = &item.kind {
+            self.form_states(x, item, f, &item.transform.then(outer));
+        }
         for g in &item.graphics {
             self.placed_graphic(x, g, &item.transform.then(outer));
         }
         x.end();
+    }
+
+    /// The attributes of a form field that its attribute list holds
+    /// (objects.md, form fields).
+    fn form_attrs(x: &mut Xml, f: &Form) {
+        if let Some(n) = &f.name {
+            x.attr("Name", n);
+        }
+        let flag = |v: bool| v.to_string();
+        let attrs: [(&str, Option<String>); 7] = [
+            ("Description", f.description.clone()),
+            ("ExportValue", f.export_value.clone()),
+            (
+                "Required",
+                f.required
+                    .filter(|_| !matches!(f.kind, FormKind::Button | FormKind::MultiState))
+                    .map(flag),
+            ),
+            ("Multiline", f.multiline.map(flag)),
+            ("Scrollable", f.scrollable.map(flag)),
+            ("FontSize", f.font_size.map(num)),
+            (
+                "AppliedFont",
+                f.font.as_ref().map(|(family, _)| family.clone()),
+            ),
+        ];
+        for (name, v) in attrs {
+            if let Some(v) = v {
+                x.attr(name, v);
+            }
+        }
+        if let Some((_, Some(style))) = &f.font {
+            x.attr("FontStyle", style);
+        }
+    }
+
+    /// The `State` elements of a form field with the items each shows
+    /// (objects.md, form fields). `outer` is the field's transform to
+    /// the spread.
+    fn form_states(&self, x: &mut Xml, item: &PageItem, f: &Form, outer: &Matrix) {
+        for s in &f.states {
+            let statetype = if f.kind == FormKind::MultiState {
+                ("long", s.id.to_string())
+            } else {
+                match state_type(s.id) {
+                    Some(t) => ("enumeration", t.to_string()),
+                    None => {
+                        self.warnings.borrow_mut().push(format!(
+                            "item {}: state type {} is not known; state left out",
+                            item.uid, s.id
+                        ));
+                        continue;
+                    }
+                }
+            };
+            x.start("State")
+                .attr("Self", format!("{}i{:x}", uref(Some(item.uid)), s.id))
+                .attr("Active", s.active.to_string())
+                .attr("Enabled", s.enabled.to_string());
+            x.start("Properties")
+                .start("Statetype")
+                .attr("type", statetype.0)
+                .text(&statetype.1)
+                .end()
+                .end();
+            for i in &s.items {
+                self.page_item(x, i, true, outer);
+            }
+            x.end();
+        }
     }
 
     /// `OverprintFill` and `OverprintStroke` of a page item, where its

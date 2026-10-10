@@ -935,10 +935,8 @@ INDD object:
 | Gradient start and length, fill and stroke (four attributes), items other than groups | 86,594 of 86,594 each |
 | Gradient angles and highlights (six attributes) | all, 92,396 to 92,402 per attribute (groups by the rule above) |
 
-The 138 names that differ belong to groups that are states of a button
-(their parent has class 0x1450D); they have no name chunk, and IDML
-names them `$ID/$$$/StateType/...`. The converter does not write such
-groups.
+The 138 names that differ belong to groups that are the states of form
+fields; IDML names them by their state type (form fields).
 
 Values other than the default: 206 items with a name given by the
 user, 176 hidden, 1,241 with change counts, 1,113 with overridden
@@ -1534,6 +1532,129 @@ and the text wrap equal the IDML in 634 of 634. `StrokeType` (634),
 `OverprintFill` (33) and `StrokeDashAndGap` (7) are not reproduced yet:
 IDML writes `StrokeType="StrokeStyle/$ID/Solid"` on 627 items whose
 attribute list has no stroke type.
+
+## Form fields and multi-state objects
+
+Seven classes are page items that IDML writes as interactive elements:
+
+| Class | IDML | Elements (documents) |
+|---|---|---|
+| 0x1450C | `Button` | 284 (43) |
+| 0x1450D | `CheckBox` | 72 (5) |
+| 0x1450E | `RadioButton` | 11 (4) |
+| 0x1450F | `TextBox` | 27 (4) |
+| 0x14511 | `ComboBox` | 1 (1) |
+| 0x14512 | `SignatureField` | 2 (2) |
+| 0x145D8 | `MultiStateObject` | 18 (16) |
+
+Counts are over the pairs of the corpus of 2026-10: 48 documents, all
+trustworthy, saved by InDesign 8 to 20. Each element's `Self` is the
+object's UID (415 of 415). A field is listed like any page item, in the
+child list of its spread, group or anchor, and its fields and states
+nest (a button inside a group inside a multi-state object's state).
+
+**Fields with states** (button, check box, radio button, multi-state
+object) have no chunk 0x15B and no 0x151:
+
+- Chunk 0x14521: u32 active state ID, u32 count, then per state u32
+  state ID, u16 enabled (1, or 0 for `Enabled="false"`), u16 key, u16
+  (0). IDML writes one `State` per entry, in order (705 of 705), with
+  `Self` the field's `Self`, `i` and the state ID in hexadecimal,
+  `Active="true"` for the active state ID and `Enabled` from the u16
+  (705 of 705; 4 not enabled).
+- Chunk 0x14526: u32 spread, u32 parent, u32 count, then per key u32
+  key, u32 *k*, *k* UIDs: the items each state shows, by its key (one
+  group per state in 705 of 705). The chunks parse to their end in all
+  385 fields. The spread decides `AllowOverrides` as chunk 0x15B does
+  for other items.
+- Chunk 0x14527: six f64, the transform (`ItemTransform`, 385 of 385).
+
+**State types.** `Properties/Statetype` follows from the state ID. For
+a multi-state object it is the ID itself (`type="long"`, IDs 9 to 15;
+72 of 72 states). For the others it is an enumeration (633 of 633):
+
+| ID | `Statetype` | States | Name of the state's group without a name of its own |
+|---:|---|---:|---|
+| 0 | `Up` | 284 | `$ID/$$$/StateType/Normal` |
+| 1 | `Rollover` | 109 | `$ID/$$$/StateType/Over` |
+| 2 | `Down` | 61 | `$ID/$$$/StateType/Down` |
+| 3 | `UpOn` | 83 | `$ID/$$$/StateType/NormalOn` |
+| 4 | `UpOff` | 83 | `$ID/$$$/StateType/NormalOff` |
+| 6 | `RolloverOff` | 7 | `$ID/$$$/StateType/OverOff` |
+| 7 | `DownOn` | 3 | `$ID/$$$/StateType/DownOn` |
+| 8 | `DownOff` | 3 | `$ID/$$$/StateType/DownOff` |
+
+The key is not the state type: a button's second state has key 2
+whether it is `Rollover` (ID 1) or `Down` (ID 2). ID 5 has no sample; a
+state with an ID not in the table is left out with a warning. A state's
+group has no name chunk (0x418), or one with flag 1 and an empty name;
+IDML names it by the state type, as in the table (633 of 633 groups of
+buttons, check boxes and radio buttons). The groups of multi-state
+objects have names of their own (72 of 72).
+
+**Fields with child items** (text box, combo box, signature field) have
+the usual chunks 0x151 (transform) and 0x15B, whose children IDML writes
+inside the element: a `Rectangle` or `TextFrame` (30 of 30). Text boxes
+can be anchored in text, with the anchor's `AnchoredObjectSetting`.
+
+**`Properties/PathBoundingBox`.** The bounds of the paths of the items
+the field shows, in the field's own coordinates: the curves through the
+anchor and direction points (not only the anchors) of the items of every
+state, or of the child items, each through its transform and those of
+the groups and fields between it and the field. Items inside a frame
+(an oval inside an oval) do not count. The converter takes each item's
+box in its own coordinates and the box around its corners through its
+transform, from the innermost item out: 415 of 415 equal to 6
+significant digits, 379 of them as text (the others differ in the last
+digit or two). The field has no `PathGeometry`.
+
+**Attributes from the attribute list (chunk 0x6E03).** Strings have value
+type 0x1451F or 0x1B02 (a flag byte and an in-object string), numbers
+0x6E68 (f64), flags 0x6E65 (u16).
+
+| ID | IDML | On | Evidence |
+|---|---|---|---|
+| 0x14534 | `Name` | all | 415 of 415, 237 distinct |
+| 0x14535 | `Description` | all but multi-state objects | 397 of 397 (23 distinct); 3 multi-state objects have `Description=""` without it |
+| 0x1453D | `Required` (1 `true`) | check box, radio button, text box, combo box, signature field | 113 of 113 (6 `true`); buttons have the attribute but IDML writes no `Required` |
+| 0x14550 | `ExportValue` | check box, radio button | 83 of 83 (9 distinct) |
+| 0x14552 | `Multiline` | text box | 27 of 27 (8 `true`) |
+| 0x14553 | `Scrollable` | text box | 27 of 27 (9 `true`) |
+| 0x14540 | `FontSize` | text box, combo box | 28 of 28 (4 distinct); signature fields have it, IDML writes none |
+| 0x1455F | `AppliedFont` | text box | 24 of 24 (2 distinct); the 3 text boxes without it have neither `AppliedFont` nor `FontStyle` |
+| 0x14542 | `FontStyle` | text box with 0x1455F | 24 of 24 |
+
+The flags `ReadOnly`, `PrintableInPdf`, `CheckedByDefault`, `Password`,
+`RightToLeftField`, `SortChoices`, `HiddenUntilTriggered`,
+`InitiallyHidden` and `VisibilityInPdf` have one value in every sample,
+and so do the candidate u16 attributes (0x14539 to 0x1453C, 0x14545,
+0x14549, 0x14551, 0x14554 to 0x14558, 0x145E1); which holds which cannot
+be shown. Where every IDML has the value, it comes from the value files
+(`idml-values.md`, form fields). `ChoiceList` of the combo box (0x1455D,
+one sample) is not decoded.
+
+**Values of the page item.** `Visible`, `Locked`, the change counts,
+the layout constraints and `ItemLayer` follow the page item rules
+(page item settings). The gradient attributes are, as for a group,
+the values all the items the field shows directly have (the state
+groups or the child items), and IDML leaves an attribute out where they
+differ: the six gradient attributes are equal in 400 of 415 fields (4
+of them without the start and length values). The fill, stroke and corner values in
+the field's attribute list are not IDML's: IDML's `FillColor` and
+corner values of buttons are not in the list, and other stored values
+differ, so they are not written. Fields with states have no object
+style chunk (0x1B916); IDML names `[None]` for 363 of their 385 and
+another style for 22, and where that is stored is not known, so
+`AppliedObjectStyle` is left out for them, and so are the anchor
+settings of such a field anchored in text, which IDML compares with the
+style (12 anchored check boxes and radio buttons with a style other
+than `[None]` have no `AnchoredObjectSetting`). A field has no
+`ObjectExportOption`.
+
+**Not decoded.** Button behaviours (`GotoAnchorBehavior`,
+`GotoURLBehavior`, … in 193 buttons; chunk 0x15601 lists them), the
+`TimingSetting` of buttons and the `AnimationSetting` of multi-state
+objects, and page item labels (`Properties/Label`).
 
 ## Placed InDesign pages (class 0x6607)
 

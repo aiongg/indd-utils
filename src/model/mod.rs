@@ -138,6 +138,73 @@ mod tests {
     }
 
     #[test]
+    fn reads_the_states_of_a_button() {
+        let le = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+        // States 0 (key 1, active) and 1 (key 2, not enabled).
+        let mut states = le(&[0, 2, 0]);
+        states.extend([1, 0, 1, 0, 0, 0]);
+        states.extend(le(&[1]));
+        states.extend([0, 0, 2, 0, 0, 0]);
+        // Spread 5, parent 5; key 1 shows group 21, key 2 group 22.
+        let items = le(&[5, 5, 2, 1, 1, 21, 2, 1, 22]);
+        let mut transform = Vec::new();
+        for v in [1.0f64, 0.0, 0.0, 1.0, 10.0, 20.0] {
+            transform.extend(v.to_le_bytes());
+        }
+        // A square from (0, 0) to (4, 2), as four corner points.
+        let mut path = le(&[1, 4]);
+        for (x, y) in [(0.0f64, 0.0f64), (0.0, 2.0), (4.0, 2.0), (4.0, 0.0)] {
+            path.extend(le(&[2]));
+            path.extend(x.to_le_bytes());
+            path.extend(y.to_le_bytes());
+        }
+        path.extend([0, 0]);
+        let button = synthetic::chunks(&[
+            (chunk::FORM_STATES, states),
+            (chunk::FORM_STATE_ITEMS, items),
+            (chunk::FORM_TRANSFORM, transform),
+        ]);
+        let shape = synthetic::chunks(&[(chunk::ITEM_PATHS, path)]);
+        let objects = [
+            (20, class::BUTTON, button),
+            group(21, &[23]),
+            group(22, &[]),
+            (23, class::SPLINE_ITEM, shape),
+        ];
+        let bytes = synthetic::image(&objects);
+        let db = synthetic::database(&bytes, &objects);
+        let reader = Reader::new(&db);
+        let item = reader.page_item(20, None).unwrap().unwrap();
+        assert_eq!(item.transform.0[4..], [10.0, 20.0]);
+        let ItemKind::Form(f) = &item.kind else {
+            panic!("{:?}", item.kind)
+        };
+        assert_eq!(f.kind, FormKind::Button);
+        let got: Vec<_> = f
+            .states
+            .iter()
+            .map(|s| {
+                let names: Vec<_> = s.items.iter().map(|i| i.props.name.clone()).collect();
+                (s.id, s.active, s.enabled, names)
+            })
+            .collect();
+        let name = |n: &str| {
+            Some(ItemName {
+                builtin: true,
+                name: n.into(),
+            })
+        };
+        assert_eq!(
+            got,
+            [
+                (0, true, true, vec![name("$$$/StateType/Normal")]),
+                (1, false, false, vec![name("$$$/StateType/Over")]),
+            ]
+        );
+        assert_eq!(f.bounds, Some([0.0, 0.0, 4.0, 2.0]));
+    }
+
+    #[test]
     fn style_group_cycles_are_cut() {
         let g = |uid, root, children: &[u32]| {
             (

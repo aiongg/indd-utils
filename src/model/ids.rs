@@ -39,6 +39,16 @@ pub mod class {
     pub const NAMED_GRID: u32 = 0xCD12;
     pub const ASSIGNMENT: u32 = 0x1BE01;
     pub const SMOOTH_SHADE: u32 = 0x5533;
+    /// Form fields and multi-state objects (IDML `Button`, `CheckBox`,
+    /// `RadioButton`, `TextBox`, `ComboBox`, `SignatureField`,
+    /// `MultiStateObject`).
+    pub const BUTTON: u32 = 0x1450C;
+    pub const CHECK_BOX: u32 = 0x1450D;
+    pub const RADIO_BUTTON: u32 = 0x1450E;
+    pub const TEXT_BOX: u32 = 0x1450F;
+    pub const COMBO_BOX: u32 = 0x14511;
+    pub const SIGNATURE_FIELD: u32 = 0x14512;
+    pub const MULTI_STATE: u32 = 0x145D8;
     /// Holds an item anchored in text.
     pub const ANCHOR: u32 = 0x262;
     /// A footnote, owned by a story at its reference (U+0004).
@@ -144,6 +154,14 @@ pub mod chunk {
     pub const PAGE_COLUMNS: u32 = 0x528;
     pub const PAGE_GRID: u32 = 0xCD02;
     pub const ITEM_TRANSFORM: u32 = 0x151;
+    /// A form field's states: u32 active state ID, u32 count, then per
+    /// state u32 ID, u16 enabled, u16 key, u16.
+    pub const FORM_STATES: u32 = 0x14521;
+    /// A form field's state items: u32 spread, u32 parent, u32 count,
+    /// then per state u32 key, u32 count and the item UIDs.
+    pub const FORM_STATE_ITEMS: u32 = 0x14526;
+    /// A form field's transform (six f64) when it has states.
+    pub const FORM_TRANSFORM: u32 = 0x14527;
     /// Text on a path of a shape or frame: u32 text path UID (0 for
     /// none), then its settings.
     pub const ITEM_TEXT_PATH: u32 = 0xB30A;

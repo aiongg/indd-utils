@@ -1614,8 +1614,18 @@ impl Writer<'_> {
     /// The gradient attributes of a page item: its own, or, for a group,
     /// the values all its children have. See `docs/format/objects.md`.
     pub(super) fn gradients(item: &PageItem) -> Vec<(&'static str, String)> {
-        if item.kind == ItemKind::Group {
-            let kids: Vec<_> = item.children.iter().map(Self::gradients).collect();
+        // A form field has the values of the items it shows, as a group
+        // has those of its children (objects.md, form fields).
+        let shown: Vec<&PageItem> = match &item.kind {
+            ItemKind::Group => item.children.iter().collect(),
+            ItemKind::Form(f) if f.kind.has_states() => {
+                f.states.iter().flat_map(|s| &s.items).collect()
+            }
+            ItemKind::Form(_) => item.children.iter().collect(),
+            _ => Vec::new(),
+        };
+        if matches!(item.kind, ItemKind::Group | ItemKind::Form(_)) {
+            let kids: Vec<_> = shown.into_iter().map(Self::gradients).collect();
             return GRADIENT_ATTRS
                 .iter()
                 .filter_map(|&(_, name, _)| {

@@ -78,6 +78,8 @@ ELEMENTS = [
     "Rectangle/InCopyExportOption", "Oval/InCopyExportOption",
     "Polygon/InCopyExportOption", "Image/ClippingPathSettings",
     "PDF/ClippingPathSettings", "EPS/ClippingPathSettings", "Ink",
+    "Button", "CheckBox", "RadioButton", "TextBox", "ComboBox", "SignatureField",
+    "MultiStateObject",
 ]
 # The top-level elements of Resources/Preferences.xml, as paths
 # "Preferences/<tag>". tools/root_values.py collects them from the IDML

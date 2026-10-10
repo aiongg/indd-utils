@@ -17,6 +17,9 @@ pub mod ty {
     pub const REF: u32 = 0x117;
     /// A built-in item code, the second value after a reference of 0.
     pub const CODE: u32 = 0x6E64;
+    /// A flag byte and an in-object string.
+    pub const STRING: u32 = 0x1B02;
+    pub const FORM_STRING: u32 = 0x1451F;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -464,6 +467,14 @@ fn decode(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
         (ty::ENUM, 2) => enc.u16_at(data, 0).map(Value::Enum),
         (ty::REF, 4) => enc.u32_at(data, 0).map(Value::Ref),
         (ty::POINT, 16) => f(0).zip(f(8)).map(|(x, y)| Value::Point(x, y)),
+        // A flag byte and an in-object string, as form fields store their
+        // names (objects.md, form fields).
+        (ty::STRING | ty::FORM_STRING, _) => (|| {
+            let mut c = enc.cursor(data);
+            c.flag()?;
+            Ok::<_, Error>(Value::String(c.string()?))
+        })()
+        .ok(),
         // Other 4-byte types are references or codes (for example a
         // corner effect ID); keep the number.
         (_, 4) => enc.u32_at(data, 0).map(Value::Ref),

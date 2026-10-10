@@ -286,6 +286,28 @@ as `Name`, `Visible`, `Locked`, the gradient angles and the layout
 constraints are not kept: they differ in some elements, and those
 values come from the INDD.
 
+### Form fields
+
+`tools/element_values.py` also collects the form field elements
+(`objects.md`, form fields). Only buttons and multi-state objects are in
+enough files (282 buttons in 43 files, 18 multi-state objects in 16):
+
+| Element | Values kept | Versions |
+|---|---|---|
+| `Button` | `VisibilityInPdf="VisibleInPdf"`, `HiddenUntilTriggered="false"` and the page item values below | DOM 8 to 18 (42 files) |
+| `Button` | `PrintableInPdf="true"` | DOM 10 to 18 (37 files) |
+| `Button` | `AppliedObjectStyle="ObjectStyle/$ID/[None]"` | DOM 8 to 13 (40 files) |
+| `MultiStateObject` | `InitiallyHidden="false"` and page item values | DOM 8 to 13 (16 files) |
+
+The page item values are those also kept for groups: the gradient
+angles and highlights, `LocalDisplaySetting`, the layout constraints and
+the change counts, which the converter writes from the INDD where it has
+them. `Button` `PrintableInPdf` is on 216 of 284 buttons: the later
+versions have too few files to keep it. Check boxes, radio buttons,
+text boxes, combo boxes and signature fields are in fewer than 10 files
+each, so no value of theirs is kept; their constant flags (`ReadOnly`,
+`PrintableInPdf` and others) are not written.
+
 ### Spreads, pages and layers
 
 | Element | Elements | Values kept |

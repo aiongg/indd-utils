@@ -76,6 +76,75 @@ pub enum ItemKind {
     Group,
     /// Text kept from a placed EPS or PDF graphic (class 0x660B).
     EpsText(EpsText),
+    /// A form field or multi-state object.
+    Form(Form),
+}
+
+/// The kind of a form field (`docs/format/objects.md`, form fields).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormKind {
+    Button,
+    CheckBox,
+    RadioButton,
+    TextBox,
+    ComboBox,
+    SignatureField,
+    MultiState,
+}
+
+impl FormKind {
+    fn of(class: Option<u32>) -> Option<FormKind> {
+        Some(match class? {
+            class::BUTTON => FormKind::Button,
+            class::CHECK_BOX => FormKind::CheckBox,
+            class::RADIO_BUTTON => FormKind::RadioButton,
+            class::TEXT_BOX => FormKind::TextBox,
+            class::COMBO_BOX => FormKind::ComboBox,
+            class::SIGNATURE_FIELD => FormKind::SignatureField,
+            class::MULTI_STATE => FormKind::MultiState,
+            _ => return None,
+        })
+    }
+
+    /// Kinds whose appearance is a list of states rather than child
+    /// items.
+    pub fn has_states(self) -> bool {
+        matches!(
+            self,
+            FormKind::Button | FormKind::CheckBox | FormKind::RadioButton | FormKind::MultiState
+        )
+    }
+}
+
+/// A form field or multi-state object (`docs/format/objects.md`, form
+/// fields). Its fill, stroke and other page item values are in the
+/// item's attribute list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Form {
+    pub kind: FormKind,
+    pub states: Vec<FormState>,
+    /// The bounds of the paths of the items it shows, in its own
+    /// coordinates: left, top, right, bottom.
+    pub bounds: Option<[f64; 4]>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub export_value: Option<String>,
+    pub required: Option<bool>,
+    pub multiline: Option<bool>,
+    pub scrollable: Option<bool>,
+    pub font_size: Option<f64>,
+    /// Font family and style of a text box.
+    pub font: Option<(String, Option<String>)>,
+}
+
+/// One state of a form field.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FormState {
+    /// The state ID, which gives the state type.
+    pub id: u32,
+    pub active: bool,
+    pub enabled: bool,
+    pub items: Vec<PageItem>,
 }
 
 /// The settings of EPS text (`docs/format/objects.md`, EPS text).
@@ -640,10 +709,13 @@ impl<'a> Reader<'a> {
             }
             None => None,
         };
-        let on_master = self
-            .chunk(uid, chunk::ITEM_HIERARCHY)?
-            .and_then(|d| self.enc().u32_at(&d, 0))
-            .is_some_and(|s| self.class(s) == Some(class::MASTER_SPREAD));
+        // A form field with states names its spread in chunk 0x14526.
+        let on_master = match self.chunk(uid, chunk::ITEM_HIERARCHY)? {
+            Some(d) => Some(d),
+            None => self.chunk(uid, chunk::FORM_STATE_ITEMS)?,
+        }
+        .and_then(|d| self.enc().u32_at(&d, 0))
+        .is_some_and(|s| self.class(s) == Some(class::MASTER_SPREAD));
         let allow_overrides = if on_master {
             Some(
                 self.chunk(uid, chunk::ITEM_ALLOW_OVERRIDES)?
@@ -796,6 +868,7 @@ impl<'a> Reader<'a> {
         if cls != Some(class::SPLINE_ITEM)
             && cls != Some(class::GROUP)
             && cls != Some(class::EPS_TEXT)
+            && FormKind::of(cls).is_none()
         {
             return Ok(None);
         }
@@ -830,17 +903,31 @@ impl<'a> Reader<'a> {
         cls: Option<u32>,
         layer: Option<u32>,
     ) -> Result<Option<PageItem>, Error> {
-        // Groups without chunk 0x151 have their transform in chunk 0x40D.
+        let form = FormKind::of(cls);
+        let states = form.is_some_and(FormKind::has_states);
+        // Groups without chunk 0x151 have their transform in chunk 0x40D,
+        // form fields with states in chunk 0x14527.
         let transform = match self.chunk(uid, chunk::ITEM_TRANSFORM)? {
             Some(d) => Matrix::read(&mut self.cursor(&d))?,
-            None => match self.chunk(uid, chunk::GROUP_TRANSFORM)? {
-                Some(d) if cls == Some(class::GROUP) && d.len() >= 48 => {
-                    Matrix::read(&mut self.cursor(&d))?
+            None => {
+                let other = if states {
+                    chunk::FORM_TRANSFORM
+                } else {
+                    chunk::GROUP_TRANSFORM
+                };
+                match self.chunk(uid, other)? {
+                    Some(d) if (states || cls == Some(class::GROUP)) && d.len() >= 48 => {
+                        Matrix::read(&mut self.cursor(&d))?
+                    }
+                    _ => Matrix::IDENTITY,
                 }
-                _ => Matrix::IDENTITY,
-            },
+            }
         };
-        let child_uids = self.children(uid, chunk::ITEM_HIERARCHY)?;
+        let child_uids = if states {
+            Vec::new()
+        } else {
+            self.children(uid, chunk::ITEM_HIERARCHY)?
+        };
         let mut children = Vec::new();
         let mut graphics = Vec::new();
         let mut text_column = None;
@@ -874,7 +961,14 @@ impl<'a> Reader<'a> {
             Some(d) => uid_or_none(self.cursor(&d).u32()?),
             None => None,
         };
-        let kind = if cls == Some(class::GROUP) {
+        let kind = if let Some(kind) = form {
+            let states = if states {
+                self.form_states(uid, kind, layer)?
+            } else {
+                Vec::new()
+            };
+            ItemKind::Form(form_field(kind, states, &attrs, &children))
+        } else if cls == Some(class::GROUP) {
             ItemKind::Group
         } else if cls == Some(class::EPS_TEXT) {
             ItemKind::EpsText(self.eps_text(uid)?)
@@ -931,6 +1025,82 @@ impl<'a> Reader<'a> {
                 .into_iter()
                 .collect(),
         }))
+    }
+
+    /// The states of a form field (chunks 0x14521 and 0x14526) with the
+    /// items each shows. A state whose key has no entry in chunk 0x14526
+    /// shows nothing. See `docs/format/objects.md`, form fields.
+    fn form_states(
+        &self,
+        uid: u32,
+        kind: FormKind,
+        layer: Option<u32>,
+    ) -> Result<Vec<FormState>, Error> {
+        let Some(d) = self.chunk(uid, chunk::FORM_STATES)? else {
+            return Ok(Vec::new());
+        };
+        let mut c = self.cursor(&d);
+        let active = c.u32()?;
+        let n = c.u32()? as usize;
+        if n > c.remaining() / 10 {
+            return Err(Error::Corrupt(format!("form field {uid}: {n} states")));
+        }
+        let mut entries = Vec::with_capacity(n);
+        for _ in 0..n {
+            let id = c.u32()?;
+            let enabled = c.u16()?;
+            let key = c.u16()?;
+            c.u16()?;
+            entries.push((id, enabled, key));
+        }
+        let mut lists: Vec<(u32, Vec<u32>)> = Vec::new();
+        if let Some(d) = self.chunk(uid, chunk::FORM_STATE_ITEMS)? {
+            let mut c = self.cursor(&d);
+            c.skip(8)?;
+            let n = c.u32()? as usize;
+            if n > c.remaining() / 8 {
+                return Err(Error::Corrupt(format!("form field {uid}: {n} state lists")));
+            }
+            for _ in 0..n {
+                let key = c.u32()?;
+                lists.push((key, c.u32_list()?));
+            }
+        }
+        let mut out = Vec::with_capacity(n);
+        for (id, enabled, key) in entries {
+            let mut items = Vec::new();
+            for &child in lists
+                .iter()
+                .filter(|(k, _)| *k == u32::from(key))
+                .flat_map(|(_, l)| l)
+            {
+                if let Some(mut item) = self.page_item(child, layer)? {
+                    // A state's group without a name of its own has the
+                    // name of its state type.
+                    if item.kind == ItemKind::Group
+                        && item
+                            .props
+                            .name
+                            .as_ref()
+                            .is_none_or(|n| n.builtin && n.name.is_empty())
+                        && let Some(name) = state_group_name(kind, id)
+                    {
+                        item.props.name = Some(ItemName {
+                            builtin: true,
+                            name: name.into(),
+                        });
+                    }
+                    items.push(item);
+                }
+            }
+            out.push(FormState {
+                id,
+                active: id == active,
+                enabled: enabled != 0,
+                items,
+            });
+        }
+        Ok(out)
     }
 
     /// The text on the path of an item (chunk 0xB30A): u32 text path UID,
@@ -1350,6 +1520,167 @@ impl<'a> Reader<'a> {
 /// the 210-byte tail left out. Layout: u32 version, flagged in-object
 /// string (font name), nine f64, flagged in-object string (text), tail.
 /// See `docs/format/objects.md`, EPS text.
+/// The built-in name of a state's group that has no name of its own, by
+/// state ID (`docs/format/objects.md`, form fields).
+fn state_group_name(kind: FormKind, id: u32) -> Option<&'static str> {
+    if kind == FormKind::MultiState {
+        return None;
+    }
+    Some(match id {
+        0 => "$$$/StateType/Normal",
+        1 => "$$$/StateType/Over",
+        2 => "$$$/StateType/Down",
+        3 => "$$$/StateType/NormalOn",
+        4 => "$$$/StateType/NormalOff",
+        6 => "$$$/StateType/OverOff",
+        7 => "$$$/StateType/DownOn",
+        8 => "$$$/StateType/DownOff",
+        _ => return None,
+    })
+}
+
+/// The settings of a form field from its attribute list, and the bounds
+/// of the items it shows (`docs/format/objects.md`, form fields).
+fn form_field(
+    kind: FormKind,
+    states: Vec<FormState>,
+    attrs: &Attrs,
+    children: &[PageItem],
+) -> Form {
+    let text = |id: u32| match attrs.get(id) {
+        Some(Value::String(s)) => Some(s.clone()),
+        _ => None,
+    };
+    let flag = |id: u32| attrs.get(id).and_then(Value::as_u32).map(|v| v != 0);
+    let text_box = kind == FormKind::TextBox;
+    let shown: Vec<&PageItem> = if kind.has_states() {
+        states.iter().flat_map(|s| &s.items).collect()
+    } else {
+        children.iter().collect()
+    };
+    let bounds = shown
+        .into_iter()
+        .filter_map(|i| item_bounds(i, 0))
+        .reduce(|[l, t, r, b], [l1, t1, r1, b1]| [l.min(l1), t.min(t1), r.max(r1), b.max(b1)]);
+    let font = match text(0x1455F) {
+        Some(family) if text_box => Some((family, text(0x14542))),
+        _ => None,
+    };
+    Form {
+        kind,
+        states,
+        bounds,
+        name: text(0x14534),
+        description: text(0x14535),
+        export_value: text(0x14550)
+            .filter(|_| matches!(kind, FormKind::CheckBox | FormKind::RadioButton)),
+        required: flag(0x1453D),
+        multiline: flag(0x14552).filter(|_| text_box),
+        scrollable: flag(0x14553).filter(|_| text_box),
+        font_size: attrs
+            .get(0x14540)
+            .and_then(Value::as_f64)
+            .filter(|_| matches!(kind, FormKind::TextBox | FormKind::ComboBox)),
+        font,
+    }
+}
+
+/// The parameters in (0, 1) where a cubic Bézier curve has a horizontal
+/// or vertical tangent.
+fn curve_extrema(p: &[(f64, f64); 4]) -> Vec<f64> {
+    let mut out = Vec::new();
+    for k in 0..2 {
+        let v = |i: usize| if k == 0 { p[i].0 } else { p[i].1 };
+        // The derivative divided by 3: a t² + b t + c.
+        let a = -v(0) + 3.0 * v(1) - 3.0 * v(2) + v(3);
+        let b = 2.0 * (v(0) - 2.0 * v(1) + v(2));
+        let c = v(1) - v(0);
+        if a.abs() < 1e-12 {
+            if b.abs() > 1e-12 {
+                out.push(-c / b);
+            }
+        } else {
+            let disc = b * b - 4.0 * a * c;
+            if disc >= 0.0 {
+                let r = disc.sqrt();
+                out.push((-b + r) / (2.0 * a));
+                out.push((-b - r) / (2.0 * a));
+            }
+        }
+    }
+    out.retain(|t| *t > 0.0 && *t < 1.0);
+    out
+}
+
+fn cubic_point(p: &[(f64, f64); 4], t: f64) -> (f64, f64) {
+    let u = 1.0 - t;
+    let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+    (
+        (0..4).map(|i| w[i] * p[i].0).sum(),
+        (0..4).map(|i| w[i] * p[i].1).sum(),
+    )
+}
+
+/// The bounds of `item` in its parent's coordinates: the box around its
+/// paths (their curves, not only the anchor points) and, for a group or
+/// a form field, the boxes of the items it shows, with its corners
+/// through the item's transform.
+fn item_bounds(item: &PageItem, depth: usize) -> Option<[f64; 4]> {
+    if depth > MAX_ITEM_DEPTH {
+        return None;
+    }
+    let mut bounds: Option<[f64; 4]> = None;
+    let mut add = |(x, y): (f64, f64)| {
+        bounds = Some(match bounds {
+            None => [x, y, x, y],
+            Some([l, t, r, b]) => [l.min(x), t.min(y), r.max(x), b.max(y)],
+        });
+    };
+    for path in &item.paths {
+        let n = path.points.len();
+        let segments = if path.open { n.saturating_sub(1) } else { n };
+        for p in &path.points {
+            add(p.anchor);
+        }
+        // The curve between two anchors can reach beyond them.
+        for i in 0..segments {
+            let (p, q) = (&path.points[i], &path.points[(i + 1) % n]);
+            let ctrl = [p.anchor, p.right, q.left, q.anchor];
+            for t in curve_extrema(&ctrl) {
+                add(cubic_point(&ctrl, t));
+            }
+        }
+    }
+    // The items in a frame do not count; those of a group or a form
+    // field do.
+    let inner: Vec<&PageItem> = match &item.kind {
+        ItemKind::Group => item.children.iter().collect(),
+        ItemKind::Form(f) if f.kind.has_states() => {
+            f.states.iter().flat_map(|s| &s.items).collect()
+        }
+        ItemKind::Form(_) => item.children.iter().collect(),
+        _ => Vec::new(),
+    };
+    for child in inner {
+        if let Some([l, t, r, b]) = item_bounds(child, depth + 1) {
+            add((l, t));
+            add((r, b));
+        }
+    }
+    let [l, t, r, b] = bounds?;
+    let [a, bb, c, d, tx, ty] = item.transform.0;
+    let at = |x: f64, y: f64| (a * x + c * y + tx, bb * x + d * y + ty);
+    let corners = [at(l, t), at(r, t), at(l, b), at(r, b)];
+    let xs = corners.map(|p| p.0);
+    let ys = corners.map(|p| p.1);
+    Some([
+        xs.into_iter().fold(f64::INFINITY, f64::min),
+        ys.into_iter().fold(f64::INFINITY, f64::min),
+        xs.into_iter().fold(f64::NEG_INFINITY, f64::max),
+        ys.into_iter().fold(f64::NEG_INFINITY, f64::max),
+    ])
+}
+
 pub(super) fn eps_text_data(enc: Encoding, d: &[u8]) -> Result<Vec<u8>, Error> {
     let mut c = enc.cursor(d);
     let mut out = c.u32()?.to_be_bytes().to_vec();

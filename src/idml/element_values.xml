@@ -175,6 +175,13 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<HTMLExportPreference BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" />
 		</Preferences>
 	</Values>
+	<Values MinimumVersion="8" MaximumVersion="13">
+		<Button AppliedObjectStyle="ObjectStyle/$ID/[None]" />
+		<MultiStateObject InitiallyHidden="false" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="" OverriddenPageItemProps="" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" GradientFillStart="0 0" GradientFillLength="0" GradientFillAngle="0" GradientStrokeStart="0 0" GradientStrokeLength="0" GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" AppliedObjectStyle="ObjectStyle/$ID/[None]" Visible="true" />
+	</Values>
+	<Values MinimumVersion="8" MaximumVersion="18">
+		<Button VisibilityInPdf="VisibleInPdf" HiddenUntilTriggered="false" Visible="true" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" GradientFillAngle="0" GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="" />
+	</Values>
 	<Values MinimumVersion="8" MaximumVersion="20">
 		<EPSText OverriddenPageItemProps="" Visible="true" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" MiterLimit="10" GradientFillStart="0 0" GradientFillLength="0" GradientFillAngle="0" GradientStrokeStart="0 0" GradientStrokeLength="0" GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" AppliedObjectStyle="ObjectStyle/$ID/[None]" ParentInterfaceChangeCount="" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="" />
 	</Values>
@@ -255,6 +262,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<EPubExportPreference GenerateCascadeStyleSheet="true" />
 			<HTMLExportPreference GenerateCascadeStyleSheet="true" />
 		</Preferences>
+	</Values>
+	<Values MinimumVersion="10" MaximumVersion="18">
+		<Button PrintableInPdf="true" />
 	</Values>
 	<Values MinimumVersion="10">
 		<TextFrame>
