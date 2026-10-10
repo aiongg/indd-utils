@@ -2537,6 +2537,7 @@ From the frame's multi-column frame object (class 0x263):
 | 0x2D1 | u8 12 | `UseFixedColumnWidth` |
 | 0x2D1 | f64 32 | `TextColumnMaxWidth` (in 40-byte chunks) |
 | 0x3730 | u16 | `IgnoreWrap` |
+| 0x22646 | u32 0 | `ColumnRuleOverride`: 1 true, 0 false (below) |
 | 0x22646 | f64 28, u32 36 | `ColumnRuleStrokeWidth`, `ColumnRuleStrokeColor` (a swatch; 0 = `n`) |
 | 0x22608 | u16 2, f64 4, f64 12 | `FootnotesSpanAcrossColumns` (1 = true), `FootnotesMinimumSpacing`, `FootnotesSpaceBetween` |
 | 0x2834 | 24 bytes | `BaselineFrameGridOption` (below) |
@@ -2627,9 +2628,16 @@ values, the rule leaves out 379,953 values that the IDML does not have,
 keeps the 200,434 it has, and leaves out one value that the IDML has (a
 `TextColumnFixedWidth` equal to its style's).
 
-`ColumnRuleOverride`: chunk 0x2265A is all zero in the frames of the
-pairs except one, whose IDML has `true`; the converter writes `false`
-for zero chunks and frames without it (7,247 of 7,248).
+`ColumnRuleOverride`: the u32 at offset 0 of chunk 0x22646 (60 bytes).
+In the conversions of the 1,251 trustworthy pairs after 2026-10, 11,319
+frames have the chunk: 2 frames (a 15.0 and an 18.4 document) have 1,
+and IDML has `ColumnRuleOverride="true"` on both; the other 11,317 have
+0, and IDML has `false` wherever it writes the attribute. The converter
+writes `true` for 1 and `false` otherwise, also for frames without the
+chunk: 21,167 of 21,167 values, no extra value. The same 2 frames are
+the only ones whose chunk 0x2265A (32 bytes) is not all zero, so the
+corpus cannot tell the two chunks apart; offset 0 of 0x22646 is taken
+because the chunk holds the other column rule values of the frame.
 
 **Baseline frame grid of text frames.** Chunk 0x2834 of the
 multi-column frame (24 bytes) holds the frame's baseline grid:

@@ -353,9 +353,10 @@ impl Writer<'_> {
             if let Some(c) = color {
                 attrs.push(("ColumnRuleStrokeColor", c));
             }
-            if p.column_rule_override != Some(true) {
-                attrs.push(("ColumnRuleOverride", "false".into()));
-            }
+            attrs.push((
+                "ColumnRuleOverride",
+                (p.column_rule_override == Some(true)).to_string(),
+            ));
         }
         if has("FootnotesEnableOverrides") && footnotes {
             let [spacing, between] = p.footnotes.unwrap_or([12.0, 6.0]);

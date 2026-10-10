@@ -81,6 +81,7 @@ nothing else in the transparency settings of the trustworthy pairs.
 | 0x1081C | `DropShadowSetting/YOffset` | f64 | 649 of 649; 256 of these items have X ≠ Y |
 | 0x10820 | `DropShadowSetting/Size` | f64 | 6 items, two values; 406 of 406 rectangles and text frames over the 654 pairs of the later corpus |
 | 0x1084A | `DropShadowSetting/Spread` | f64, percent | 28 of 28 items in 9 files |
+| 0x10837 | `DropShadowSetting/EffectColor` | swatch UID | 11 of 11 items in 6 files (below) |
 | 0x1084D | `InnerShadowSetting/Applied` | u16: 1 true, 0 false | 10 items with 1 |
 | 0x1084E | `InnerShadowSetting/EffectColor` | swatch UID | 10 items (below) |
 | 0x10852 | `InnerShadowSetting/Distance` | f64 | 10 items with 0 |
@@ -151,6 +152,22 @@ swatch that IDML writes as `EffectColor`. Items without the effect store
 UID 0xB, where the IDML default is `n` (no colour). The converter writes
 the colour only when the effect is applied.
 
+**Drop shadow colour.** Item attribute 0x10837 is the swatch of the
+drop shadow, IDML `EffectColor`. With the write rule above, the
+converter reproduces all 11 `EffectColor` values of the trustworthy
+pairs (8 polygons, 2 rectangles, 1 text frame; swatches such as
+`Color/Paper` and named colours), with no extra value. In 7 of these
+items the object style chain stores 0 for the attribute, which names no
+swatch, so every item colour differs from it. The one other item whose
+style stores 0 has the Black swatch, and its IDML has no
+`EffectColor`. One item cannot show whether IDML compares with Black or
+leaves the value out for another reason; the converter leaves out
+Black when the style stores 0.
+
+Not covered: items whose drop shadow is off (`Mode="None"`) for which
+IDML still writes a `DropShadowSetting` (the "D empty, IDML writes it"
+column above).
+
 ## Stroke and fill transparency
 
 Only the gradient feather has values that tell its attributes apart:
@@ -197,10 +214,7 @@ settings), 170 of 170.
 
 ## Not converted
 
-- Drop shadow `EffectColor` (probably 0x10837: all 11 items whose IDML
-  writes it store that ID, but most stored values are not written and
-  the style values were not resolved), `Noise`, `KnockedOut` and
-  `UseGlobalLight`.
+- Drop shadow `Noise`, `KnockedOut` and `UseGlobalLight`.
 - Stroke, fill and content blending (opacity and blend mode) and the
   other effects (feather, outer and inner glow, bevel and emboss, satin,
   directional feather): no item or style in the pairs has a value other

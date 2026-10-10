@@ -258,7 +258,6 @@ pub mod chunk {
     pub const FRAME_BASELINE_GRID: u32 = 0x2834;
     pub const FRAME_COLUMNS: u32 = 0x2D1;
     pub const FRAME_COLUMN_RULE: u32 = 0x22646;
-    pub const FRAME_COLUMN_RULE_OVERRIDE: u32 = 0x2265A;
     pub const FRAME_FOOTNOTES: u32 = 0x22608;
     pub const FRAME_IGNORE_WRAP: u32 = 0x3730;
     /// Frame grid of a multi-column frame: u16 1 at 0 for a frame grid.

@@ -424,7 +424,7 @@ pub struct TextFramePreferences {
     pub ignore_wrap: Option<bool>,
     /// Column rule (chunk 0x22646): f64 width at 28, u32 colour at 36.
     pub column_rule: Option<(f64, u32)>,
-    /// Chunk 0x2265A: all zero in every sample but one.
+    /// Column rule override: u32 at 0 of chunk 0x22646, 1 for true.
     pub column_rule_override: Option<bool>,
     /// Footnote options (chunk 0x22608): u16, u16 span across columns,
     /// f64 minimum spacing, f64 space between.
@@ -610,8 +610,9 @@ impl<'a> Reader<'a> {
                 flag(46),
             )
         });
-        let column_rule = match self.chunk(mcf, chunk::FRAME_COLUMN_RULE)? {
-            Some(d) => match (self.enc().f64_at(&d, 28), self.enc().u32_at(&d, 36)) {
+        let rule_chunk = self.chunk(mcf, chunk::FRAME_COLUMN_RULE)?;
+        let column_rule = match &rule_chunk {
+            Some(d) => match (self.enc().f64_at(d, 28), self.enc().u32_at(d, 36)) {
                 (Some(w), Some(c)) => Some((w, c)),
                 _ => None,
             },
@@ -657,9 +658,10 @@ impl<'a> Reader<'a> {
                 .and_then(|d| self.enc().u16_at(&d, 0))
                 .map(|v| v != 0),
             column_rule,
-            column_rule_override: self
-                .chunk(mcf, chunk::FRAME_COLUMN_RULE_OVERRIDE)?
-                .map(|d| d.iter().any(|&b| b != 0)),
+            column_rule_override: rule_chunk
+                .as_ref()
+                .and_then(|d| self.enc().u32_at(d, 0))
+                .map(|v| v == 1),
             footnotes,
             footnote_span: footnote_chunk.and_then(|d| self.enc().u16_at(&d, 2)) == Some(1),
             baseline_grid,

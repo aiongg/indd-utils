@@ -118,6 +118,13 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         Kind::Range(0.0, 100.0),
     ),
     (
+        DROP_SHADOW_COLOR,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "EffectColor",
+        Kind::Swatch,
+    ),
+    (
         0x1084D,
         "TransparencySetting",
         "InnerShadowSetting",
@@ -326,6 +333,13 @@ const STOPS: &[(u32, &str)] = &[
 /// effect is applied.
 const COLOR_APPLIED: &[(&str, u32)] = &[("InnerShadowSetting", 0x1084D)];
 
+/// The drop shadow's `EffectColor`. Where the object style stores no
+/// swatch (0), IDML writes the item's colour, except for the one item
+/// whose colour is Black; the converter leaves Black out there, as the
+/// samples do not show why (`docs/format/transparency.md`, drop shadow
+/// colour).
+const DROP_SHADOW_COLOR: u32 = 0x10837;
+
 /// An effect element: name, attributes and opacity stops.
 type Effect = (&'static str, Vec<(&'static str, String)>, Vec<Stop>);
 
@@ -401,12 +415,15 @@ pub(super) fn write(
                 }
                 match w.value_text(kind, v) {
                     Some(t) => {
-                        let same = style.is_some_and(|s| {
-                            s.transparency(id)
-                                .and_then(|sv| w.value_text(kind, sv))
-                                .is_some_and(|st| st == t)
-                        });
-                        if !same {
+                        let style_text = style
+                            .and_then(|s| s.transparency(id))
+                            .and_then(|sv| w.value_text(kind, sv));
+                        let same = style_text.as_ref().is_some_and(|st| *st == t);
+                        let unshown = id == DROP_SHADOW_COLOR
+                            && style.is_some()
+                            && style_text.is_none()
+                            && t == "Color/Black";
+                        if !same && !unshown {
                             values.push((name, t));
                         }
                     }
