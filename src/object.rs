@@ -272,7 +272,9 @@ impl<'a> Cursor<'a> {
     /// Like [`Cursor::segments`], but returns the UTF-16 code units, so a
     /// surrogate pair split between two runs can be joined by the caller.
     pub fn segment_units(&mut self, chars: usize) -> Result<Vec<u16>, Error> {
-        let mut units: Vec<u16> = Vec::with_capacity(chars);
+        // Each unit takes at least one byte, which bounds the capacity of
+        // a damaged count.
+        let mut units: Vec<u16> = Vec::with_capacity(chars.min(self.remaining()));
         while units.len() < chars {
             let header = self.u16()?;
             let n = (header & 0x3FFF) as usize;
