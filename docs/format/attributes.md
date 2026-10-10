@@ -352,6 +352,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1B2F | `MinimumWordSpacing` | fraction ×100 | 77/77 styles |
 | 0x1B31 | `MaximumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
 | 0x1B32 | `MinimumLetterSpacing` | fraction ×100 | 78/78 styles; see below |
+| 0x1B33 | `DesiredGlyphScaling` | fraction ×100 | 22/22 `ParagraphStyleRange` elements in 10 documents (96 to 99), 1,251 trustworthy pairs; 1.0 in the root style and text defaults of every pair, as IDML's 100. No other text list of the pairs has it |
 | 0x1B37 | `StartParagraph` | 0 Anywhere, 1 NextColumn, 2 NextPage, 3 NextFrame, 4 NextOddPage | 78/78 styles; codes below |
 | 0x1B3C | `Position` | 0 Normal, 1 Superscript, 2 Subscript, 3 OTSuperscript, 4 OTSubscript, 5 OTNumerator, 6 OTDenominator (runs/styles: 107/23, 4/7, 1/0, 3/0, 21/0 for 1, 2, 3, 4, 6) | 20/20 ranges, 78/78 styles |
 | 0x1B40 | `KeepLinesTogether` | 1 = true | 78/78 styles; see below |

@@ -476,6 +476,7 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (0x1B22, "HyphenateCapitalizedWords", Kind::Bool, false),
     (0x1B34, "MaximumGlyphScaling", Kind::Percent, false),
     (0x1B35, "MinimumGlyphScaling", Kind::Percent, false),
+    (0x1B33, "DesiredGlyphScaling", Kind::Percent, false),
     (0x1B20, "HyphenateAfterFirst", Kind::Number, false),
     (0x1B23, "HyphenateWordsLongerThan", Kind::Number, false),
     (0x1B39, "KeepWithNext", Kind::Number, false),
