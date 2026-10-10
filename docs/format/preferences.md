@@ -253,9 +253,25 @@ and gradients that IDML writes though nothing refers to them
 items. Written with the page item attribute table, it gives
 `PageItemDefault` `StrokeWeight` in 628 of 628 files in which an
 analysis script found the list; over all pairs the converter reproduces
-`StrokeWeight`, `CornerRadius` and `MiterLimit` of every file, and the
-frame fitting attributes of the list are written to the preference
-`FrameFittingOption`.
+`StrokeWeight`, `CornerRadius` and `MiterLimit` of every file.
+
+The frame fitting attributes of the list (`objects.md`, frame fitting)
+are the preference `FrameFittingOption`. IDML writes all seven in every
+file; the list often lacks some (`AutoFit` in 1,126 of the 1,251
+trustworthy pairs, the crops in 1,125, `FittingAlignment` in 93), and an
+attribute the list lacks has code or number 0 in IDML: `AutoFit="false"`
+(1,126 of 1,126), crops `0`, `FittingOnEmptyFrame="None"` (1,123 of
+1,123) and `FittingAlignment="TopLeftAnchor"` (93 of 93). Where the list
+has the attribute, IDML has its value. The converter reproduces each of
+the seven attributes in 1,251 of 1,251 trustworthy pairs (all 1,460
+pairs: `AutoFit` absent and `false` in 1,324, `FittingOnEmptyFrame`
+`None` in 1,321, `FittingAlignment` `TopLeftAnchor` in 107).
+
+The page item attributes of the list also give the stroke attributes of
+`PageItemDefault` (`attributes.md`, strokes): `StrokeTint`, `GapColor`,
+`GapTint`, `EndCap`, `EndJoin`, the line ends and `ArrowHeadAlignment`,
+each reproduced in every trustworthy pair whose IDML has it, except 4
+`RightLineEnd` values (a line end code not identified).
 
 ## Print settings (`PrintPreference`, `PrintBookletPrintPreference`)
 

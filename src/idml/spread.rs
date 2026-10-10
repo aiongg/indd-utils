@@ -802,32 +802,53 @@ impl Writer<'_> {
         x.end();
     }
 
-    /// `FrameFittingOption` of a rectangle, oval or polygon. IDML writes
-    /// the local values that differ from the object style's; with none,
-    /// all of the style's values unless the style is the root `[None]`.
+    /// `FrameFittingOption` of a rectangle, oval or polygon. When the
+    /// object style, the root `[None]` included, turns the fitting
+    /// category off, IDML writes all seven values: the item's where it
+    /// stores them, else the style's. Otherwise it writes the item's values
+    /// that differ from the style's; a style other than the root without a
+    /// category list (older files) gives all its values when none differ.
     /// See `docs/format/objects.md`.
     pub(super) fn frame_fitting(&self, x: &mut Xml, item: &PageItem) {
         let style = item
             .object_style
             .and_then(|u| self.doc.object_styles.get(&u));
-        let differ: Vec<u32> = FITTING_ATTRS
-            .iter()
-            .map(|(id, ..)| *id)
-            .filter(|&id| {
+        let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();
+        let off = style
+            .and_then(|s| s.enabled.as_ref())
+            .is_some_and(|on| !on.contains(&0x1B960));
+        let attrs = if let Some(s) = style.filter(|_| off) {
+            let mut merged = s.fitting.clone();
+            merged
+                .values
+                .retain(|(id, _)| item.attrs.get(*id).is_none());
+            merged.values.extend(
                 item.attrs
-                    .get(id)
-                    .is_some_and(|v| style.and_then(|s| s.fitting.get(id)) != Some(v))
-            })
-            .collect();
-        let attrs = if !differ.is_empty() {
-            fitting_attrs(self, &item.attrs, &differ)
+                    .values
+                    .iter()
+                    .filter(|(id, _)| all.contains(id))
+                    .cloned(),
+            );
+            fitting_attrs(self, &merged, &all)
         } else {
-            match style {
-                Some(s) if !(s.builtin && s.name == "[None]" && s.based_on.is_none()) => {
-                    let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();
-                    fitting_attrs(self, &s.fitting, &all)
+            let differ: Vec<u32> = all
+                .iter()
+                .copied()
+                .filter(|&id| {
+                    item.attrs
+                        .get(id)
+                        .is_some_and(|v| style.and_then(|s| s.fitting.get(id)) != Some(v))
+                })
+                .collect();
+            if !differ.is_empty() {
+                fitting_attrs(self, &item.attrs, &differ)
+            } else {
+                match style {
+                    Some(s) if s.enabled.is_none() && !Self::is_root_object_style(s) => {
+                        fitting_attrs(self, &s.fitting, &all)
+                    }
+                    _ => Vec::new(),
                 }
-                _ => Vec::new(),
             }
         };
         if !attrs.is_empty() {

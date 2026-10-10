@@ -22,16 +22,78 @@ pub struct Style {
     /// Keyboard shortcut: u32 key 10 bytes before the name's flag byte,
     /// then the two bytes 6 and 5 before it (`docs/format/objects.md`).
     pub shortcut: Option<(u32, u8, u8)>,
-    /// The u16 values after the tag map count of the export settings
-    /// (chunk 0x28F0): `SplitDocument`, `EmitCss` and, from InDesign 13,
-    /// `IncludeClass` (`docs/format/objects.md`, styles). Empty when the
-    /// chunk has tag maps, whose layout is not known; `None` without the
-    /// chunk.
-    pub export_flags: Option<Vec<u16>>,
+    /// Export settings (chunk 0x28F0); `None` without the chunk or when
+    /// it does not parse.
+    pub export: Option<StyleExport>,
     /// `PreviewColor`: the u32 14 bytes before the name's flag byte, 0
     /// for none or an interface colour (`docs/format/objects.md`, styles).
     /// `None` for another value or a shorter header.
     pub preview_color: Option<Option<[f64; 3]>>,
+}
+
+/// The export settings of a paragraph, character or object style (chunk
+/// 0x28F0): tag maps, then u16 flags (`SplitDocument`, `EmitCss`,
+/// `IncludeClass` and more in later versions for text styles; see
+/// `docs/format/objects.md`, styles).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct StyleExport {
+    pub maps: Vec<ExportTagMap>,
+    pub flags: Vec<u16>,
+}
+
+/// An export tag map (`StyleExportTagMap`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExportTagMap {
+    pub export_type: String,
+    pub tag: String,
+    pub class: String,
+    pub attributes: Vec<(String, String)>,
+}
+
+impl StyleExport {
+    /// u32 map count; per map three strings (type, tag, class), a u32
+    /// attribute count and that many pairs of strings; then u16 values to
+    /// the end. Each string is a u32 length in UTF-16 units and text
+    /// segments.
+    pub fn read(enc: Encoding, d: &[u8]) -> Result<StyleExport, Error> {
+        let mut c = enc.cursor(d);
+        let string = |c: &mut Cursor| -> Result<String, Error> {
+            match c.u32()? as usize {
+                0 => Ok(String::new()),
+                n if n <= c.remaining() => c.segments(n),
+                n => Err(Error::Corrupt(format!("export tag map string of {n}"))),
+            }
+        };
+        let n = c.u32()? as usize;
+        if n > c.remaining() / 16 {
+            return Err(Error::Corrupt(format!("{n} export tag maps")));
+        }
+        let mut maps = Vec::with_capacity(n);
+        for _ in 0..n {
+            let export_type = string(&mut c)?;
+            let tag = string(&mut c)?;
+            let class = string(&mut c)?;
+            let k = c.u32()? as usize;
+            if k > c.remaining() / 8 {
+                return Err(Error::Corrupt(format!("{k} export tag attributes")));
+            }
+            let mut attributes = Vec::with_capacity(k);
+            for _ in 0..k {
+                attributes.push((string(&mut c)?, string(&mut c)?));
+            }
+            maps.push(ExportTagMap {
+                export_type,
+                tag,
+                class,
+                attributes,
+            });
+        }
+        let mut flags = Vec::new();
+        while c.remaining() >= 2 {
+            flags.push(c.u16()?);
+        }
+        Ok(StyleExport { maps, flags })
+    }
 }
 
 /// A table of contents style (class 0x11605), from chunk 0x11605: a flag
@@ -96,6 +158,19 @@ pub struct ObjectStyle {
     pub anchor: Option<AnchorSettings>,
     /// Chunk 0xCD32: the applied named grid (`Reader::applied_named_grid`).
     pub named_grid: Option<Option<u32>>,
+    /// Export settings (chunk 0x28F0).
+    pub export: Option<StyleExport>,
+}
+
+/// Whether `s` has the form of a GUID as styles store it: lowercase
+/// hexadecimal digits in groups of 8, 4, 4, 4 and 12, joined by hyphens.
+fn is_guid(s: &str) -> bool {
+    let groups: Vec<&str> = s.split('-').collect();
+    groups.iter().map(|g| g.len()).eq([8, 4, 4, 4, 12])
+        && groups.iter().all(|g| {
+            g.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
 }
 
 /// Style groups nested deeper than this are left out, with a warning.
@@ -170,15 +245,19 @@ impl<'a> Reader<'a> {
         } else {
             None
         };
-        // A 36-character in-object string after the name: a GUID. The
-        // byte after the tag can have any value (objects.md, styles).
+        // A GUID in a 36-character in-object string after the name's
+        // string. The byte after the tag can have any value (objects.md,
+        // styles).
         let unique_id = if self.enc().big_endian() {
             None
         } else {
-            data[at..]
+            let mut c = self.cursor(&data[at..]);
+            let end = at + c.name().map_or(0, |_| c.pos());
+            data[end..]
                 .windows(6)
                 .position(|w| w[0] == 2 && w[2..] == [36, 0, 36, 0x40])
-                .and_then(|i| self.cursor(&data[at + i..]).string().ok())
+                .and_then(|i| self.cursor(&data[end + i..]).string().ok())
+                .filter(|g| is_guid(g))
         };
         let preview_color = match (at >= 14)
             .then(|| self.enc().u32_at(&data, at - 14))
@@ -200,17 +279,7 @@ impl<'a> Reader<'a> {
             }
             _ => Attrs::default(),
         };
-        // Export settings: u32 count of tag maps, the maps, then u16 flags.
-        let export_flags = self.chunk(uid, chunk::STYLE_EXPORT)?.map(|d| {
-            if self.enc().u32_at(&d, 0) == Some(0) {
-                (4..d.len().saturating_sub(1))
-                    .step_by(2)
-                    .filter_map(|o| self.enc().u16_at(&d, o))
-                    .collect()
-            } else {
-                Vec::new()
-            }
-        });
+        let export = self.style_export(uid)?;
         Ok(Some(Style {
             uid,
             name,
@@ -222,7 +291,7 @@ impl<'a> Reader<'a> {
             imported,
             unique_id,
             shortcut,
-            export_flags,
+            export,
             preview_color,
         }))
     }
@@ -319,6 +388,20 @@ impl<'a> Reader<'a> {
 
     /// An object style. `None` if it has no info chunk (based-on style,
     /// flag byte and name).
+    /// The export settings of a style (chunk 0x28F0), with a warning when
+    /// they do not parse.
+    fn style_export(&self, uid: u32) -> Result<Option<StyleExport>, Error> {
+        Ok(self.chunk(uid, chunk::STYLE_EXPORT)?.and_then(|d| {
+            match StyleExport::read(self.enc(), &d) {
+                Ok(e) => Some(e),
+                Err(e) => {
+                    self.warn(format!("style {uid}: export settings: {e}; left out"));
+                    None
+                }
+            }
+        }))
+    }
+
     pub(super) fn object_style(&self, uid: u32) -> Result<Option<ObjectStyle>, Error> {
         let Some(d) = self.chunk(uid, chunk::OBJECT_STYLE_INFO)? else {
             return Ok(None);
@@ -411,6 +494,7 @@ impl<'a> Reader<'a> {
                 .chunk(uid, chunk::ANCHOR_SETTINGS)?
                 .map(|d| AnchorSettings::read(self.enc(), &d)),
             named_grid: self.applied_named_grid(uid)?,
+            export: self.style_export(uid)?,
         }))
     }
 }
@@ -528,5 +612,51 @@ impl StorySettings {
             optical_alignment: enc.u16_at(d, 12)?,
             frame_type: enc.u16_at(d, 14)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A u32 length and one segment of single-byte characters.
+    fn export_string(enc: Encoding, s: &str) -> Vec<u8> {
+        let mut d = enc.u32_bytes(s.len() as u32).to_vec();
+        if !s.is_empty() {
+            d.extend(enc.u16_bytes(0x4000 | s.len() as u16));
+            d.extend(s.bytes());
+        }
+        d
+    }
+
+    #[test]
+    fn reads_export_tag_maps_and_flags() {
+        let enc = Encoding::default();
+        let mut d = enc.u32_bytes(2).to_vec();
+        for (ty, tag, class) in [("EPUB", "p", ""), ("PDF", "H3", "x")] {
+            for s in [ty, tag, class] {
+                d.extend(export_string(enc, s));
+            }
+            d.extend(enc.u32_bytes(0));
+        }
+        for f in [1u16, 0, 1, 0] {
+            d.extend(enc.u16_bytes(f));
+        }
+        let e = StyleExport::read(enc, &d).unwrap();
+        assert_eq!(e.maps.len(), 2);
+        assert_eq!(
+            (e.maps[1].export_type.as_str(), e.maps[1].tag.as_str()),
+            ("PDF", "H3")
+        );
+        assert_eq!(e.maps[0].class, "");
+        assert_eq!(e.flags, [1, 0, 1, 0]);
+        assert!(StyleExport::read(enc, &enc.u32_bytes(1000)).is_err());
+    }
+
+    #[test]
+    fn accepts_only_guids_as_unique_ids() {
+        assert!(is_guid("0a1b2c3d-0000-4fff-8abc-0123456789ab"));
+        assert!(!is_guid("myHorizontalScaleForEmDashSpaceAfter"));
+        assert!(!is_guid("0A1B2C3D-0000-4FFF-8ABC-0123456789AB"));
     }
 }

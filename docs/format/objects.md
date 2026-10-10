@@ -1022,13 +1022,13 @@ The frame fitting settings are attributes in the page item attribute list
 
 | ID | IDML `FrameFittingOption` attribute | Encoding |
 |---|---|---|
-| 0x6E83 | `AutoFit` | u32, 0 in every sample (`false`) |
+| 0x6E83 | `AutoFit` | u32: 0 `false`, 1 `true` |
 | 0x6E7E | `LeftCrop` | f64 |
 | 0x6E7F | `TopCrop` | f64 |
 | 0x6E80 | `RightCrop` | f64 |
 | 0x6E81 | `BottomCrop` | f64 |
 | 0x6E7C | `FittingOnEmptyFrame` | u32: 0 `None`, 1 `ContentToFrame`, 2 `Proportionally`, 3 `FillProportionally` |
-| 0x6E7D | `FittingAlignment` | u32: 0 `TopLeftAnchor`, 4 `CenterAnchor` |
+| 0x6E7D | `FittingAlignment` | u32: 0 `TopLeftAnchor`, 1 `TopCenterAnchor`, 3 `LeftCenterAnchor`, 4 `CenterAnchor` |
 
 Evidence, from the same-version pairs:
 
@@ -1049,16 +1049,45 @@ Evidence, from the same-version pairs:
 - **AutoFit.** 0 and `false` wherever IDML writes it (200 of 200); other
   values are left out.
 
+Codes 1 and 3 of `FittingAlignment` and code 1 of `AutoFit` come from
+the corpus after 2026-10, over all pairs (item and object style lists
+against their IDML): `AutoFit` 1 `true` in 927 items and styles, 0
+`false` in 2,548; `FittingAlignment` 1 `TopCenterAnchor` in 21 object
+styles of one 14.0 document, 3 `LeftCenterAnchor` in 1 item. Codes 2
+and 5 to 8 do not occur; the converter leaves them out.
+
 **Where IDML writes it.** Only on rectangles, ovals and polygons, never
 on text frames (1,154) or lines (136), even when their list has these
-attributes. Let D be the item's local attributes whose value differs
-from its object style's. IDML writes D if it is not empty; otherwise all
-seven of the style's values, unless the style is the root `[None]`, in
-which case it writes no element. This gives the IDML element exactly
-for 1,849 of 1,864 frames (2,582 of 2,599 with the pairs whose IDML is
-from an older version); in the other 15, IDML writes all seven values
-although D is not empty. The converter follows the rule, and writes the
-seven values of every object style.
+attributes. The rule depends on the applied object style's category
+list (chunk 0x1B92E, object style settings):
+
+1. **Fitting category off.** When the list lacks 0x1B960
+   (`EnableFrameFittingOptions`), IDML writes all seven attributes:
+   the item's value where its list has the ID, the style's otherwise.
+   This holds for the root `[None]` too, although its IDML element has
+   no `Enable…` attributes. In the trustworthy pairs of the corpus after
+   2026-10, the root style's list lacks 0x1B960 in 22 documents, and all
+   9,560 items there that use the root style have all seven attributes;
+   in the other 883 documents with such items, no item that uses the
+   root style has all seven.
+2. **Otherwise**, let D be the item's local attributes whose value
+   differs from its object style's. IDML writes D; with D empty it
+   writes no element. An object style without a category list (older
+   files) gives all seven of its values when D is empty, unless it is
+   the root `[None]`.
+
+Over the trustworthy pairs, the converter reproduces 33,274 of 33,702
+`Rectangle/FrameFittingOption` elements, 13,131 of 13,648 for polygons
+and 6,929 of 7,207 for ovals, with every attribute of the written
+elements except 131 `FittingAlignment` values and 7 values of each of
+three crops. Of the elements not reproduced, 585 belong to items the
+converter does not write with that tag, and 632 are on items that use
+the root `[None]` (style value 0) and do not store 0x6E7D, where IDML
+writes only `FittingAlignment="CenterAnchor"` (609 of them in one 20.3
+document); 6 rectangles remain. The 131 differing values are of the same kind,
+on items of other styles. No stored value tells these items apart from
+the items where IDML writes the style's value; the converter writes the
+style's value.
 
 ## Clipping path settings
 
@@ -1730,15 +1759,24 @@ All 486 style names and 291 `NextStyle` values in the pairs match.
 **Imported and unique ID.** Over the 4,694 paragraph and character
 styles of the trustworthy pairs whose IDML style has the same name, the
 u16 after the kind equals `Imported` in 4,694 (180 imported). The GUID
-is a 36-character in-object string after the name; where it is stored,
-IDML has it as `StyleUniqueId` in 2,769 of 2,793 styles (DOM 11 on; the
-other 24 have another GUID in IDML). Styles without a stored GUID
-(1,108 from DOM 11 on) have a `StyleUniqueId` in IDML that the INDD does
-not hold, which the converter leaves out. The byte after the GUID's
-string tag is not always 0. In the trustworthy pairs of the corpus of
-2026-10, accepting any second byte gives 724 more styles (479
-paragraph, 245 character) the IDML `StyleUniqueId`; 4 more have another
-GUID in IDML, as above.
+is a 36-character in-object string after the name's string; the byte
+after its string tag is not always 0. Every `StyleUniqueId` in the
+corpus IDML files is a GUID of lowercase hexadecimal digits in groups of
+8, 4, 4, 4 and 12 (7,953) or `$ID/` (4,299), so the converter accepts
+only that form, searching from the end of the name. A search from the
+name's own flag byte took a style name of 36 characters for the GUID.
+
+IDML has `StyleUniqueId` on every paragraph and character style, the
+root styles included, when the document was saved by 11.2 or later
+(header or last session of the save history): the stored GUID, or
+`$ID/` for a style without one. Earlier documents have none. Over the
+trustworthy pairs the converter reproduces 6,313 of 6,316 paragraph and
+3,734 of 3,735 character style values. The exceptions are pairs whose
+IDML was exported by another minor version than the INDD records: four
+11.4 documents whose IDML has DOM 11.0 and no `StyleUniqueId` (34
+values written though the IDML has none), and one 11.0 document whose
+IDML (DOM 11.4) has `$ID/` (3 values missing); one paragraph style has
+another GUID in IDML.
 
 **Kind field.** The kind and the `Imported` u16 after it can be read
 as one u32 in most files, because the second u16 is 0. The InDesign 7.5
@@ -1792,18 +1830,41 @@ styles of one document (two pairs) have a colour: UID 0x20, RGB 0.5 0.5
 styles have no `PreviewColor` in IDML. The converter leaves the property
 to the observed values when the u32 is neither 0 nor an interface colour.
 
-**Export flags (chunk 0x28F0).** u32 count of export tag maps, the
-maps, then u16 values: `SplitDocument`, `EmitCss` and, from DOM 13,
-`IncludeClass` (1 `true`, 0 `false`); later versions add more u16
-values. The tag maps (`StyleExportTagMap`) are not decoded, so the
-flags are read only when the count is 0. IDML has `SplitDocument` and
-`EmitCss` from DOM 10 and `IncludeClass` from DOM 13 on paragraph and
-character styles. Without the chunk the values are `false`, `true`,
-`true`. Evidence (trustworthy pairs, styles other than the root
-styles): every converted value equals the IDML (paragraph styles
-`SplitDocument` 3,751, `IncludeClass` 3,098, `EmitCss` 3,865; character
-styles 1,962, 1,717, 1,962). The styles with tag maps keep the observed
-values or none.
+**Export settings (chunk 0x28F0).** A u32 count of export tag maps,
+the maps, then u16 values to the end of the chunk:
+
+| Field | Contents |
+|---|---|
+| u32 | number of tag maps *n* |
+| *n* maps | export type, tag, class (three strings), u32 attribute count *k*, *k* pairs of strings |
+| u16 | `SplitDocument` (1 `true`, 0 `false`) |
+| u16 | `EmitCss` |
+| u16 | `IncludeClass` (DOM 13 on) |
+| u16 … | more values in later versions, not identified |
+
+A string is a u32 length in UTF-16 units followed by text segments (as
+the font version, `fonts.md`); an empty string is a length of 0. Export
+types are `EPUB` and `PDF`; tags such as `p` or `H3` and classes may be
+empty. No map in the corpus has attributes, so the layout of the pairs
+is assumed and the converter writes no map that has them. The chunks
+of every paragraph, character and object style of all pairs parse.
+
+IDML has `SplitDocument` and `EmitCss` when the document was saved by
+10.1 or later, and `IncludeClass` from 13.0 (header or last session of
+the save history), on every paragraph and character style, the root
+styles included. Without the chunk the values are `false`, `true`,
+`true`. The trustworthy pairs include four whose INDD header says 10.0
+and whose IDML (DOM 10.2) has the attributes, and six of 10.0 whose
+IDML (DOM 10.0) has none. Over the trustworthy pairs the converter
+reproduces `SplitDocument` and `EmitCss` of 7,287 of 7,287 paragraph
+styles and 4,067 of 4,067 character styles, and `IncludeClass` of 5,760
+and 3,500, with no extra value.
+
+**Tag maps.** IDML writes one `StyleExportTagMap` per map after the
+style's `Properties`, in stored order:
+`Self="u<style UID in hex>StyleExportTagMapn<type>"`, `ExportType`, `ExportTag`, `ExportClass`, `ExportAttributes=""`,
+and the style's `SplitDocument` and `EmitCss`. 306 of 306 elements in
+the trustworthy pairs, every attribute equal.
 
 **Empty nested, line and GREP styles.** Paragraph styles have
 `EmptyNestedStyles`, `EmptyLineStyles` and `EmptyGrepStyles` (DOM 8.1,
@@ -1904,6 +1965,35 @@ is `None` and 0x5A16 `InverseRoundedCorner` (1 style). The two gradient
 angles are told apart by one style with −90 and 0. Each corner radius
 and corner option has its own ID, as in page items (`attributes.md`,
 corners), and the converter writes each corner from its ID.
+
+**Overprint.** The attribute list holds the overprint flags of the
+fill (0x6E6A), the stroke (0x6E67) and the gap (0x6E8B), u16 1 `true`,
+0 `false`. IDML writes `OverprintFill` only when the fill colour (0x6E68)
+puts ink on the page: it is not the swatch `None` or `Paper`, its tint
+(0x6E69) is not 0, and it is not a white process colour (CMYK 0 0 0 0,
+or RGB 255 255 255). The same holds for `OverprintStroke` with 0x6E64
+and 0x6E66, and `OverprintGap` with 0x6E89 and 0x6E8A. The root `[None]`
+has none of the three. Documents saved by 21.4 or later (12 trustworthy
+pairs of 21.4 and 21.5) have all three on every object style, the root
+included, whatever the colours. Over the trustworthy pairs the converter
+reproduces 235 of 235 `OverprintFill`, 1,512 of 1,512 `OverprintStroke`
+and 49 of 49 `OverprintGap` values with no extra value. The white RGB
+case rests on 2 styles of two pairs of one 13.1 document (89 other RGB
+fills and strokes are written). Every object style flag in the corpus
+is 0; page item lists use the same IDs, where a stored 1 is `true` in
+IDML (3,387 `OverprintFill` and 64 `OverprintStroke` values of the
+trustworthy pairs). When IDML writes the flags on page items is not
+established, and the converter does not write them there.
+
+**Export settings (chunk 0x28F0).** Object styles have the chunk of
+paragraph and character styles (styles, export settings). IDML writes
+`EmitCss` (the second u16) for documents saved by 10.1 and
+`IncludeClass` (the third) for documents saved by 13.0, the root
+`[None]` included; there is no `SplitDocument`. Without the chunk both
+are `true`. Trustworthy pairs: `EmitCss` 5,031 of 5,031,
+`IncludeClass` 4,019 of 4,019 (every value is `true`). One 12.1
+document has an object style tag map (`ObjectStyleExportTagMap`); it is
+not written.
 
 **Optical margin (chunk 0x285B).** The f64 at 2 is `OpticalMarginSize`
 and the u16 at 12 `OpticalMarginAlignment` (1 = true), as in the story

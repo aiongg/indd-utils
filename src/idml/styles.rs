@@ -365,6 +365,28 @@ impl Writer<'_> {
         x.finish()
     }
 
+    /// Whether swatch `uid` puts ink on the page: a swatch other than
+    /// `None` and `Paper`, and not a white process colour (CMYK 0 0 0 0 or
+    /// RGB 255 255 255; objects.md, object style overprint).
+    fn carries_ink(&self, uid: u32) -> bool {
+        let Some(r) = self.doc.swatches.get(&uid) else {
+            return false;
+        };
+        if r == "Swatch/None" || r == "Color/Paper" {
+            return false;
+        }
+        use crate::model::color::Space;
+        !self.doc.colors.iter().any(|c| {
+            c.uid == uid
+                && c.model == 0
+                && match c.space {
+                    Space::Cmyk => c.values.iter().all(|&v| v == 0.0),
+                    Space::Rgb => c.values.iter().all(|&v| v == 1.0),
+                    _ => false,
+                }
+        })
+    }
+
     /// An object style as a values node: the values every exported IDML
     /// has on such a style (`idml-values.md`), with the values read from
     /// the INDD in their place. See `docs/format/objects.md`.
@@ -407,6 +429,31 @@ impl Writer<'_> {
         }
         if let Some(g) = self.named_grid_ref(os.named_grid) {
             attrs.push(("AppliedNamedGrid", g));
+        }
+        // Overprint of the fill, stroke and gap: where the colour carries
+        // ink, and from 21.4 always (objects.md, object style overprint).
+        for (name, color, tint, overprint) in [
+            ("OverprintFill", 0x6E68, 0x6E69, 0x6E6A),
+            ("OverprintStroke", 0x6E64, 0x6E66, 0x6E67),
+            ("OverprintGap", 0x6E89, 0x6E8A, 0x6E8B),
+        ] {
+            let Some(v) = os.attrs.get(overprint).and_then(Value::as_u32) else {
+                continue;
+            };
+            let ink = || {
+                let tint = os.attrs.get(tint).and_then(Value::as_f64);
+                os.attrs
+                    .get(color)
+                    .and_then(Value::as_u32)
+                    .is_some_and(|c| self.carries_ink(c))
+                    && tint != Some(0.0)
+            };
+            if v <= 1 && (self.saved_by((21, 4)) || (!root && ink())) {
+                attrs.push((name, (v == 1).to_string()));
+            }
+        }
+        for (name, value) in export_flags(os.export.as_ref(), |v| self.saved_by(v), false) {
+            attrs.push((name, value.into()));
         }
         match os.paragraph_style {
             Some(0) => attrs.push(("AppliedParagraphStyle", "n".into())),
@@ -817,10 +864,12 @@ impl Writer<'_> {
             x.attr(k, v);
         }
         x.attr("Imported", s.imported.to_string());
-        if let Some(id) = &s.unique_id {
-            x.attr("StyleUniqueId", id);
-        }
         let v = doc.version;
+        // From 11.2 every style has a unique ID: the stored GUID, else
+        // `$ID/` (objects.md, styles).
+        if self.saved_by((11, 2)) {
+            x.attr("StyleUniqueId", s.unique_id.as_deref().unwrap_or("$ID/"));
+        }
         if paragraph && (v.major >= 10 || (v.major == 8 && v.minor >= 1)) {
             for (id, name) in [
                 (0x1B75, "EmptyNestedStyles"),
@@ -829,6 +878,9 @@ impl Writer<'_> {
             ] {
                 x.attr(name, (!self.inherited_list(s, id)).to_string());
             }
+        }
+        for (name, value) in export_flags(s.export.as_ref(), |v| self.saved_by(v), true) {
+            x.attr(name, value);
         }
         // Root styles also get the values every exported IDML has on them;
         // values read from the INDD take precedence.
@@ -851,9 +903,6 @@ impl Writer<'_> {
                 && let Some(e) = extended
             {
                 x.attr("ExtendedKeyboardShortcut", e);
-            }
-            for (name, value) in export_flags(s, v.major) {
-                x.attr(name, value);
             }
             // Other styles get the values every IDML has on them.
             x.attrs_missing(n.attrs.iter());
@@ -898,33 +947,94 @@ impl Writer<'_> {
             }
         }
         Self::properties_with(x, &props, &extra);
+        self.export_tag_maps(x, s);
         x.end();
+    }
+
+    /// The export tag maps of a paragraph or character style, with the
+    /// style's split and CSS flags (`docs/format/objects.md`, styles). Maps
+    /// with attributes are left out: none occurs in the corpus.
+    fn export_tag_maps(&self, x: &mut Xml, s: &Style) {
+        let Some(e) = &s.export else { return };
+        let flags = export_flags(Some(e), |v| self.saved_by(v), true);
+        let flag = |name: &str| flags.iter().find(|(n, _)| *n == name).map(|(_, v)| *v);
+        for m in e.maps.iter().filter(|m| m.attributes.is_empty()) {
+            x.start("StyleExportTagMap")
+                .attr(
+                    "Self",
+                    format!("{}StyleExportTagMapn{}", uref(Some(s.uid)), m.export_type),
+                )
+                .attr("ExportType", &m.export_type)
+                .attr("ExportTag", &m.tag)
+                .attr("ExportClass", &m.class)
+                .attr("ExportAttributes", "");
+            for name in ["SplitDocument", "EmitCss"] {
+                if let Some(f) = flag(name) {
+                    x.attr(name, f);
+                }
+            }
+            x.end();
+        }
     }
 }
 
 /// `SplitDocument`, `EmitCss` and `IncludeClass` of a paragraph or
-/// character style: the first u16 values after the tag map count of
-/// chunk 0x28F0, or `false`, `true`, `true` without the chunk. IDML has
-/// the first two from DOM 10, the third from DOM 13
-/// (`docs/format/objects.md`, styles).
-fn export_flags(s: &Style, major: u32) -> Vec<(&'static str, &'static str)> {
-    let need = match major {
-        0..=9 => return Vec::new(),
-        10..=12 => 2,
-        _ => 3,
+/// character style (`text`) or an object style: the first three u16
+/// flags of chunk 0x28F0, or `false`, `true`, `true` without the chunk.
+/// IDML has `SplitDocument` (text styles only) and `EmitCss` when 10.1
+/// saved the document, `IncludeClass` when 13.0 did (`saved_by`;
+/// `docs/format/objects.md`, styles).
+pub(super) fn export_flags(
+    export: Option<&crate::model::StyleExport>,
+    saved_by: impl Fn((u32, u32)) -> bool,
+    text: bool,
+) -> Vec<(&'static str, &'static str)> {
+    let flags = match export {
+        Some(e) => e.flags.as_slice(),
+        None => &[0, 1, 1],
     };
-    let values: Vec<u16> = match &s.export_flags {
-        Some(f) if f.len() >= need => f[..need].to_vec(),
-        Some(_) => return Vec::new(),
-        None => [0, 1, 1][..need].to_vec(),
-    };
+    let since = [(10, 1), (10, 1), (13, 0)];
     ["SplitDocument", "EmitCss", "IncludeClass"]
         .into_iter()
-        .zip(values)
-        .filter_map(|(name, v)| match v {
+        .zip(since)
+        .zip(flags)
+        .filter(|((name, since), _)| saved_by(*since) && (text || *name != "SplitDocument"))
+        .filter_map(|((name, _), v)| match v {
             0 => Some((name, "false")),
             1 => Some((name, "true")),
             _ => None,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::export_flags;
+    use crate::model::StyleExport;
+
+    #[test]
+    fn export_flags_follow_the_saving_version() {
+        let e = StyleExport {
+            maps: Vec::new(),
+            flags: vec![1, 0, 0, 7],
+        };
+        let saved = |v: (u32, u32)| move |since: (u32, u32)| v >= since;
+        assert!(export_flags(Some(&e), saved((10, 0)), true).is_empty());
+        assert_eq!(
+            export_flags(Some(&e), saved((12, 0)), true),
+            [("SplitDocument", "true"), ("EmitCss", "false")]
+        );
+        assert_eq!(
+            export_flags(Some(&e), saved((13, 0)), false),
+            [("EmitCss", "false"), ("IncludeClass", "false")]
+        );
+        assert_eq!(
+            export_flags(None, saved((13, 0)), true),
+            [
+                ("SplitDocument", "false"),
+                ("EmitCss", "true"),
+                ("IncludeClass", "true")
+            ]
+        );
+    }
 }

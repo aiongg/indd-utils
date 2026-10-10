@@ -715,13 +715,22 @@ impl Writer<'_> {
                 .attrs
                 .extend(values.into_iter().map(|(k, v)| (k.to_string(), v)));
             let all: Vec<u32> = FITTING_ATTRS.iter().map(|(id, ..)| *id).collect();
-            let fitting = fitting_attrs(self, a, &all);
-            if !fitting.is_empty() {
-                let i = ours_of(&mut ours, "FrameFittingOption");
-                ours[i]
-                    .attrs
-                    .extend(fitting.into_iter().map(|(k, v)| (k.to_string(), v)));
+            let mut fitting = fitting_attrs(self, a, &all);
+            // Every IDML has all seven; a value the list lacks is code or
+            // number 0 (preferences.md, page item defaults).
+            for (&(id, name, _), zero) in
+                FITTING_ATTRS
+                    .iter()
+                    .zip(["false", "0", "0", "0", "0", "None", "TopLeftAnchor"])
+            {
+                if a.get(id).is_none() {
+                    fitting.push((name, zero.to_string()));
+                }
             }
+            let i = ours_of(&mut ours, "FrameFittingOption");
+            ours[i]
+                .attrs
+                .extend(fitting.into_iter().map(|(k, v)| (k.to_string(), v)));
         }
         for (tag, name, data) in &prefs.print_records {
             let mut text = base64_lines(data);

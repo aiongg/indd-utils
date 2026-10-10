@@ -14,7 +14,7 @@ use crate::model::attrs::{Delimiter, NestedStyle, TabStop};
 /// Frame fitting attributes of page items and object styles, in the
 /// order IDML writes them (`docs/format/objects.md`).
 pub(super) const FITTING_ATTRS: [(u32, &str, Kind); 7] = [
-    (0x6E83, "AutoFit", Kind::Enum(&[(0, "false")])),
+    (0x6E83, "AutoFit", Kind::Enum(&[(0, "false"), (1, "true")])),
     (0x6E7E, "LeftCrop", Kind::Number),
     (0x6E7F, "TopCrop", Kind::Number),
     (0x6E80, "RightCrop", Kind::Number),
@@ -32,7 +32,12 @@ pub(super) const FITTING_ATTRS: [(u32, &str, Kind); 7] = [
     (
         0x6E7D,
         "FittingAlignment",
-        Kind::Enum(&[(0, "TopLeftAnchor"), (4, "CenterAnchor")]),
+        Kind::Enum(&[
+            (0, "TopLeftAnchor"),
+            (1, "TopCenterAnchor"),
+            (3, "LeftCenterAnchor"),
+            (4, "CenterAnchor"),
+        ]),
     ),
 ];
 

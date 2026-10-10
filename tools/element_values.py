@@ -131,10 +131,8 @@ WHEN_WRITTEN = {
         "VerticalThreshold", "UseFlexibleColumnWidth",
         "MinimumFirstBaselineOffset",
     ],
-    "ParagraphStyle": ["EmitCss"],
     "Story": ["UserText"],
     "XmlStory": ["UserText"],
-    "CharacterStyle": ["EmitCss", "SplitDocument"],
 }
 # Elements the converter writes only for one value of an attribute that
 # it reads from the INDD: path -> (attribute, value). Elements on the

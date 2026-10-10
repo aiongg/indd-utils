@@ -387,10 +387,6 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<TextFramePreference UseFlexibleColumnWidth="false" />
 		</TextFrame>
 	</WhenWritten>
-	<WhenWritten MinimumVersion="10">
-		<ParagraphStyle EmitCss="true" />
-		<CharacterStyle SplitDocument="false" EmitCss="true" />
-	</WhenWritten>
 	<WhenWritten MinimumVersion="11">
 		<Story UserText="true" />
 		<XmlStory UserText="true" />

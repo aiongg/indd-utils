@@ -83,8 +83,9 @@ InDesign version or later (`MinimumVersion` in the file).
 The converter reads many of these from the INDD: the object style
 settings (`objects.md`, object style settings and named grids), the
 baseline frame grid colour (`preferences.md`), the attributes of the
-root table style (`tables.md`) and the paragraph border and shading
-values (`attributes.md`).
+root table style (`tables.md`), the paragraph border and shading
+values (`attributes.md`), and the style unique IDs and export settings
+(`objects.md`, styles).
 
 Two kinds of IDML files are not evidence for the root styles, and the
 pair rule leaves them out: an IDML (DOM 7) beside an INDD of version
@@ -369,8 +370,6 @@ character styles in the IDML files):
 | `PreviewColor` `Nothing` | paragraph | 7 on |
 | `EpubAriaRole=""` | paragraph and character | 21 on |
 | `IncludeClass="true"` | character | 13 on |
-| `EmitCss="true"` where written | paragraph and character | 10 on |
-| `SplitDocument="false"` where written | character | 10 on |
 
 Character styles' `PreviewColor` and `ExtendedKeyboardShortcut` are left
 out: a few styles have other values.
@@ -379,9 +378,8 @@ TOC styles (1,556 in the IDML files) all have `RunIn="false"` and
 `IncludeHidden="false"`. `SetStoryDirection` varies and is read from
 the INDD (`objects.md`, table of contents styles).
 
-The paragraph styles' `SplitDocument` and `IncludeClass` are left out:
-a few styles have other values, whose INDD field was not found. Keyboard
-shortcuts are read from the INDD (`objects.md`, styles).
+`SplitDocument`, `EmitCss` and `IncludeClass` are read from the INDD
+(`objects.md`, styles, export settings), as are keyboard shortcuts.
 
 Table and cell styles other than the root styles (1,587 and 138 in the
 IDML files) all have `KeyboardShortcut="0 0"` (cell styles from DOM 8,
