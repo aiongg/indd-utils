@@ -14,8 +14,9 @@ the document structure, pages, page items, placed graphics, story text
 with its formatting, footnotes, endnotes, notes and tracked changes,
 styles, swatches, tables, hyperlinks and cross-references, fonts and XML
 structure. Its output validates against the IDML RelaxNG schemas, except
-for endnote markup, which it writes as InDesign does and which the
-published schema rejects ([`docs/measurement.md`](docs/measurement.md)).
+for endnote markup and form fields anchored in text, which it writes as
+InDesign does and which the published schema rejects
+([`docs/measurement.md`](docs/measurement.md)).
 Some attributes are still missing (see
 [Current numbers](#current-numbers)), so the output is not yet the same
 as InDesign's own IDML export.

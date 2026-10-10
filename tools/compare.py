@@ -262,11 +262,18 @@ NESTED = {"Footnote", "Cell", "Note"}
 ERROR = re.compile(r"(?P<part>[^:]+):(?P<line>\d+):(?P<col>\d+): error: (?P<msg>.*)")
 
 
+# Form fields that InDesign writes inside a character range when they are
+# anchored in text, where the schema does not allow them.
+ANCHORED_FORM_FIELDS = ("CheckBox", "RadioButton", "TextBox", "ComboBox", "ListBox",
+                        "SignatureField")
+
+
 def endnote_errors(idml, errs):
     """The schema errors of `idml` as (part, message) without positions,
-    if every one is a deviation of InDesign's endnote markup from the 21.5
-    schema: an `Endnote` in a character range, or an element inside an
-    `EndnoteRange`. None otherwise (docs/measurement.md)."""
+    if every one is a deviation of InDesign's own markup from the 21.5
+    schema: an `Endnote` in a character range, an element inside an
+    `EndnoteRange`, or a form field anchored in a character range. None
+    otherwise (docs/measurement.md)."""
     out = set()
     z = zipfile.ZipFile(idml)
     for e in errs:
@@ -274,7 +281,10 @@ def endnote_errors(idml, errs):
         if not m:
             return None
         part, line, msg = m["part"], int(m["line"]), m["msg"]
+        form = any(msg.startswith(f'element "{t}" not allowed here')
+                   for t in ANCHORED_FORM_FIELDS)
         if not msg.startswith('element "Endnote" not allowed here') and \
+                not (form and endnote_parent(z.read(part), line) == "CharacterStyleRange") and \
                 endnote_parent(z.read(part), line) != "EndnoteRange":
             return None
         out.add((part, msg))
@@ -922,8 +932,8 @@ def main():
         print(f"schema validation failures: {len(invalid)}")
         for name, errs in invalid[:10]:
             print(f"  {name}: {len(errs)} errors, {errs[:3]}")
-        print(f"schema errors accepted (endnote markup, as in the reference): "
-              f"{len(endnote_passed)} files")
+        print(f"schema errors accepted (endnote and anchored form field markup, as in "
+              f"the reference): {len(endnote_passed)} files")
     if args.all:
         print(f"files without a reference: {len(others)}, rejected: {len(other_rejected)}"
               + (f" ({rejection_kinds(other_rejected)})" if other_rejected else "")
@@ -936,6 +946,10 @@ def main():
                 'element "Endnote"' in e or "EndnoteRange" in e for e in errs)]
             if with_endnotes:
                 print(f"  with endnote markup errors: {len(with_endnotes)}: {with_endnotes[:10]}")
+            with_forms = [n for n, errs in other_invalid if any(
+                f'element "{t}" not allowed here' in e for e in errs for t in ANCHORED_FORM_FIELDS)]
+            if with_forms:
+                print(f"  with anchored form field errors: {len(with_forms)}: {with_forms[:10]}")
             for name, errs in other_invalid[:10]:
                 print(f"  {name}: {len(errs)} errors, {errs[:3]}")
     print(f"warnings: {sum(warnings.values())} (count, files, kind)")

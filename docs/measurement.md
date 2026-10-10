@@ -299,14 +299,23 @@ InDesign's own endnote markup: an `Endnote` inside a
 (`format/footnotes.md`). The converter writes endnotes as InDesign does.
 An output's errors are accepted when both hold:
 
-- every error is `element "Endnote" not allowed here` or names an element
-  whose parent is an `EndnoteRange`;
+- every error is `element "Endnote" not allowed here`, names an element
+  whose parent is an `EndnoteRange`, or is an anchored form field (below);
 - the reference IDML of the same pair has the same errors (same part and
   message, positions ignored).
 
+**Anchored form fields.** The same schema rejects a `CheckBox`,
+`RadioButton`, `TextBox`, `ComboBox` or `SignatureField` inside a
+`CharacterStyleRange`, which is where InDesign writes a form field
+anchored in text (`format/objects.md`, form fields). The reference IDML
+of every pair with such a field has these errors (3 pairs of the corpus
+of 2026-10), and the converter writes the fields as InDesign does. The
+rule above accepts them in the same way.
+
 `compare.py` prints how many files this accepts. Files without a
-reference IDML get no exception: an endnote error there counts as a
-failure, and `compare.py --all` lists those files separately.
+reference IDML get no exception: an endnote or anchored form field error
+there counts as a failure, and `compare.py --all` lists those files
+separately.
 
 ## Audit: what the converter does not read
 
