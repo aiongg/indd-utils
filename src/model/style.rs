@@ -106,6 +106,10 @@ pub struct TocStyle {
     pub builtin: bool,
     pub title: String,
     pub title_style: u32,
+    /// u16 at 2 after the name.
+    pub include_book_documents: bool,
+    /// u32 at 4 after the name.
+    pub create_bookmarks: bool,
     /// After a flag byte and a string: u16 at 2 numbered paragraphs, at 4
     /// make anchor and at 6 remove forced line breaks, where the chunk
     /// has them.
@@ -310,7 +314,9 @@ impl<'a> Reader<'a> {
                 let mut c = self.cursor(&d);
                 let builtin = c.flag()? == 1;
                 let name = c.string()?;
-                c.skip(8)?;
+                c.u16()?;
+                let include_book_documents = c.u16()? == 1;
+                let create_bookmarks = c.u32()? == 1;
                 let title_style = c.u32()?;
                 c.flag()?;
                 let title = c.string()?;
@@ -326,6 +332,8 @@ impl<'a> Reader<'a> {
                     builtin,
                     title,
                     title_style,
+                    include_book_documents,
+                    create_bookmarks,
                     flags,
                 }))
             })();

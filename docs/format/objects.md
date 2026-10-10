@@ -607,8 +607,9 @@ of a named grid of the document; otherwise it leaves the attribute out.
 
 ## Table of contents styles (0x11605)
 
-Chunk 0x11605: a flag byte (1 = built-in key) and the name, three u32
-(the third the UID of the title's paragraph style), a flag byte and the
+Chunk 0x11605: a flag byte (1 = built-in key) and the name, a u16 (0 in
+every style), a u16 `IncludeBookDocuments` and a u32 `CreateBookmarks`
+(1 = true), the u32 UID of the title's paragraph style, a flag byte and the
 title, a flag byte and a string not identified, then u16 fields: at 0
 `SetStoryDirection` (0 `Horizontal`, 1 `Vertical`), at 2
 `NumberedParagraphs` (0 `IncludeFullParagraph`, 2 `ExcludeNumbers`), at
@@ -627,10 +628,15 @@ writes match on `Name`, `Title` and `TitleStyle` (511 of 511),
 `Vertical` in two pairs of version 18), `MakeAnchor` (445 of
 445 from DOM 9 on, 4 true) and `RemoveForcedLineBreak` (340 of 340 from
 DOM 13 on, 4 true); `AppliedTOCStyle` matches for 18,923 of 18,923
-stories (21 made by a table of contents). `CreateBookmarks` (false in 1
-of 676 IDML styles) and `IncludeBookDocuments` (true in 8) were not
-found, and the entries (`TOCStyleEntry`, 130 in all corpus IDML files)
-are not decoded: the converter writes the styles without them.
+stories (21 made by a table of contents). `IncludeBookDocuments` and
+`CreateBookmarks` match all 1,520 TOC styles of the corpus of 2026-10
+whose IDML style has the same name (1,304 trustworthy; 15 with
+`IncludeBookDocuments="true"`, one with `CreateBookmarks="false"`, in a
+stale pair). The flagged string after the title is the path of a book
+file in some of these styles, but it does not decide
+`IncludeBookDocuments`. The entries (`TOCStyleEntry`, 130 in all corpus
+IDML files) are not decoded: the converter writes the styles without
+them.
 Two TOC styles of the corpus pairs have another value at the
 `SetStoryDirection` field: 0x40 with no `SetStoryDirection` in the IDML
 (version 15.0) and 0xF6FC with `Horizontal` (a stale pair of version

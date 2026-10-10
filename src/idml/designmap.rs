@@ -415,7 +415,9 @@ impl Writer<'_> {
                     self.style_ref((t.title_style != 0).then_some(t.title_style), true),
                 )
                 .attr("Title", &t.title)
-                .attr("Name", &name);
+                .attr("Name", &name)
+                .attr("IncludeBookDocuments", t.include_book_documents.to_string())
+                .attr("CreateBookmarks", t.create_bookmarks.to_string());
             let major = self.doc.version.major;
             let flag = |i: usize| t.flags.get(i).copied();
             match flag(0) {
