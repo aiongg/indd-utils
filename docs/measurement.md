@@ -342,3 +342,162 @@ distinct INDD and INDT file in the corpus and ranks the items by the number
 of files in which they are not read, with the number of files in which
 they are read. It writes the full tables to `target/audit/` and takes
 about 20 seconds.
+
+## Render comparison
+
+`tools/render_compare.py` compares renders of the documents that come
+with a PDF exported by InDesign. For each same-save triple (an INDD file,
+its reference IDML and its PDF, all of the same save) it compares three
+PDFs page by page:
+
+| PDF | What it is |
+|---|---|
+| R | The InDesign PDF from the corpus |
+| A | DesignCraft's PDF of the reference IDML |
+| B | DesignCraft's PDF of the converter's IDML |
+
+- **A vs B measures the converter.** Both are rendered by the same program
+  from the same folder, with the same fonts and linked files, so a
+  difference comes from the IDML. A pixel-identical page is a page whose
+  rendering the converter's IDML does not change.
+- **R vs A measures DesignCraft.** Where the reference IDML renders
+  differently from InDesign's PDF, the renderer differs from InDesign.
+  Most of these differences come from fonts DesignCraft does not have, so
+  issue counts are reported for font-complete documents separately.
+
+DesignCraft is an input program (`--designcraft PATH` or the
+`DESIGNCRAFT_CLI` environment variable); nothing from it is in this
+repository. Each IDML is rendered with `designcraft-cli run --in doc.idml
+--cmd font.list --cmd preflight.run --export out.pdf`, which also reports
+its font matches and preflight items.
+
+### Same-save PDFs
+
+A PDF beside an INDD file is not always an export of the INDD's last
+save. A triple is measured when the PDF shows the same save as the INDD
+(`pdf_stale_reasons` in `compare.py`) and the IDML pair is trustworthy
+(the stale rule above, applied with the converter's output):
+
+| Signal | Data used | Same save when |
+|---|---|---|
+| PDF names an INDD state | The PDF's `xmpMM:DerivedFrom` `stRef:instanceID` (`pdfinfo -meta`); the INDD's `xmpMM:InstanceID` and the `stEvt:instanceID` of its `xmpMM:History` (`indd xmp`) | It equals the INDD's InstanceID or one in its history |
+| Dates | `xmp:ModifyDate` of the PDF and of the INDD | At most 1 hour apart |
+| Pages | `pdfinfo` page count; `<Page>` elements in the IDML's spreads | Equal (exports of spreads or of a page range are left out) |
+| Writer | `pdfinfo` Creator | Starts with `Adobe InDesign` |
+
+Evidence, over 496 distinct triples of the corpus of 2026-10:
+
+- The PDF's source instance is the INDD's current InstanceID in 42
+  triples. It is a history entry 1 step back in 9 triples, 2 steps back in
+  258 and 3 or more steps back in 103; the entries after it are saves
+  (`stEvt:changed` `/metadata` or `/`). It is not in the history in 81
+  triples, and 3 PDFs name no source.
+- Where the instance is found, the ModifyDate gap has a median of 4
+  seconds: 279 of 412 gaps are within 60 seconds and 312 within 1 hour.
+
+The history entry alone accepts PDFs exported several saves before the
+INDD's last save; the date limit removes those whose saves came later.
+
+### Measures
+
+Pages are rendered with `pdftoppm -r 50 -gray`, cropped to the page's
+TrimBox (some InDesign PDFs have bleed and marks; DesignCraft's PDFs have
+all boxes equal) and compared:
+
+| Measure | Definition |
+|---|---|
+| Pixel-identical | The two page images have the same bytes |
+| Mean difference | Mean absolute difference of the images after a 2 × 2 mean, from 0 to 1 |
+| Missing ink, extra ink | Share of pixels with ink (value below 200) in one image and none within 2 pixels in the other, after the 2 × 2 mean |
+| Lines | `pdftotext -bbox-layout` lines; a line's key is its text without white space, casefolded. Lines with the same key are matched, nearest first |
+| Moved line | A matched line whose left edge or top differs by more than 1 pt. Line boxes depend on the ascent and descent each PDF declares for its fonts, so between R and A the top is first corrected by the document's median difference for lines of the same pair of box heights |
+| Character overlap | Share of the characters of a page (without white space) that the other page also has, counted as a multiset |
+| Font-complete | DesignCraft matches every font family of the document exactly (`font.list`); a page of another document is font-complete when every font `pdffonts` lists for the page in R belongs to such a family |
+
+**First differing page.** In A vs B, the first page that is not
+pixel-identical is where the converter's output first changes the
+rendering; later pages often only reflow. For that page the tool lists
+compare.py's gap keys (and extra-value keys) among the elements that can
+draw on it: the items of its spread and master spread, the stories of
+their text frames, and the styles those apply, with their BasedOn chain.
+Items and stories that can also draw on a pixel-identical page of the
+document are left out, unless that leaves no key (`AB_gaps_scope` in
+`docs.tsv`); styles are kept, because a style can change one page and
+not another.
+`summary.json` ranks these keys by documents. Next to each it gives the
+number of pixel-identical documents that have the same gap anywhere (a
+gap that many of them have is unlikely to change a rendering) and the
+number of documents compare.py's `gaps.tsv` lists for the key, if that
+file exists.
+
+**DesignCraft issue kinds (R vs A).** A document counts for an issue
+kind when at least one page or item has it:
+
+| Issue | Rule |
+|---|---|
+| line breaks differ | A page with at least 20 characters and 3 lines in R, of which fewer than 80 % match a line of A |
+| lines moved | Over 20 % of the matched lines moved |
+| text missing | Character overlap below 0.9 |
+| ink missing, ink extra | Over 2 % of the pixels. Most come from linked files missing from the corpus, which DesignCraft reports as `preflight: missingLink` |
+| line past the column edge | A line of A that starts at least 50 pt left of a right edge shared by 3 or more lines of the page and ends 2–80 pt past it, and is not such a line in R |
+| spread line | A line of A of 2–6 words whose gaps are all at least 0.8 × the line's box height (about 1 em) and that ends on such an edge, or two pieces on one line at least 3 such units apart that span a column; not such a line in R |
+| story not drawn | A story in a single text frame whose first 24 characters R shows and A does not. Reported apart when the frame's inner height is under 1.05 × the first character's point size |
+| preflight: KIND | An item of DesignCraft's preflight of A |
+| page count differs, render failed, render timed out | As named |
+
+Right-to-left lines are left out of the line-edge and spread checks.
+
+### Running it
+
+```sh
+cargo build --release
+python3 -I tools/render_compare.py --designcraft PATH/designcraft-cli
+```
+
+It needs poppler-utils (`pdfinfo`, `pdftoppm`, `pdftotext`, `pdffonts`)
+and the Python standard library only. Options:
+
+| Option | Effect |
+|---|---|
+| `--jobs N` | Triples processed in parallel (default: the number of CPUs) |
+| `--limit N`, `--file SUBSTR` | Only the first N triples, or those whose INDD path contains SUBSTR |
+| `--exclude PREFIX` | Leave out paths under `corpus/` that start with PREFIX (default `own/`) |
+| `--versions 13-21` | INDD major versions measured (little-endian only). Other triples are listed but not measured |
+| `--max-pages N` | Pages compared per document (default 100); the whole document is rendered |
+| `--link-fonts` | Give DesignCraft the font files a package keeps beside the IDML, in a `Document Fonts` folder; DesignCraft reads only that folder |
+| `--bin PATH` | Another converter binary |
+| `--gaps PATH` | compare.py's `gaps.tsv` to rank first-difference keys against (default `target/compare/gaps.tsv`) |
+| `--images ID:PAGE…` | Write images of pages of the last run (below) and nothing else |
+
+Run it after converter changes, like `diff_outputs.py`: a page whose A vs
+B result changes is a fix or a regression, and the first differing page
+locates it. Run it after DesignCraft updates for the R vs A issues.
+
+### Outputs
+
+In `target/render-compare/` (`--out DIR`). Documents are named by the
+first 10 hexadecimal digits of the INDD's SHA-256; only `triples.tsv` and
+`docs.tsv` give corpus paths.
+
+| File | Content |
+|---|---|
+| `triples.tsv` | Every triple with an IDML and a PDF: verdict (same save, rejected, not measured) and reasons |
+| `docs.tsv` | Per document: page counts, exit codes and times, fonts DesignCraft lacks, missing links, overset items in A and B, A vs B identical pages, first differing page with its gap keys, pages differing after it, DesignCraft issue kinds |
+| `pages.tsv` | Per page: sizes, font-complete, R vs A and A vs B pixel and line measures, flags |
+| `lines.tsv` | Lines past the column edge and spread lines in R, A and B, and whether R has the same line |
+| `dropped.tsv` | Stories R shows and A does not, with frame height, point size, leading and fonts |
+| `issues.tsv` | DesignCraft issue kinds per document, without paths, for reporting to DesignCraft |
+| `summary.json` | Headline numbers: triples by verdict and reason; A vs B pixel-identical documents and pages, first-difference gap keys; DesignCraft renders, failures, times, issue kinds on font-complete documents and on all documents, and its warnings |
+| `work/ID/` | The converter's IDML, `A.pdf`, `B.pdf`, the folders they were rendered from and DesignCraft's results (`run.json`) |
+| `images/` | With `--images ID:PAGE`: `ID-pPAGE.png` (R, A and B side by side) and `ID-pPAGE-ab.png` (A vs B: red where only A has ink, blue where only B has it) |
+
+### Limits
+
+- Lines are not attributed to frames, so the line checks work on whole
+  pages and also fire on tabbed and ragged layouts; counting only lines
+  that R does not have removes most of those.
+- Text extraction of right-to-left scripts follows `pdftotext`'s order,
+  so line matching on Hebrew and Arabic is weaker.
+- The gap keys of the first differing page are candidates. A change on a
+  page can also come from a story that starts on an earlier page or from
+  a value outside the elements listed above.

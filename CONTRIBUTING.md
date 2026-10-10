@@ -78,6 +78,20 @@ After a change to the IDML writer, also validate every output:
 | Refactoring | `diff_outputs.py`: 0 differing outputs, 0 changed failures and warnings |
 | Behaviour change | `compare.py`: no new conversion or schema validation failures; value coverage does not fall; the diff of `diff_outputs.py` is explained in the commit message |
 
+To see how a change affects rendering, compare renders of the documents
+that come with an InDesign PDF. This needs poppler-utils (`pdfinfo`,
+`pdftoppm`, `pdftotext`, `pdffonts`) and a build of DesignCraft's
+command-line program:
+
+```sh
+cargo build --release && python3 -I tools/render_compare.py --designcraft PATH/designcraft-cli
+```
+
+It reports how many documents and pages render pixel-identical from the
+converter's IDML and from the reference IDML, and the first differing
+page of each other document (`docs/measurement.md`, "Render
+comparison").
+
 ## Adding something end to end
 
 The same six steps apply whether you add a text attribute, a page item
