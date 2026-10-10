@@ -813,7 +813,7 @@ impl Writer<'_> {
                 '\u{17}' => {}
                 '\u{18}' if story.text_variables.contains_key(&pos) => {
                     flush(x, &mut buf);
-                    self.variable_instance(x, &story.text_variables[&pos]);
+                    self.variable_instance(x, &story.text_variables[&pos], story.uid);
                 }
                 c => buf.push(c),
             }

@@ -125,6 +125,13 @@ const ATTRS: &[(u32, &str, &str, &str, Kind)] = &[
         Kind::Swatch,
     ),
     (
+        KNOCKED_OUT,
+        "TransparencySetting",
+        "DropShadowSetting",
+        "KnockedOut",
+        Kind::Bool,
+    ),
+    (
         0x1084D,
         "TransparencySetting",
         "InnerShadowSetting",
@@ -340,6 +347,18 @@ const COLOR_APPLIED: &[(&str, u32)] = &[("InnerShadowSetting", 0x1084D)];
 /// colour).
 const DROP_SHADOW_COLOR: u32 = 0x10837;
 
+/// The drop shadow's `KnockedOut`. An item or object style chain that
+/// does not store it has `true` (`docs/format/transparency.md`, drop
+/// shadow knockout).
+const KNOCKED_OUT: u32 = 0x1EB6F;
+
+/// The value of an attribute that an item or style chain does not store,
+/// where the samples show one.
+fn unstored(id: u32) -> Option<&'static Value> {
+    const TRUE: Value = Value::Enum(1);
+    (id == KNOCKED_OUT).then_some(&TRUE)
+}
+
 /// An effect element: name, attributes and opacity stops.
 type Effect = (&'static str, Vec<(&'static str, String)>, Vec<Stop>);
 
@@ -405,7 +424,9 @@ pub(super) fn write(
                 {
                     continue;
                 }
-                let Some(v) = attrs.get(id) else { continue };
+                let Some(v) = attrs.get(id).or_else(|| style.and_then(|_| unstored(id))) else {
+                    continue;
+                };
                 if let Kind::Range(lo, hi) = kind
                     && let Some(f) = v.as_f64()
                     && !(lo..=hi).contains(&f)
@@ -416,7 +437,7 @@ pub(super) fn write(
                 match w.value_text(kind, v) {
                     Some(t) => {
                         let style_text = style
-                            .and_then(|s| s.transparency(id))
+                            .and_then(|s| s.transparency(id).or_else(|| unstored(id)))
                             .and_then(|sv| w.value_text(kind, sv));
                         let same = style_text.as_ref().is_some_and(|st| *st == t);
                         let unshown = id == DROP_SHADOW_COLOR

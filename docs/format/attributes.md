@@ -123,11 +123,48 @@ style, below) and on items with stored values not decoded then (77
 alignment `OutsideAlignment` and stroke types; strokes, below). Over all pairs, 4 extra `StrokeWeight` values appear,
 in 3 stale pairs.
 
-Groups are left out: their fill and stroke attributes in IDML were not
-studied (1,844 groups of the trustworthy pairs have a `StrokeWeight`
-that the converter does not write). IDML writes no corner attributes
-for EPS text (class 0x660B; none in 634 elements), so only its other
-attributes follow the rule.
+IDML writes no corner attributes for EPS text (class 0x660B; none in
+634 elements), so only its other attributes follow the rule.
+
+**Groups.** A group (class 0x401) stores none of these attributes. IDML
+gives a group, for each fill, stroke and corner attribute, the value
+that all its child page items have in effect: the child's own value
+(stored, or from the base list where IDML writes it), else its object
+style's effective value; for a child group, its own shared value. EPS
+text has no corner values and is left out for the corners. IDML writes
+the shared value when it differs from the group's object style value,
+when the style turns the category off, when the group has no object
+style, and for a stroke tint that every child stores as 100 (written
+−1, above); it leaves the attribute out when the children differ.
+
+With this rule the converter reproduces, over the groups of the 1,251
+trustworthy pairs of the corpus after 2026-10 (none was written
+before):
+
+| Attribute | Values |
+|---|---:|
+| `StrokeWeight` | 4,741 of 4,741 |
+| `FillColor` | 3,813 of 3,813 |
+| `MiterLimit` | 3,679 of 3,679 |
+| `StrokeColor` | 1,221 of 1,221 |
+| `CornerRadius`, `TopLeftCornerRadius` | 1,001 of 1,001 each |
+| `StrokeTint` | 664 of 664 |
+| `FillTint` | 379 of 417 |
+| `BottomLeftCornerRadius`, `BottomRightCornerRadius` | 326 of 326 each |
+| `TopRightCornerRadius` | 296 of 296 |
+| `GapColor` | 124 of 124 |
+| corner options (five attributes) | 92 to 103 of as many |
+| `LeftLineEnd`, `RightLineEnd`, `StrokeAlignment`, `EndJoin`, `EndCap` | 40, 9, 15, 7 and 2 of as many |
+| `StrokeType` | 15 of 17 |
+
+The 38 `FillTint` values follow children whose own `FillTint` the
+converter writes as 100 where IDML has −1 (a difference of the children,
+not of the group rule). The rule adds 27 extra values: 3 documents of
+versions 10 to 12 whose groups have `CornerRadius` and
+`TopLeftCornerRadius` but not the other three radii, although every
+child has all four, and one `StrokeType`. `OverprintFill` (313 values)
+does not follow the rule in 75 groups that have a child without the
+attribute, and is not written on groups.
 
 **Category turned off.** When the item's object style (other than the
 root `[None]`) turns a category off, IDML writes the item's values of
@@ -201,9 +238,44 @@ corpus after 2026-10 with reference 0, IDML value against stored code.
 No code has two IDML values. The codes are the same in every list that
 names a stroke style (items, object styles, cells, tables, paragraph
 rules, underlines and strike-throughs), so the converter uses one table.
-Custom stroke styles (a non-zero reference, 17 items in 2 files, for
-example `DashedStrokeStyle/Rounded`) are left out. Codes 0x5A3D and
-0xB008 occur only in files without a trustworthy IDML.
+Codes 0x5A3D and 0xB008 occur only in files without a trustworthy IDML.
+
+**Custom stroke styles.** A record with code 0x5A42 and a non-zero
+reference names a custom stroke style: the reference is the UID of an
+object of class 0xB016 (striped) or 0x5A43 (dashed). IDML defines each
+in `Resources/Graphic.xml` after the built-in `StrokeStyle` elements and
+names it in `StrokeType` as `StripedStrokeStyle/<name>` or
+`DashedStrokeStyle/<name>`.
+
+| Class | Chunk | Layout | IDML |
+|---|---|---|---|
+| 0xB016 | 0xB023 | flag byte, in-object string | `Name` |
+| 0xB016 | 0xB002 | u32 *n*, then *n* pairs of f64 (start, width), fractions of the stroke weight | `StripeArray`: each value × 100, in stored order |
+| 0x5A43 | 0x5A48 | flag byte, in-object string | `Name` |
+| 0x5A43 | 0x5A4F | u32 *n*, *n* f64 dash and gap lengths in points, u16 corner adjustment, u32 end cap | `DashArray` (the values as stored), `StrokeCornerAdjustment` (3 `DashesAndGaps`), `EndCap` (as 0x6E6B) |
+
+IDML writes `Self`, `StripeArray`, `Name` for a striped style and
+`Self`, `DashArray`, `StrokeCornerAdjustment`, `EndCap`, `Name` for a
+dashed one; `Self` is `StripedStrokeStyle/<name>` or
+`DashedStrokeStyle/<name>`. Every object of the two classes is written,
+also where nothing uses it, in UID order.
+
+Evidence over the trustworthy pairs of the corpus after 2026-10: the
+converter reproduces 21 of 21 `StripedStrokeStyle` elements (one
+definition, (0, 0.05), IDML `StripeArray="0 5"`) and 5 of 5
+`DashedStrokeStyle` elements (one definition: 24, 0, corner 3, cap 1,
+IDML `DashArray="24 0"`, `StrokeCornerAdjustment="DashesAndGaps"`,
+`EndCap="RoundEndCap"`), with every attribute, and with them 21 more
+object style `StrokeType` values, 5 graphic line values and one of
+`PageItemDefault`. Four of the five files with the dashed style use it
+nowhere. A chunk whose length is not that of its layout leaves the
+style out with a warning. Over the 6,039 distinct INDD and INDT files of
+the corpus outside the privately held samples, 78 files have such
+styles: all 98 striped and 119 dashed objects have the chunk lengths of
+the layout (4 + 16*n* and 4 + 8*n* + 6, either byte order). Striped
+styles have 1, 2, 3, 5, 6 or 7 stripes; every dashed style has an even
+number of lengths, corner code 3 (117) or 0 (2) and end cap 0 (108) or
+1 (11). Only the one-stripe form and corner code 3 occur in a pair.
 
 **Stroke alignment (0x6E8C).** 0 `CenterAlignment`, 1 `InsideAlignment`
 (3,238 items in 44 files), 2 `OutsideAlignment` (196 items in 50 files).
@@ -243,9 +315,8 @@ stroke alignment by the rule of the fill and stroke colour: the value
 the item stores (or that of the base list) where it differs from the
 applied object style's effective value, every value where the style
 turns the category off, and every value without a style (above). Groups
-never store these IDs, and IDML writes values on groups whose source is
-not shown (664 groups with `StrokeTint`, 40 with `LeftLineEnd`), so the
-converter writes none on groups.
+never store these IDs; their values come from their children (values an
+item does not store, groups).
 
 A tint is compared as stored: an item that stores 100 differs from a
 style value of −1, and IDML writes it as −1. 4,508 items in 192 files
@@ -283,8 +354,21 @@ their order on `PageItemDefault`, where the values are equal in every
 file (`preferences.md`, page item defaults). 0x6E78 is 0 in every style,
 0x6E73 in all but 2; 0x6E78 is `Nonprinting` of `PageItemDefault`. 0x6E67, 0x6E6A and 0x6E8B are the
 overprint flags (`objects.md`, object style settings).
-`StrokeCornerAdjustment` and `StrokeDashAndGap` do not occur in the
-corpus IDML files.
+**Dashes (0x5A35).** Page item attribute 0x5A35 (value type 0x5A36):
+8 bytes (0 in every sample), u32 count *n*, *n* f64, u16 corner
+adjustment. IDML writes the f64 list as `StrokeDashAndGap` (numbers
+separated by spaces) and the code as `StrokeCornerAdjustment`: 3
+`DashesAndGaps`, the only code in the samples, which the dashed stroke
+style's chunk 0x5A4F also stores for `DashesAndGaps`. IDML has the two
+attributes only on items whose stroke type in effect is `Dashed`
+(`StrokeStyle/$ID/Dashed`; every such item has them), and on groups by
+the group rule: no item with another stroke type has them, though 1,251
+documents store the attribute in the page item defaults and many items
+of other stroke types store it. Object styles never have them. With
+these rules the converter reproduces 2,312 of 2,316 graphic line values
+of each attribute, 8 of 9 for polygons and 10 of 24 and 29 for groups,
+with no extra value. The values of 9 rectangles and 7 EPS text items
+are not written (not examined).
 
 ## Text attribute lists
 
@@ -399,7 +483,7 @@ styles with INDD styles of the same name (486 styles), then checked with
 | 0x1DF04 | `ParagraphBorderBottomOffset` | f64 | 83/83 styles |
 | 0x1DF21 | `SameParaStyleSpacing` (Properties) | f64; −1 = SetIgnore | 15/15 ranges, 100/100 styles |
 | 0x4265 | `GridAlignFirstLineOnly` | 1 = true | 81/81 styles |
-| 0x4266 | `GridAlignment` | 0 None, 1 AlignBaseline | 86/86 styles |
+| 0x4266 | `GridAlignment` | 0 None, 1 AlignBaseline, 2 AlignEmTop, 3 AlignEmCenter (below) | 86/86 styles |
 | 0x425E | `Tatechuyoko` | 1 = true | root styles; 1 from a sample typeset vertically and its print PDF, see below |
 | 0x4279 | `ShataiDegreeAngle` | degrees, written ×100 | root styles; see below |
 | 0x427A | `ShataiAdjustTsume` | 1 = true | root styles; see below |
@@ -432,7 +516,15 @@ enumeration: `kHardKinsokuName` `HardKinsoku` (51 styles),
 `SimplifiedChineseKinsoku` (1), `kMojikumiDefaultName1`
 `LineEndAllOneHalfEmEnum` (55) and `kMojikumiDefaultName16`
 `SimpChineseDefault` (1); a custom kinsoku table (class 0x4204) as the
-object `KinsokuTable/<name>` (38). Other built-in tables are not written.
+object `KinsokuTable/<name>` (38). The corpus of 2026-10 adds three
+built-in tables, each from the `TextDefault` of every trustworthy pair
+that uses it: `kTradChineseKinsokuName` `TraditionalChineseKinsoku` (90
+documents), `kMojikumiDefaultName15` `TradChineseDefault` (80) and
+`kMojikumiDefaultName2` `OneEmIndentLineEndUkeOneHalfEmEnum` (1). With
+them the converter reproduces 1,251 of 1,251 `TextDefault` `KinsokuSet`
+and `Mojikumi` values, 1,430 of 1,430 `KinsokuSet` and 1,532 of 1,532
+`Mojikumi` values of paragraph styles. Other built-in tables are not
+written.
 A custom mojikumi table (class 0x4203, `objects.md`) is the object
 `MojikumiTable/<name>`. In the trustworthy pairs of the corpus of
 2026-10 this gives the IDML value for 576 paragraph ranges, 105
@@ -798,7 +890,7 @@ not listed leaves the attribute out.
 | 0x1B21 | `HyphenateBeforeLast` | num | 580 (85) |
 | 0x1B30 | `DesiredLetterSpacing` | pct | 559 (64) |
 | 0x1B38 | `KeepAllLinesTogether` | bool | 556 (61) |
-| 0x1B3E | `CharacterAlignment` | 0 `AlignBaseline`, 1 `AlignEmCenter`, 2 `AlignEmBottom` | 551 (56) |
+| 0x1B3E | `CharacterAlignment` | 0 `AlignBaseline`, 1 `AlignEmCenter`, 2 `AlignEmBottom`, 3 `AlignEmTop`, 4 `AlignICFTop`, 5 `AlignICFBottom` (below) | 551 (56) |
 | 0x1B4C | `RuleAboveColor` (Properties) | swatch | 546 (51) |
 | 0x1B5C | `RuleAbove` | bool | 541 (46) |
 | 0x1B83 | `HyphenWeight` | num | 541 (46) |
@@ -916,6 +1008,32 @@ values of these attributes in paragraph and character styles, text
 defaults and text ranges; 120,409 reproduced, 3 wrong (`TextDefault`
 `DesiredLetterSpacing`, `DesiredWordSpacing` and `UnderlineType` in one
 document each), the rest in stories whose text differs.
+
+**More codes, corpus of 2026-10.** Over the 1,251 trustworthy pairs,
+the converter's output with these codes reproduces the IDML values below
+and adds no extra value:
+
+| ID | Code | IDML | Evidence (converter's output, trustworthy pairs) |
+|---|---|---|---|
+| 0x4266 | 2 | `GridAlignment="AlignEmTop"` | with code 3: 11,024 of 11,024 range values (2,333 more than before), 1,826 of 1,826 paragraph style values |
+| 0x4266 | 3 | `GridAlignment="AlignEmCenter"` | |
+| 0x1B3E | 3 | `CharacterAlignment="AlignEmTop"` | with codes 4 and 5: 9,603 of 9,605 range values (1,699 more) |
+| 0x1B3E | 4, 5 | `AlignICFTop`, `AlignICFBottom` | one run each, one document |
+| 0xB676 (cells) | 3 | `FirstBaselineOffset="EmboxHeight"` | 6,668 of 6,668 cell values (2,143 more) |
+
+**Page number type (0x1B09).** A u16 enumeration: 0 `AutoPageNumber`, 2
+`NextPageNumber`, 3 `TextVariable`, written as the range's
+`PageNumberType`. The root paragraph style has 0, the `AutoPageNumber`
+of IDML's root style. In the trustworthy pairs the ranges with
+`TextVariable` are those that hold a text variable instance; the
+converter reproduces 278 of 278 values with no extra value.
+
+**Custom glyph (0x1B5E).** Value type 0x1B26: u16 length *n*, *n* bytes
+of a glyph name, u32 glyph ID. IDML writes `Properties/CustomGlyph`
+(type `string`) as `$ID/` and the name, for example `$ID/ampersand.smcp`.
+The converter leaves out records with an empty name. It reproduces 1,499
+of 1,499 values in the trustworthy pairs, with no extra value. The glyph
+ID is not used.
 
 ### Ruby, kenten and warichu
 

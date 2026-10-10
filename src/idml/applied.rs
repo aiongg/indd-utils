@@ -23,6 +23,8 @@ pub(super) struct StyleValues {
     pub footnote: Option<(bool, f64, f64)>,
     /// Baseline frame grid of the text frame settings.
     pub baseline: Option<crate::model::BaselineGrid>,
+    /// Insets of the text frame settings, in stored order.
+    pub insets: Option<[f64; 4]>,
 }
 
 impl StyleValues {
@@ -111,6 +113,9 @@ impl Writer<'_> {
                 }
                 if out.baseline.is_none() {
                     out.baseline = f.baseline_grid;
+                }
+                if out.insets.is_none() {
+                    out.insets = f.insets;
                 }
             }
             if (s.frame.is_some() || is_root)

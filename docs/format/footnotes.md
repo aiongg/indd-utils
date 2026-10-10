@@ -261,10 +261,15 @@ text styles are the defaults, which the converter writes. The title is
 the exporting InDesign's localized default (`Endnotes` 108, `Notes de
 fin` 18, `Eindnoten` 12, 4 others in the 654 pairs before 2026-10), and
 the separator and marker position follow its language. The converter
-writes U+3000 and `RubyMarker` when the last session of the save history
-has language code 0x0101, and tab and `SuperscriptMarker` otherwise
-(140 of 141 pairs; `objects.md`, save history). The title is left
-out.
+writes the separator U+3000 when the last session of the save history
+has language code 0x0101, and tab otherwise (140 of 141 pairs before
+2026-10; `objects.md`, save history). The title and the marker position
+follow the saving edition that the XMP black name shows (`objects.md`,
+saving edition): `RubyMarker` for a Japanese edition only, so Korean
+editions, which also have code 0x0101, get `SuperscriptMarker`. Over the
+trustworthy pairs of the corpus after 2026-10 this gives 917 of 918
+titles and 916 of 918 marker positions (692 and 876 before); without a
+black name the marker follows the code.
 
 ## IsEndnoteStory
 

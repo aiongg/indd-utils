@@ -430,7 +430,9 @@ impl Writer<'_> {
         // The export options of the version (idml-values.md) in place of
         // those of the value files.
         node.children.retain(|c| c.tag != "ObjectExportOption");
-        if let Some(e) = export::object_export_option(self.doc.version, None, true) {
+        if let Some(e) =
+            export::object_export_option(self.doc.version, None, None, export::Owner::Style)
+        {
             node.children.insert(0, e);
         }
         // The transform values the style sets, where IDML has the element
@@ -447,6 +449,25 @@ impl Writer<'_> {
         .collect();
         if !transform.is_empty() && node.child("TransformAttributeOption").is_some() {
             node.set(&["TransformAttributeOption"], transform);
+        }
+        // Flex paddings and gaps; without the chunk 12 and 20 (objects.md,
+        // object style settings).
+        if node.child("FlexLayoutAttributeOption").is_some() {
+            let v = os
+                .flex_spacing
+                .unwrap_or([12.0, 12.0, 12.0, 12.0, 20.0, 20.0]);
+            let names = [
+                "FlexPaddingTop",
+                "FlexPaddingRight",
+                "FlexPaddingBottom",
+                "FlexPaddingLeft",
+                "FlexGapRow",
+                "FlexGapColumn",
+            ];
+            node.set(
+                &["FlexLayoutAttributeOption"],
+                names.into_iter().zip(v).map(|(n, v)| (n, num(v))).collect(),
+            );
         }
         let mut attrs = self.item_attr_values(&os.attrs);
         for (id, name) in [
@@ -486,7 +507,8 @@ impl Writer<'_> {
             attrs.push((name, value.into()));
         }
         match os.paragraph_style {
-            Some(0) => attrs.push(("AppliedParagraphStyle", "n".into())),
+            // No chunk 0x1B946 is no style too (objects.md, object styles).
+            Some(0) | None => attrs.push(("AppliedParagraphStyle", "n".into())),
             Some(p) if self.doc.styles.contains_key(&p) => {
                 attrs.push(("AppliedParagraphStyle", self.style_ref(Some(p), true)))
             }
@@ -751,10 +773,10 @@ impl Writer<'_> {
             _ => {}
         }
         node.set(&["StoryPreference"], story);
-        // The u32 at 40 of the wrap chunk: 0 for `ApplyToMasterPageOnly`;
+        // The u16 at 40 of the wrap chunk: 0 for `ApplyToMasterPageOnly`;
         // without the chunk, false (objects.md, object style settings).
         if node.child("TextWrapPreference").is_some() {
-            match os.text_wrap.as_ref().map(|w| w.flags) {
+            match os.text_wrap.as_ref().map(|w| w.master_flag) {
                 Some(1) | None => {
                     node.set(
                         &["TextWrapPreference"],

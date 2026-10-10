@@ -82,6 +82,7 @@ nothing else in the transparency settings of the trustworthy pairs.
 | 0x10820 | `DropShadowSetting/Size` | f64 | 6 items, two values; 406 of 406 rectangles and text frames over the 654 pairs of the later corpus |
 | 0x1084A | `DropShadowSetting/Spread` | f64, percent | 28 of 28 items in 9 files |
 | 0x10837 | `DropShadowSetting/EffectColor` | swatch UID | 11 of 11 items in 6 files (below) |
+| 0x1EB6F | `DropShadowSetting/KnockedOut` | u16: 1 true, 0 false; `true` where not stored | 30,692 of 30,692 items (below) |
 | 0x1084D | `InnerShadowSetting/Applied` | u16: 1 true, 0 false | 10 items with 1 |
 | 0x1084E | `InnerShadowSetting/EffectColor` | swatch UID | 10 items (below) |
 | 0x10852 | `InnerShadowSetting/Distance` | f64 | 10 items with 0 |
@@ -116,9 +117,8 @@ value maps one to one onto the IDML value in all rows):
 
 IDML writes `OuterGlowSetting` and `InnerGlowSetting` after
 `InnerShadowSetting`, as the schema lists them. Not identified: the
-inner glow's `Opacity`, `Spread` and `EffectColor`, the outer glow's
-`Noise`, and drop shadow `KnockedOut` (497 items of one 8.0 document,
-`true` in all, no local ID varies).
+inner glow's `Opacity`, `Spread` and `EffectColor` and the outer glow's
+`Noise`. Drop shadow `KnockedOut` is 0x1EB6F (below).
 
 All items whose value is not on the IDML item (it comes from the style
 or the default) match as well: for example 743 items for
@@ -163,6 +163,28 @@ style stores 0 has the Black swatch, and its IDML has no
 `EffectColor`. One item cannot show whether IDML compares with Black or
 leaves the value out for another reason; the converter leaves out
 Black when the style stores 0.
+
+**Drop shadow knockout.** Page item attribute 0x1EB6F is
+`DropShadowSetting/KnockedOut`: a u16, 1 `true`, 0 `false` (value type
+0x6E65). Object styles hold it in their transparency list (chunk
+0x1B92C); `[None]` stores 1, and the styles that store 0 are mostly
+`[Normal Graphics Frame]`, `[Normal Text Frame]` and user styles of
+older documents. The document's base list (class 0x6E02) does not have
+it. An item or a style chain that does not store it has `true`, the
+value of `TransparencyDefaultContainerObject` in every corpus IDML.
+IDML writes `KnockedOut` on the item when this value differs from the
+style's, by the rule above; an item without an object style gets no
+value it does not store.
+
+With this rule the converter reproduces, over the trustworthy pairs,
+every `KnockedOut` of the items: 17,543 of 17,543 rectangles, 9,505 of
+9,505 text frames, 1,911 of 1,911 polygons, 1,578 of 1,578 graphic
+lines and 155 of 155 ovals. Before the rule, 25, 13, 14, 23 and 8
+documents missed these `DropShadowSetting` elements. It also writes 380
+elements that IDML does not have (760 extra values in 3 documents):
+items that store nothing, whose style stores 0, and whose IDML has no
+`KnockedOut`. Nothing stored in the items or their styles separates
+them from the items that follow the rule; they stay open (`unknowns.md`).
 
 Not covered: items whose drop shadow is off (`Mode="None"`) for which
 IDML still writes a `DropShadowSetting` (the "D empty, IDML writes it"
@@ -214,7 +236,7 @@ settings), 170 of 170.
 
 ## Not converted
 
-- Drop shadow `Noise`, `KnockedOut` and `UseGlobalLight`.
+- Drop shadow `Noise` and `UseGlobalLight`.
 - Stroke, fill and content blending (opacity and blend mode) and the
   other effects (feather, outer and inner glow, bevel and emboss, satin,
   directional feather): no item or style in the pairs has a value other

@@ -1,6 +1,7 @@
 //! Dates of the document's XMP packet, which give the time zone offsets
 //! that IDML link times are written in (`docs/format/objects.md`, link
-//! times).
+//! times), and the name of its black swatch, which shows the language of
+//! the edition that saved it (`docs/format/objects.md`, saving edition).
 
 /// An XMP date with a UTC offset: the instant (seconds since 1970 UTC)
 /// and the offset in seconds.
@@ -42,6 +43,105 @@ pub fn dates(packet: &[u8]) -> Vec<XmpDate> {
         }
     }
     out
+}
+
+/// A colour of the packet's `xmpTPg:Colorants` list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Colorant {
+    pub name: String,
+    /// `CMYK`, `RGB` or `LAB`.
+    pub mode: String,
+    /// `PROCESS` or `SPOT`, in either case.
+    pub kind: String,
+    /// The colorant is a tint (`xmpG:tint`).
+    pub tint: bool,
+    /// Cyan, magenta, yellow, black in percent, or red, green, blue
+    /// (0–255), or L, a, b; as many as the mode has.
+    pub values: Vec<f64>,
+}
+
+/// The value of property `name` in `item`, in element (`<name>v</name>`)
+/// or attribute (`name="v"`) form, with the XML entities resolved.
+fn property(item: &str, name: &str) -> Option<String> {
+    let raw = if let Some(i) = item.find(&format!("<{name}>")) {
+        let rest = &item[i + name.len() + 2..];
+        &rest[..rest.find('<')?]
+    } else {
+        let i = item.find(&format!("{name}=\""))?;
+        let rest = &item[i + name.len() + 2..];
+        &rest[..rest.find('"')?]
+    };
+    Some(
+        raw.replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&"),
+    )
+}
+
+/// The colours of the `xmpTPg:Colorants` list of `packet`. Items without
+/// a name or a mode are left out.
+pub fn colorants(packet: &[u8]) -> Vec<Colorant> {
+    let text = String::from_utf8_lossy(packet);
+    let Some(start) = text.find("<xmpTPg:Colorants") else {
+        return Vec::new();
+    };
+    let list = &text[start..];
+    let list = &list[..list.find("</xmpTPg:Colorants").unwrap_or(list.len())];
+    let mut out = Vec::new();
+    for item in list.split("<rdf:li").skip(1) {
+        let (Some(name), Some(mode)) = (
+            property(item, "xmpG:swatchName"),
+            property(item, "xmpG:mode"),
+        ) else {
+            continue;
+        };
+        let components: &[&str] = match mode.as_str() {
+            "CMYK" => &["cyan", "magenta", "yellow", "black"],
+            "RGB" => &["red", "green", "blue"],
+            "LAB" => &["L", "A", "B"],
+            _ => &[],
+        };
+        let values = components
+            .iter()
+            .filter_map(|c| property(item, &format!("xmpG:{c}"))?.trim().parse().ok())
+            .collect();
+        out.push(Colorant {
+            name,
+            mode,
+            kind: property(item, "xmpG:type").unwrap_or_default(),
+            tint: property(item, "xmpG:tint").is_some(),
+            values,
+        });
+    }
+    out
+}
+
+/// The name the packet gives the black swatch: the one colorant that is
+/// not a tint, is a process colour, has the mode and values of `black`
+/// (as IDML writes them: CMYK in percent, RGB 0–255) and whose name no
+/// other colour of the document (`others`) has. `None` if there is no
+/// such colorant or more than one.
+pub fn black_name(
+    colorants: &[Colorant],
+    black: (&str, &[f64]),
+    others: &[&str],
+) -> Option<String> {
+    let (mode, values) = black;
+    let mut found = colorants.iter().filter(|c| {
+        !c.tint
+            && c.kind.eq_ignore_ascii_case("process")
+            && c.mode == mode
+            && c.values.len() == values.len()
+            && c.values
+                .iter()
+                .zip(values)
+                .all(|(a, b)| (a - b).abs() < 1e-3)
+            && !others.contains(&c.name.as_str())
+    });
+    let first = found.next()?;
+    found.next().is_none().then(|| first.name.clone())
 }
 
 /// A date `YYYY-MM-DDTHH:MM[:SS[.fff]]` followed by `Z` or `±HH:MM`.
@@ -134,6 +234,26 @@ mod tests {
         assert_eq!(d[0].utc, days_from_civil(2020, 3, 1) * 86_400 + 9 * 3600);
         assert_eq!(d[1].offset, -4 * 3600);
         assert_eq!(d[2].offset, 0);
+    }
+
+    #[test]
+    fn finds_the_black_name() {
+        let packet = r#"<xmpTPg:Colorants><rdf:Seq>
+<rdf:li rdf:parseType="Resource"><xmpG:swatchName>Schwarz</xmpG:swatchName><xmpG:mode>CMYK</xmpG:mode><xmpG:type>PROCESS</xmpG:type><xmpG:cyan>0</xmpG:cyan><xmpG:magenta>0</xmpG:magenta><xmpG:yellow>0</xmpG:yellow><xmpG:black>100</xmpG:black></rdf:li>
+<rdf:li xmpG:swatchName="Schwarz" xmpG:mode="CMYK" xmpG:type="PROCESS" xmpG:tint="40" xmpG:cyan="0" xmpG:magenta="0" xmpG:yellow="0" xmpG:black="100"/>
+<rdf:li xmpG:swatchName="Ink &amp; More" xmpG:mode="CMYK" xmpG:type="PROCESS" xmpG:cyan="0" xmpG:magenta="0" xmpG:yellow="0" xmpG:black="100"/>
+</rdf:Seq></xmpTPg:Colorants>"#;
+        let c = colorants(packet.as_bytes());
+        assert_eq!(c.len(), 3);
+        assert!(c[1].tint);
+        assert_eq!(c[2].name, "Ink & More");
+        let black = ("CMYK", &[0.0, 0.0, 0.0, 100.0][..]);
+        // Two candidates: ambiguous.
+        assert_eq!(black_name(&c, black, &[]), None);
+        assert_eq!(
+            black_name(&c, black, &["Ink & More"]).as_deref(),
+            Some("Schwarz")
+        );
     }
 
     #[test]

@@ -137,6 +137,20 @@ pub(super) fn text_wrap_mode(wrap: Option<&TextWrap>) -> Option<&'static str> {
     }
 }
 
+/// IDML `TextWrapSide` of the side code of a text wrap; `None` for a code
+/// without evidence. See `docs/format/objects.md`, text wrap.
+pub(super) fn text_wrap_side(code: u16) -> Option<&'static str> {
+    Some(match code {
+        0 => "BothSides",
+        1 => "LeftSide",
+        2 => "RightSide",
+        3 => "SideTowardsSpine",
+        4 => "SideAwayFromSpine",
+        5 => "LargestArea",
+        _ => return None,
+    })
+}
+
 /// IDML `TextWrapOffset` attributes of a text wrap (0 without one).
 pub(super) fn text_wrap_offsets(wrap: Option<&TextWrap>) -> Vec<(&'static str, String)> {
     let [left, top, right, bottom] = wrap.map_or([0.0; 4], |w| w.offsets);
@@ -178,6 +192,37 @@ pub(super) const STROKE_TYPES: &[(u32, &str)] = &[
     (0xB009, "ThickThinThick"),
     (0xB01A, "Triple_Stroke"),
 ];
+
+/// Whether a dash attribute (`StrokeDashAndGap`, `StrokeCornerAdjustment`)
+/// is written: IDML has them only where the stroke type in effect is
+/// `Dashed` (attributes.md, dashes).
+pub(super) fn dash_written(name: &str, stroke_type: Option<&str>) -> bool {
+    !matches!(name, "StrokeDashAndGap" | "StrokeCornerAdjustment")
+        || stroke_type == Some("StrokeStyle/$ID/Dashed")
+}
+
+/// The stroke type code of a custom stroke style, stored with its UID.
+pub(super) const CUSTOM_STROKE_TYPE: u32 = 0x5A42;
+
+/// The `Self` of a custom stroke style.
+pub(super) fn custom_stroke_ref(st: &crate::model::StrokeStyle) -> String {
+    let kind = if st.dashed {
+        "DashedStrokeStyle"
+    } else {
+        "StripedStrokeStyle"
+    };
+    format!("{kind}/{}", self_name(&st.name))
+}
+
+/// IDML `EndCap` of an end cap code (attribute 0x6E6B).
+pub(super) fn end_cap(code: u32) -> Option<&'static str> {
+    Some(match code {
+        0 => "ButtEndCap",
+        1 => "RoundEndCap",
+        2 => "ProjectingEndCap",
+        _ => return None,
+    })
+}
 
 /// The stroke styles every corpus IDML lists in `Graphic.xml`, in order.
 /// See `docs/format/idml-values.md`.
@@ -446,7 +491,12 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
     (
         0x4266,
         "GridAlignment",
-        Kind::Enum(&[(0, "None"), (1, "AlignBaseline")]),
+        Kind::Enum(&[
+            (0, "None"),
+            (1, "AlignBaseline"),
+            (2, "AlignEmTop"),
+            (3, "AlignEmCenter"),
+        ]),
         false,
     ),
     (
@@ -491,9 +541,23 @@ pub(super) const TEXT_ATTRS: &[(u32, &str, Kind, bool)] = &[
             (0, "AlignBaseline"),
             (1, "AlignEmCenter"),
             (2, "AlignEmBottom"),
+            (3, "AlignEmTop"),
+            (4, "AlignICFTop"),
+            (5, "AlignICFBottom"),
         ]),
         false,
     ),
+    (
+        0x1B09,
+        "PageNumberType",
+        Kind::Enum(&[
+            (0, "AutoPageNumber"),
+            (2, "NextPageNumber"),
+            (3, "TextVariable"),
+        ]),
+        false,
+    ),
+    (0x1B5E, "CustomGlyph", Kind::GlyphName, true),
     (0x1B4C, "RuleAboveColor", Kind::SwatchOrText, true),
     (0x1B5C, "RuleAbove", Kind::Bool, false),
     (0x1B83, "HyphenWeight", Kind::Number, false),
@@ -951,6 +1015,8 @@ pub(super) const ITEM_ATTRS: &[(u32, &str, Kind)] = &[
         ]),
     ),
     (0x6E66, "StrokeTint", Kind::Tint),
+    (0x5A35, "StrokeDashAndGap", Kind::Dashes),
+    (0x5A35, "StrokeCornerAdjustment", Kind::DashCorner),
     (0x6E89, "GapColor", Kind::Swatch),
     (0x6E8A, "GapTint", Kind::Tint),
     (
@@ -1077,7 +1143,11 @@ pub(super) const CELL_ATTRS: &[(u32, &[&str], Kind)] = &[
     (
         0xB676,
         &["FirstBaselineOffset"],
-        Kind::Enum(&[(0, "LeadingOffset"), (1, "AscentOffset")]),
+        Kind::Enum(&[
+            (0, "LeadingOffset"),
+            (1, "AscentOffset"),
+            (3, "EmboxHeight"),
+        ]),
     ),
     (0xB6E1, &["WritingDirection"], Kind::Enum(&[(1, "true")])),
     (0xB675, &["RotationAngle"], Kind::Number),

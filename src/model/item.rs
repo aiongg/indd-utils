@@ -246,6 +246,12 @@ pub struct ItemProps {
     /// Chunk 0x1623 is 1: a frame for a graphic (`ContentType`
     /// `GraphicType` without a graphic).
     pub graphic_frame: bool,
+    /// The i32 at 4 of chunk 0x324: the layer position before grouping
+    /// (`objects.md`, page item settings).
+    pub grouping_layer_position: Option<i32>,
+    /// The value of key `CustomSizeType` of chunk 0x1E22B (`objects.md`,
+    /// export options).
+    pub export_size_type: Option<u32>,
 }
 
 /// A page item name: a built-in key or a name given by the user.
@@ -262,10 +268,33 @@ pub struct TextWrap {
     pub mode: u32,
     /// The four offsets: left, top, right, bottom.
     pub offsets: [f64; 4],
-    /// The u32 at offset 40; 1 in every sample whose IDML has
-    /// `Inverse="false"`, `ApplyToMasterPageOnly="false"` and
-    /// `TextWrapSide="BothSides"`.
-    pub flags: u32,
+    /// The u16 at offset 40: 0 for `ApplyToMasterPageOnly`, 1 otherwise.
+    pub master_flag: u16,
+    /// The u16 at offset 42: the `TextWrapSide` code (`TEXT_WRAP_SIDES`
+    /// of the writer).
+    pub side: u16,
+}
+
+/// A list of keys with string values (chunk 0x1E22B): u32 count; per
+/// entry a u32-counted key in text segments, a flag byte, two bytes, a u16
+/// value count and the values, each a u8 length, a u8 and that many bytes.
+fn key_values(c: &mut Cursor) -> Result<Vec<(String, Vec<String>)>, Error> {
+    let n = c.u32()?;
+    let mut out = Vec::new();
+    for _ in 0..n {
+        let len = c.u32()? as usize;
+        let key = c.segments(len)?;
+        c.skip(3)?;
+        let count = c.u16()?;
+        let mut values = Vec::new();
+        for _ in 0..count {
+            let m = c.u8()? as usize;
+            c.u8()?;
+            values.push(String::from_utf8_lossy(c.bytes(m)?).into_owned());
+        }
+        out.push((key, values));
+    }
+    Ok(out)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -748,6 +777,20 @@ impl<'a> Reader<'a> {
             graphic_frame: self
                 .chunk(uid, chunk::ITEM_CONTENT)?
                 .is_some_and(|d| d.len() >= 2 && self.cursor(&d).u16().ok() == Some(1)),
+            grouping_layer_position: self
+                .chunk(uid, chunk::ITEM_GROUPING_LAYER)?
+                .and_then(|d| self.enc().i32_at(&d, 4)),
+            export_size_type: match self.chunk(uid, chunk::ITEM_EXPORT_SIZE)? {
+                Some(d) => key_values(&mut self.cursor(&d)).ok().and_then(|kv| {
+                    kv.into_iter()
+                        .find(|(k, _)| k == "CustomSizeType")?
+                        .1
+                        .first()?
+                        .parse()
+                        .ok()
+                }),
+                None => None,
+            },
         })
     }
 
@@ -778,7 +821,8 @@ impl<'a> Reader<'a> {
     }
 
     /// Text wrap of a page item or graphic, from chunk 0x3703: u32 mode,
-    /// u32 contour path object, four f64 offsets, u32 flags.
+    /// u32 contour path object, four f64 offsets, u16 master page flag,
+    /// u16 side.
     pub(super) fn text_wrap(&self, uid: u32) -> Result<Option<TextWrap>, Error> {
         self.wrap_chunk(uid, chunk::TEXT_WRAP)
     }
@@ -795,7 +839,8 @@ impl<'a> Reader<'a> {
         let mode = c.u32()?;
         c.skip(4)?;
         let offsets = [c.f64()?, c.f64()?, c.f64()?, c.f64()?];
-        let flags = c.u32()?;
+        let master_flag = c.u16()?;
+        let side = c.u16()?;
         if !matches!(
             mode,
             wrap_mode::NONE | wrap_mode::JUMP_OBJECT | wrap_mode::BOUNDING_BOX | wrap_mode::CONTOUR
@@ -807,7 +852,8 @@ impl<'a> Reader<'a> {
         Ok(Some(TextWrap {
             mode,
             offsets,
-            flags,
+            master_flag,
+            side,
         }))
     }
 
@@ -1207,7 +1253,9 @@ impl<'a> Reader<'a> {
             Some((link, data)) => (Some(link), data),
             None => {
                 let id = match kind {
-                    GraphicKind::Image => Some(chunk::IMAGE_DATA),
+                    // EPS graphics name their data as images do
+                    // (objects.md, embedded graphics).
+                    GraphicKind::Image | GraphicKind::Eps => Some(chunk::IMAGE_DATA),
                     GraphicKind::Pdf => Some(chunk::PDF_DATA),
                     _ => None,
                 };
@@ -1778,5 +1826,32 @@ mod eps_text_tests {
         assert_eq!(&t[72..74], &[0, 1]);
         assert_eq!(t[74 + 100 - 82], 0x55);
         assert!(eps_text_data(enc, &d[..d.len() - 1]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::object::Encoding;
+
+    #[test]
+    fn reads_export_size_keys() {
+        let enc = Encoding::default();
+        let mut d = enc.u32_bytes(2).to_vec();
+        for (key, values) in [("CustomSizeType", &["2"][..]), ("CustomSizeValue", &[][..])] {
+            d.extend(enc.u32_bytes(key.len() as u32));
+            d.extend(enc.u16_bytes(0x4000 | key.len() as u16));
+            d.extend(key.bytes());
+            d.extend([0, 2, 3]);
+            d.extend(enc.u16_bytes(values.len() as u16));
+            for v in values {
+                d.extend([v.len() as u8, 0x40]);
+                d.extend(v.bytes());
+            }
+        }
+        let kv = key_values(&mut enc.cursor(&d)).unwrap();
+        assert_eq!(kv[0], ("CustomSizeType".to_string(), vec!["2".to_string()]));
+        assert!(kv[1].1.is_empty());
+        assert!(key_values(&mut enc.cursor(&d[..d.len() - 3])).is_err());
     }
 }

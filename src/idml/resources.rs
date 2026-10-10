@@ -136,21 +136,34 @@ impl Writer<'_> {
                 ("Space", c.space_name().into()),
                 ("ColorValue", nums(&c.idml_values())),
                 ("ColorOverride", c.override_name().into()),
-                ("Name", name),
-                ("ColorEditable", c.editable.to_string()),
-                ("ColorRemovable", c.removable.to_string()),
-                ("Visible", c.visible.to_string()),
+            ]);
+            // Values that follow the model (idml-values.md, keyed values).
+            let keyed: Vec<(String, String)> = c
+                .model_name()
+                .and_then(|m| values::keyed("Color", m))
+                .map(|n| n.attrs.into_iter().filter(|(k, _)| k != "Model").collect())
+                .unwrap_or_default();
+            let mut attrs: Vec<(String, String)> = attrs
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .chain(keyed)
+                .collect();
+            attrs.extend([
+                ("Name".to_string(), name),
+                ("ColorEditable".to_string(), c.editable.to_string()),
+                ("ColorRemovable".to_string(), c.removable.to_string()),
+                ("Visible".to_string(), c.visible.to_string()),
             ]);
             if let Some((space, values)) = c.idml_alternate() {
-                attrs.push(("AlternateSpace", space.into()));
-                attrs.push(("AlternateColorValue", nums(&values)));
+                attrs.push(("AlternateSpace".to_string(), space.into()));
+                attrs.push(("AlternateColorValue".to_string(), nums(&values)));
             }
             if let Some(id) = c.creator {
-                attrs.push(("SwatchCreatorID", id.to_string()));
+                attrs.push(("SwatchCreatorID".to_string(), id.to_string()));
             }
             if self.doc.version.major >= 16 {
                 let hsb = c.space == crate::model::color::Space::Hsb;
-                attrs.push(("ConvertToHsb", hsb.to_string()));
+                attrs.push(("ConvertToHsb".to_string(), hsb.to_string()));
             }
             x.start("Color");
             for (k, v) in &attrs {
@@ -404,6 +417,27 @@ impl Writer<'_> {
                     ("Name", builtin_key(name)),
                 ],
             );
+        }
+        // Custom stroke styles, in UID order (attributes.md, custom
+        // stroke styles).
+        for st in &self.doc.stroke_styles {
+            if st.dashed {
+                x.start("DashedStrokeStyle")
+                    .attr("Self", custom_stroke_ref(st))
+                    .attr("DashArray", nums(&st.values));
+                if st.corner == 3 {
+                    x.attr("StrokeCornerAdjustment", "DashesAndGaps");
+                }
+                if let Some(cap) = end_cap(st.cap) {
+                    x.attr("EndCap", cap);
+                }
+            } else {
+                let stripes: Vec<f64> = st.values.iter().map(|v| v * 100.0).collect();
+                x.start("StripedStrokeStyle")
+                    .attr("Self", custom_stroke_ref(st))
+                    .attr("StripeArray", nums(&stripes));
+            }
+            x.attr("Name", &st.name).end();
         }
         x.end();
         x.finish()
@@ -775,8 +809,37 @@ impl Writer<'_> {
     /// entries of a document without index options. Both follow the
     /// edition that made the document (preferences.md, index options).
     fn index_title(&self) -> Option<(Option<&'static str>, &'static str)> {
+        // The title follows the edition that saved the document, where
+        // its black name shows it (objects.md, saving edition).
+        let saved = self.saving_edition().and_then(|e| {
+            Some(match e {
+                Edition::English | Edition::German | Edition::French | Edition::Dutch => "Index",
+                Edition::Korean => "색인",
+                Edition::Japanese | Edition::Chinese => "索引",
+                Edition::Italian => "Indice",
+                Edition::Czech => "Rejstřík",
+                Edition::Portuguese => "Índice",
+                Edition::Russian => "Указатель",
+                Edition::Other => return None,
+            })
+        });
+        let edition = match self.edition() {
+            Some(e) => e,
+            None => {
+                let e = self.saving_edition()?;
+                let separator = if e == Edition::Japanese { "、" } else { "; " };
+                return Some((saved, separator));
+            }
+        };
+        let (title, separator) = self.assigned_index_title(edition);
+        Some((saved.or(title), separator))
+    }
+
+    /// The index title and separator by the edition of the assignment
+    /// name (preferences.md, index options).
+    fn assigned_index_title(&self, edition: Edition) -> (Option<&'static str>, &'static str) {
         let japanese_session = self.japanese_session() == Some(true);
-        Some(match self.edition()? {
+        match edition {
             Edition::Japanese => (Some("索引"), "、"),
             Edition::Chinese => (Some("索引"), "; "),
             Edition::Korean => (Some("색인"), "; "),
@@ -785,8 +848,8 @@ impl Writer<'_> {
                 (Some("Index"), "; ")
             }
             Edition::Italian => (Some("Indice"), "; "),
-            Edition::Other => (None, "; "),
-        })
+            _ => (None, "; "),
+        }
     }
 
     pub(super) fn preferences(&self) -> String {
@@ -938,7 +1001,12 @@ impl Writer<'_> {
         }
         if let Some(a) = &prefs.item_defaults {
             let i = ours_of(&mut ours, "PageItemDefault");
-            let values = self.item_default_values(a);
+            let mut values = self.item_default_values(a);
+            let stroke = values
+                .iter()
+                .find(|(k, _)| *k == "StrokeType")
+                .map(|(_, v)| v.clone());
+            values.retain(|(k, _)| dash_written(k, stroke.as_deref()));
             ours[i]
                 .attrs
                 .extend(values.into_iter().map(|(k, v)| (k.to_string(), v)));

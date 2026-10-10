@@ -36,6 +36,9 @@ pub mod class {
     pub const FONT_FAMILY: u32 = 0x3E03;
     pub const LANGUAGE: u32 = 0x2D07;
     pub const TOC_STYLE: u32 = 0x11605;
+    /// Custom stroke styles (`attributes.md`, custom stroke styles).
+    pub const DASHED_STROKE_STYLE: u32 = 0x5A43;
+    pub const STRIPED_STROKE_STYLE: u32 = 0xB016;
     pub const NAMED_GRID: u32 = 0xCD12;
     pub const ASSIGNMENT: u32 = 0x1BE01;
     pub const SMOOTH_SHADE: u32 = 0x5533;
@@ -176,6 +179,8 @@ pub mod chunk {
     pub const GROUP_TRANSFORM: u32 = 0x40D;
     /// u16 1 for a frame meant for a graphic.
     pub const ITEM_CONTENT: u32 = 0x1623;
+    /// The item's layer position before it was grouped: i32 at 4.
+    pub const ITEM_GROUPING_LAYER: u32 = 0x324;
     pub const ITEM_PATHS: u32 = 0x162B;
     pub const ITEM_HIERARCHY: u32 = 0x15B;
     /// u32: 1 when a master page item cannot be overridden.
@@ -193,6 +198,13 @@ pub mod chunk {
     pub const STORY_OPTICAL_MARGIN: u32 = 0x2EE;
     /// The TOC style of a table of contents.
     pub const TOC_STYLE_OF: u32 = 0x11613;
+    /// Name of a dashed and of a striped stroke style: flag byte, string.
+    pub const DASHED_STROKE_NAME: u32 = 0x5A48;
+    pub const STRIPED_STROKE_NAME: u32 = 0xB023;
+    /// Dashed stroke style: u32 count, f64 lengths, u16 corner, u32 cap.
+    pub const DASHED_STROKE: u32 = 0x5A4F;
+    /// Striped stroke style: u32 count, pairs of f64 (start, width).
+    pub const STRIPED_STROKE: u32 = 0xB002;
     pub const TOC_STYLE: u32 = 0x11605;
     pub const NAMED_GRID: u32 = 0xCD28;
     /// The named grid of a story or object style: u16 1, then the named
@@ -242,6 +254,8 @@ pub mod chunk {
     pub const ITEM_LAYOUT_CONSTRAINTS: u32 = 0x22228;
     /// Export options: alternative text, actual text, tagging.
     pub const ITEM_EXPORT: u32 = 0x1E206;
+    /// Export size settings: a list of keys and string values.
+    pub const ITEM_EXPORT_SIZE: u32 = 0x1E22B;
     pub const ROOT_GROUP_KIND: u32 = 0x28C2;
     pub const SECTION_INFO: u32 = 0x4C02;
     pub const DOCUMENT_PREFERENCES: u32 = 0x533;
@@ -307,6 +321,8 @@ pub mod chunk {
     pub const OBJECT_STYLE_STORY: u32 = 0x285B;
     pub const OBJECT_STYLE_DIRECTION: u32 = 0x50F28;
     pub const OBJECT_STYLE_WRAP: u32 = 0x3776;
+    /// Flex layout settings (78 bytes): six f64 at 30, paddings and gaps.
+    pub const OBJECT_STYLE_FLEX: u32 = 0x1E244;
     pub const OBJECT_STYLE_CONTOUR: u32 = 0x3777;
     pub const OBJECT_STYLE_ENABLED: u32 = 0x1B92E;
     pub const OBJECT_STYLE_PARAGRAPH_STYLE: u32 = 0x1B946;

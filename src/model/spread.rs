@@ -151,7 +151,8 @@ pub struct Spread {
     pub guides: Vec<Guide>,
     /// Chunk 0x1A8: `None` without it.
     pub shuffle: Option<u16>,
-    /// The two resolutions in chunk 0x10833, when it is there.
+    /// The line art and text and the gradient and mesh resolutions in
+    /// chunk 0x10833, when it is there.
     pub flattener_resolution: Option<[f64; 2]>,
     /// Master spreads: chunk 0x140D.
     pub show_master_items: Option<u16>,
@@ -468,8 +469,9 @@ impl<'a> Reader<'a> {
             }
         }
         let flattener_resolution = match self.chunk(uid, chunk::SPREAD_FLATTENER)? {
-            Some(d) => match (self.enc().f64_at(&d, 20), self.enc().f64_at(&d, 28)) {
-                (Some(a), Some(b)) => Some([a, b]),
+            // f64 at 28 line art and text, at 20 gradient and mesh.
+            Some(d) => match (self.enc().f64_at(&d, 28), self.enc().f64_at(&d, 20)) {
+                (Some(line_art), Some(gradient)) => Some([line_art, gradient]),
                 _ => None,
             },
             None => None,

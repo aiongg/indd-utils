@@ -90,7 +90,7 @@ group cycles, table sizes larger than their cell data.
 | `color.rs`, `font.rs`, `cjk.rs` | swatches and inks; font families; composite fonts and kinsoku and mojikumi tables |
 | `hyperlink.rs`, `xref.rs`, `variable.rs`, `xml.rs` | hyperlinks and bookmarks; cross-reference formats; text variables; the XML structure |
 | `settings.rs`, `prefs.rs` | document-level lists and preferences |
-| `xmp.rs` | dates of the XMP packet (time zone offsets for link times) |
+| `xmp.rs` | dates of the XMP packet (time zone offsets for link times) and its black swatch name (the saving edition) |
 | `strings.rs` | searches for names at positions that are not decoded |
 
 ### `src/idml/`

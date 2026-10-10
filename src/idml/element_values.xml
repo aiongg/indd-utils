@@ -175,6 +175,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 			<HTMLExportPreference BulletExportOption="UnorderedList" NumberedListExportOption="OrderedList" ImageExportOption="OptimizedImage" ImageExportResolution="Ppi150" CustomImageSizeOption="SizeFixed" ImageAlignment="AlignCenter" ImageSpaceBefore="0" ImageSpaceAfter="0" ImageConversion="Automatic" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="false" JPEGOptionsQuality="High" JPEGOptionsFormat="ProgressiveEncoding" Level="5" IgnoreObjectConversionSettings="false" ServerPath="" ImageExtension=".jpg" LeftMargin="0" RightMargin="0" TopMargin="0" BottomMargin="0" MarginUnit="CssPixel" IncludeCSSDefinition="true" CSSExportOption="EmbeddedCSS" />
 		</Preferences>
 	</Values>
+	<Values MinimumVersion="8" MaximumVersion="8">
+		<Section Pagination="AutoPaginate" PaginationMaster="n" />
+	</Values>
 	<Values MinimumVersion="8" MaximumVersion="13">
 		<Button AppliedObjectStyle="ObjectStyle/$ID/[None]" />
 		<MultiStateObject InitiallyHidden="false" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="" OverriddenPageItemProps="" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" GradientFillStart="0 0" GradientFillLength="0" GradientFillAngle="0" GradientStrokeStart="0 0" GradientStrokeLength="0" GradientStrokeAngle="0" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" AppliedObjectStyle="ObjectStyle/$ID/[None]" Visible="true" />
@@ -496,6 +499,9 @@ tools/element_values.py; evidence in docs/format/idml-values.md.
 		<Language Name="$ID/sr_RS-Cyr" SingleQuotes="''" DoubleQuotes='""' />
 		<Language Name="$ID/ta_IN" SingleQuotes="''" DoubleQuotes='""' />
 		<Language Name="$ID/te_IN" SingleQuotes="''" DoubleQuotes='""' />
+	</Keyed>
+	<Keyed Tag="Color" Key="Model">
+		<Color Model="Spot" SpotInkAliasSpotColorReference="n" />
 	</Keyed>
 	<Keyed Tag="PastedSmoothShade" Key="ContentsType">
 		<PastedSmoothShade ContentsType="AxialShade" ContentsVersion="0" SpotColorList="" ContentsEncoding="Ascii64Encoding" Name="$ID/" ColorEditable="true" ColorRemovable="true" Visible="false" SwatchCreatorID="7937" />

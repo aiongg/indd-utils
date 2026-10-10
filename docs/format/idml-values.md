@@ -113,6 +113,16 @@ next to it are read from the INDD (`preferences.md`).
 `Name` (the package's file name) is on the `Document` element from DOM
 13 only: 321 of 321 trustworthy references from DOM 13, 0 of 168 before.
 
+From DOM 20.0 every `Document` element has `AppliedMathMLRgbColor="0 0
+0"` and `TintValue="100"`, and a `Properties` child
+`AppliedMathMLSwatch` (type `enumeration`) `Nothing`, after `Label`;
+from DOM 20.4 also `PreferMathMLInEpubExport="false"` (all 99 and 72
+distinct corpus IDML files of those versions; none before). The
+converter writes them by the DOM version it writes, which the per-major
+blocks cannot express for 20.4. `AppliedMathMLFontSize` is `10` in 96
+of these files and `16` in 3 of DOM 20.2, with no field found, so it is
+left out.
+
 ## Default numbering list
 
 The root paragraph style refers to `NumberingList/$ID/[Default]`. Every
@@ -361,8 +371,16 @@ all of them have; the converter writes it in the order of the IDML files.
 | `WatermarkPreference` | 7 | 11 | the font family, style and colour |
 | `TaggedPDFPreference` | 8 | (element only) | `StructureOrder` |
 | `AdjustLayoutPreference` | 14 | 4 | `EnableAdjustLayout`, `EnableAutoAdjustMargins`, `AllowFontSizeAndLeadingAdjustment` |
-| `HTMLFXLExportPreference` | 11 | both | |
+| `HTMLFXLExportPreference` | 10.1 | both | |
 | `PublishExportPreference` | 11 | 7 | `ImageExportResolution`, `PublishPdf`, `CoverPage`, `PublishDescription`, `PublishFileName`, `PublishPageRange` |
+
+`HTMLFXLExportPreference` (`EpubPageRange=""`,
+`EpubPageRangeFormat="ExportAllPages"`) is in every IDML from DOM 10.1
+(all 1,556 distinct corpus files of DOM 10.1 and later) and in none of
+DOM 10.0 (10 files) or earlier. The converter writes it by the DOM
+version it writes (10.1 for files of version 10 last saved by 10.1 or
+later). Over the trustworthy pairs it reproduces the element in 1,139
+of 1,139 documents.
 
 The values left out here are read from the INDD or follow the rules of
 `preferences.md` (adjust layout; EPUB, HTML and Publish Online export;
@@ -423,6 +441,18 @@ in 2), Korean (457 and 7) and Hebrew (74 and 1, `‘’` and `“”`). No
 stored value tells the exceptions apart; they follow the dictionary
 preferences of the exporting computer.
 
+These exceptions follow no stored value, so the converter writes no
+quotes for Japanese, Korean and Hebrew languages without the chunk
+(writing the common value would be a majority rule).
+
+Colours are keyed by `Model`: every spot colour has
+`SpotInkAliasSpotColorReference="n"` (5,182 of 5,182 in the 1,689
+distinct corpus IDML files outside the privately held samples, DOM 8 to
+21), and no process (46,211) or registration (1,685) colour has the
+attribute. No ink of the corpus has an alias. The converter writes it
+after `ColorOverride` on spot colours: 5,090 of 5,090 values of the
+trustworthy pairs.
+
 Pasted smooth shades are keyed the same way by `ContentsType`: every
 `ConstantShade` (and every `AxialShade`) has `ContentsVersion="0"`,
 `SpotColorList=""`, `ContentsEncoding="Ascii64Encoding"`,
@@ -456,6 +486,15 @@ IDML files) all have `KeyboardShortcut="0 0"` (cell styles from DOM 8,
 with 44 files) and `ExtendedKeyboardShortcut="0 0 0"` from DOM 15; the
 converter writes them. `Imported` and `StyleUniqueId` come from the INDD
 (`objects.md`, styles).
+
+### Sections
+
+Every `Section` of DOM 8 (96 sections in the corpus IDML files) has
+`Pagination="AutoPaginate"` and `PaginationMaster="n"`, after
+`AlternateLayout`; no section of another DOM version has them. The tool
+keeps them for DOM 8 (`Values` block of version 8 to 8), and the
+converter writes them there: 85 of 85 values each in the trustworthy
+pairs.
 
 ### Swatches
 
@@ -552,11 +591,8 @@ values on those items.
 ## Column direction of pages
 
 The `ColumnDirection` of pages is read from the INDD (`objects.md`,
-page settings). The `MarginPreference` and `DocumentPreference` of the
-preferences keep the observed `Horizontal` of `preference_values.xml`;
-8 of the 489 trustworthy pairs have `Vertical` there, and no field was
-found for it (chunk 0x555 does not separate them, and 4 of the 8 lack
-it).
+page settings), and that of `MarginPreference` and `DocumentPreference`
+too (`preferences.md`, margins and columns of new pages).
 
 ## Font platform name
 
@@ -659,8 +695,5 @@ Some of these values are probably stored in the INDD and may differ in a
 document outside the corpus; none of them is read from the INDD yet. A
 sample typeset vertically shows this: two 2-byte fields of the
 preferences object (chunks 0xCD14 and 0xCD1C) are 1 there and 0 in all
-250 distinct little-endian public files, and the values most likely to
-depend on vertical layout (`StoryPreference` `StoryOrientation`,
-`DocumentPreference` and `MarginPreference` `ColumnDirection`) are
-written as observed. The print PDF cannot show which preference each
+250 distinct little-endian public files. The print PDF cannot show which preference each
 field holds, so they are not mapped.

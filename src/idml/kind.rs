@@ -72,6 +72,12 @@ pub(super) enum Kind {
     EnumString(&'static [(u32, &'static str)]),
     /// A string.
     String,
+    /// A glyph name, written as `$ID/<name>`; left out when empty.
+    GlyphName,
+    /// Dash and gap lengths, separated by spaces.
+    Dashes,
+    /// The corner adjustment of a dash list: 3 `DashesAndGaps`.
+    DashCorner,
     /// A string, or the empty string for `Nothing`.
     StringOrNothing,
     /// The empty string, written as `Nothing`; other strings are left out.
@@ -112,12 +118,18 @@ impl Kind {
 
 /// Built-in kinsoku and mojikumi tables observed in the corpus
 /// (`docs/format/attributes.md`): table name and IDML enumeration value.
-const BUILTIN_CJK_TABLES: [(&str, &str); 6] = [
+const BUILTIN_CJK_TABLES: [(&str, &str); 9] = [
     ("kHardKinsokuName", "HardKinsoku"),
     ("kSoftKinsokuName", "SoftKinsoku"),
     ("kKoreanKinsokuName", "KoreanKinsoku"),
     ("kSimpChineseKinsokuName", "SimplifiedChineseKinsoku"),
+    ("kTradChineseKinsokuName", "TraditionalChineseKinsoku"),
     ("kMojikumiDefaultName1", "LineEndAllOneHalfEmEnum"),
+    (
+        "kMojikumiDefaultName2",
+        "OneEmIndentLineEndUkeOneHalfEmEnum",
+    ),
+    ("kMojikumiDefaultName15", "TradChineseDefault"),
     ("kMojikumiDefaultName16", "SimpChineseDefault"),
 ];
 
@@ -193,6 +205,14 @@ impl Writer<'_> {
                     .iter()
                     .find(|(k, _)| k == code)
                     .map(|(_, n)| text("object", format!("{prefix}{n}"))),
+                // A custom stroke style, by its UID (attributes.md, custom
+                // stroke styles).
+                Value::RefOrCode(r, CUSTOM_STROKE_TYPE) if map == STROKE_TYPES => self
+                    .doc
+                    .stroke_styles
+                    .iter()
+                    .find(|s| s.uid == *r)
+                    .map(|s| text("object", custom_stroke_ref(s))),
                 _ => None,
             },
             Kind::StrokeType => match *v {
@@ -242,6 +262,20 @@ impl Writer<'_> {
                     .map(|f| text("string", self.family_names(f).0)),
             },
             Kind::String => v.as_string().map(|s| text("string", s)),
+            Kind::Dashes => match v {
+                Value::Dashes(d, _) => Some(text("unit", nums(d))),
+                _ => None,
+            },
+            Kind::DashCorner => match v {
+                Value::Dashes(_, 3) => Some(text("enumeration", "DashesAndGaps".into())),
+                _ => None,
+            },
+            Kind::GlyphName => match v {
+                Value::Glyph(name) if !name.is_empty() => {
+                    Some(text("string", format!("$ID/{name}")))
+                }
+                _ => None,
+            },
             Kind::StringOrNothing => v.as_string().map(|s| {
                 if s.is_empty() {
                     text("enumeration", "Nothing".into())

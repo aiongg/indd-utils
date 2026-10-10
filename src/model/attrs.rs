@@ -51,6 +51,11 @@ pub enum Value {
         kind: u32,
         value: u32,
     },
+    /// Dash and gap lengths of a stroke and the corner adjustment code
+    /// (page item attribute 0x5A35).
+    Dashes(Vec<f64>, u16),
+    /// A custom glyph: its name (the glyph ID that follows is not used).
+    Glyph(String),
     /// Opacity gradient stops: location (0–1), absolute position of the
     /// midpoint to the next stop (0–1), opacity in percent.
     Stops(Vec<[f64; 3]>),
@@ -357,6 +362,8 @@ enum Layout {
     Words,
     /// u32 reference (0 for a built-in) and u32 code.
     RefOrCode,
+    /// u16 length, that many bytes of a glyph name, u32 glyph ID.
+    Glyph,
 }
 
 fn text_layout(id: u32) -> Option<Layout> {
@@ -374,6 +381,7 @@ fn text_layout(id: u32) -> Option<Layout> {
         0x1BBA => Layout::GrepStyles,
         0x1BBB => Layout::LineStyles,
         0x1A406 => Layout::BulletChar,
+        0x1B5E => Layout::Glyph,
         // Stroke types of cell edges, table borders, rows and columns
         // (tables.md).
         0xB64D | 0xB64E | 0xB64F | 0xB650 | 0xB655 | 0xB658 | 0xB65B | 0xB65E | 0xB688 | 0xB689
@@ -433,6 +441,16 @@ fn decode_text(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
             (|| Ok::<_, Error>(Value::RefOrCode(c.u32()?, c.u32()?)))().ok()
         }
         Layout::RefOrCode => None,
+        Layout::Glyph => (|| {
+            let n = c.u16().ok()? as usize;
+            let name = c.bytes(n).ok()?.to_vec();
+            c.u32().ok()?;
+            if c.remaining() != 0 {
+                return None;
+            }
+            String::from_utf8(name).ok()
+        })()
+        .map(Value::Glyph),
     };
     value.unwrap_or_else(|| Value::Other(t, data.to_vec()))
 }
@@ -521,8 +539,21 @@ fn style_items(layout: Layout, c: &mut Cursor) -> Option<StyleItems> {
 /// u32 count, then three f64 per stop. See `docs/format/transparency.md`.
 pub const OPACITY_STOPS: [u32; 3] = [0x1EB8C, 0x1EB95, 0x1EB9E];
 
+/// The page item attribute of a stroke's dashes and gaps: 8 bytes (0 in
+/// every sample), u32 count, that many f64, u16 corner adjustment. See
+/// `docs/format/attributes.md`, dashes.
+pub const DASHES: u32 = 0x5A35;
+
 fn decode(enc: Encoding, id: u32, t: u32, data: &[u8]) -> Value {
     let f = |o: usize| enc.f64_at(data, o);
+    if id == DASHES
+        && let Some(n) = enc.u32_at(data, 8).map(|n| n as usize)
+        && data.len().checked_sub(14) == n.checked_mul(8)
+        && let Some(v) = (0..n).map(|i| f(12 + 8 * i)).collect::<Option<Vec<_>>>()
+        && let Some(corner) = enc.u16_at(data, 12 + 8 * n)
+    {
+        return Value::Dashes(v, corner);
+    }
     if OPACITY_STOPS.contains(&id)
         && let Some(n) = enc.u32_at(data, 0).map(|n| n as usize)
         && n > 0
@@ -577,6 +608,35 @@ mod tests {
         d.extend_from_slice(&[0; 6]);
         let a = Attrs::parse(Encoding::default(), &d, List::Item, None).unwrap();
         assert_eq!(a.get(0x6E65), Some(&Value::Double(0.25)));
+    }
+
+    #[test]
+    fn decodes_dashes_and_glyph_names() {
+        let enc = Encoding::default();
+        // 8 bytes, count 2, two f64, corner code 3.
+        let mut d = vec![0; 8];
+        d.extend_from_slice(&2u32.to_le_bytes());
+        d.extend_from_slice(&4.0f64.to_le_bytes());
+        d.extend_from_slice(&2.0f64.to_le_bytes());
+        d.extend_from_slice(&3u16.to_le_bytes());
+        assert_eq!(
+            decode(enc, DASHES, 0x5A36, &d),
+            Value::Dashes(vec![4.0, 2.0], 3)
+        );
+        // A count that does not fit the length is not a dash list.
+        d[8] = 3;
+        assert!(matches!(decode(enc, DASHES, 0x5A36, &d), Value::Other(..)));
+        let mut g = 5u16.to_le_bytes().to_vec();
+        g.extend_from_slice(b"a.alt");
+        g.extend_from_slice(&7u32.to_le_bytes());
+        assert_eq!(
+            decode_text(enc, 0x1B5E, 0x1B26, &g),
+            Value::Glyph("a.alt".into())
+        );
+        assert!(matches!(
+            decode_text(enc, 0x1B5E, 0x1B26, &g[..6]),
+            Value::Other(..)
+        ));
     }
 
     #[test]

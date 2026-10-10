@@ -219,9 +219,10 @@ fn convert_with(
         db.set_recorder(r);
     }
     let mut doc = model::Reader::new(&db).document(container.header.version)?;
-    // A damaged XMP packet only loses the time zone of link times.
+    // A damaged XMP packet only loses the time zone of link times and
+    // the black name.
     if let Ok(Some(packet)) = container.xmp() {
-        doc.xmp_dates = model::xmp::dates(packet);
+        doc.read_xmp(packet);
     }
     let mut warnings = doc.warnings.clone();
     warnings.extend(idml::write(&doc, name, out)?);

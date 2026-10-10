@@ -114,6 +114,43 @@ pub struct TocStyle {
     /// make anchor and at 6 remove forced line breaks, where the chunk
     /// has them.
     pub flags: Vec<u16>,
+    /// The entries (`objects.md`, table of contents styles); empty where
+    /// they do not parse.
+    pub entries: Vec<TocEntry>,
+}
+
+/// A custom stroke style. See `docs/format/attributes.md`, custom stroke
+/// styles.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrokeStyle {
+    pub uid: u32,
+    /// Dashed (class 0x5A43) or striped (class 0xB016).
+    pub dashed: bool,
+    pub name: String,
+    /// Dashed: dash and gap lengths in points. Striped: start and width of
+    /// each stripe, as fractions of the stroke weight.
+    pub values: Vec<f64>,
+    /// Dashed: corner adjustment code and end cap code.
+    pub corner: u16,
+    pub cap: u32,
+}
+
+/// An entry of a table of contents style: a paragraph style the table
+/// lists and how. See `docs/format/objects.md`, table of contents styles.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TocEntry {
+    /// The paragraph style's name, and whether it is a built-in key.
+    pub name: String,
+    pub builtin: bool,
+    /// Paragraph style UID; 0 for the same style.
+    pub format_style: u32,
+    pub level: u32,
+    /// 0 after the entry, 1 before it, 2 none.
+    pub page_number_position: u16,
+    /// Character style UIDs; 0 for the same style.
+    pub page_number_style: u32,
+    pub separator: String,
+    pub separator_style: u32,
 }
 
 /// A style group: a root group of styles, or a named group in it.
@@ -137,6 +174,9 @@ pub struct ObjectStyle {
     pub fitting: Attrs,
     /// Page item attributes (chunk 0x1B92B): fill, stroke, corners.
     pub attrs: Attrs,
+    /// Flex layout paddings (top, right, bottom, left) and gaps (row,
+    /// column), from chunk 0x1E244; `None` without it.
+    pub flex_spacing: Option<[f64; 6]>,
     /// Transparency attributes (chunk 0x1B92C), the IDs of page items.
     pub transparency: Attrs,
     /// Text frame settings (chunk 0x1B924).
@@ -304,7 +344,7 @@ impl<'a> Reader<'a> {
     }
 
     /// The table of contents styles, in UID order.
-    pub(super) fn toc_styles(&self) -> Vec<TocStyle> {
+    pub(super) fn toc_styles(&self, version: crate::header::Version) -> Vec<TocStyle> {
         let mut out = Vec::new();
         for &(uid, cls) in self.db.classes() {
             if cls != class::TOC_STYLE {
@@ -325,10 +365,25 @@ impl<'a> Reader<'a> {
                 let title = c.string()?;
                 c.flag()?;
                 c.string()?;
+                // Two u16 before version 9, three before 13, four from 13,
+                // then the entries.
+                let count = match version.major {
+                    ..=8 => 2,
+                    9..=12 => 3,
+                    _ => 4,
+                };
                 let mut flags = Vec::new();
-                while flags.len() < 4 && c.remaining() >= 2 {
+                while flags.len() < count && c.remaining() >= 2 {
                     flags.push(c.u16()?);
                 }
+                let entries = if c.remaining() >= 2 {
+                    toc_entries(&mut c).unwrap_or_else(|_| {
+                        self.warn(format!("TOC style {uid}: entries left out"));
+                        Vec::new()
+                    })
+                } else {
+                    Vec::new()
+                };
                 Ok(Some(TocStyle {
                     uid,
                     name,
@@ -338,6 +393,7 @@ impl<'a> Reader<'a> {
                     include_book_documents,
                     create_bookmarks,
                     flags,
+                    entries,
                 }))
             })();
             match read {
@@ -351,7 +407,100 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// The entries of a TOC style chunk after its fields: u16 count, then per
+/// entry the style name (flag byte, string), a document path (flag byte,
+/// string), u32 format style, u32 level, u16 page number position, u32
+/// page number style, u32-counted separator text, u32 separator style,
+/// u16, a u32-counted text and a u16. The chunk must end after them.
+fn toc_entries(c: &mut crate::object::Cursor) -> Result<Vec<TocEntry>, Error> {
+    let n = c.u16()?;
+    let mut out = Vec::new();
+    for _ in 0..n {
+        let builtin = c.flag()? == 1;
+        let name = c.string()?;
+        c.flag()?;
+        c.string()?;
+        let format_style = c.u32()?;
+        let level = c.u32()?;
+        let page_number_position = c.u16()?;
+        let page_number_style = c.u32()?;
+        let len = c.u32()? as usize;
+        let separator = c.segments(len)?;
+        let separator_style = c.u32()?;
+        c.u16()?;
+        let len = c.u32()? as usize;
+        c.segments(len)?;
+        c.u16()?;
+        out.push(TocEntry {
+            name,
+            builtin,
+            format_style,
+            level,
+            page_number_position,
+            page_number_style,
+            separator,
+            separator_style,
+        });
+    }
+    if c.remaining() != 0 {
+        return Err(Error::Corrupt("TOC entries do not fill the chunk".into()));
+    }
+    Ok(out)
+}
+
 impl<'a> Reader<'a> {
+    /// The custom stroke styles, in UID order. A style whose chunks do not
+    /// have the lengths of the documented layout is left out with a
+    /// warning.
+    pub(super) fn stroke_styles(&self) -> Vec<StrokeStyle> {
+        let mut out = Vec::new();
+        for &(uid, cls) in self.db.classes() {
+            let dashed = match cls {
+                class::DASHED_STROKE_STYLE => true,
+                class::STRIPED_STROKE_STYLE => false,
+                _ => continue,
+            };
+            let read = (|| -> Result<Option<StrokeStyle>, Error> {
+                let (name_id, data_id) = if dashed {
+                    (chunk::DASHED_STROKE_NAME, chunk::DASHED_STROKE)
+                } else {
+                    (chunk::STRIPED_STROKE_NAME, chunk::STRIPED_STROKE)
+                };
+                let (Some(n), Some(d)) = (self.chunk(uid, name_id)?, self.chunk(uid, data_id)?)
+                else {
+                    return Ok(None);
+                };
+                let mut c = self.cursor(&n);
+                c.flag()?;
+                let name = c.string()?;
+                let mut c = self.cursor(&d);
+                let count = c.u32()? as usize;
+                let (values, extra) = if dashed { (count, 6) } else { (2 * count, 0) };
+                if values.checked_mul(8).and_then(|v| v.checked_add(4 + extra)) != Some(d.len()) {
+                    return Ok(None);
+                }
+                let values = (0..values)
+                    .map(|_| c.f64())
+                    .collect::<Result<Vec<_>, _>>()?;
+                let (corner, cap) = if dashed { (c.u16()?, c.u32()?) } else { (0, 0) };
+                Ok(Some(StrokeStyle {
+                    uid,
+                    dashed,
+                    name,
+                    values,
+                    corner,
+                    cap,
+                }))
+            })();
+            match read {
+                Ok(Some(s)) => out.push(s),
+                Ok(None) | Err(_) => self.warn(format!("stroke style {uid} left out")),
+            }
+        }
+        out.sort_by_key(|s| s.uid);
+        out
+    }
+
     /// A root style group (the root of paragraph and character, object,
     /// cell or table styles): its kind (chunk 0x28C2) and children.
     pub(super) fn style_root_group(&self, uid: u32) -> Result<StyleGroup, Error> {
@@ -491,6 +640,13 @@ impl<'a> Reader<'a> {
                 _ => None,
             },
             text_wrap: self.wrap_chunk(uid, chunk::OBJECT_STYLE_WRAP)?,
+            flex_spacing: match self.chunk(uid, chunk::OBJECT_STYLE_FLEX)? {
+                Some(d) if d.len() == 78 => {
+                    let f = |i: usize| self.enc().f64_at(&d, 30 + 8 * i);
+                    (|| Some([f(0)?, f(1)?, f(2)?, f(3)?, f(4)?, f(5)?]))()
+                }
+                _ => None,
+            },
             contour_type: u32_chunk(chunk::OBJECT_STYLE_CONTOUR)?,
             enabled: match self.chunk(uid, chunk::OBJECT_STYLE_ENABLED)? {
                 Some(d) => Some(self.cursor(&d).u32_list()?),
@@ -689,6 +845,42 @@ mod tests {
             d.extend(s.bytes());
         }
         d
+    }
+
+    #[test]
+    fn reads_toc_entries() {
+        use crate::database::synthetic::flagged_string;
+        let be = Encoding::new(
+            crate::header::ByteOrder::Big,
+            crate::header::Version { major: 4, minor: 0 },
+        );
+        for enc in [Encoding::default(), be] {
+            let mut d = enc.u16_bytes(1).to_vec();
+            d.extend(flagged_string(enc, 1, "Heading"));
+            d.extend(flagged_string(enc, 2, ""));
+            for v in [0x51u32, 2] {
+                d.extend(enc.u32_bytes(v));
+            }
+            d.extend(enc.u16_bytes(2));
+            d.extend(enc.u32_bytes(0));
+            d.extend(export_string(enc, "\t"));
+            d.extend(enc.u32_bytes(0x60));
+            d.extend(enc.u16_bytes(0));
+            d.extend(export_string(enc, "; "));
+            d.extend(enc.u16_bytes(1));
+            let e = toc_entries(&mut enc.cursor(&d)).unwrap();
+            assert_eq!(e.len(), 1);
+            assert_eq!((e[0].name.as_str(), e[0].builtin), ("Heading", true));
+            assert_eq!((e[0].format_style, e[0].level), (0x51, 2));
+            assert_eq!(e[0].page_number_position, 2);
+            assert_eq!(
+                (e[0].separator.as_str(), e[0].separator_style),
+                ("\t", 0x60)
+            );
+            // Bytes after the entries: not read.
+            d.push(0);
+            assert!(toc_entries(&mut enc.cursor(&d)).is_err());
+        }
     }
 
     #[test]

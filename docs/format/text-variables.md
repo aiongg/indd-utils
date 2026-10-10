@@ -24,7 +24,14 @@ lacks an IDML element. The layout below also holds for all 2,496 class
 | u32 *n*, segments | Name: *n* UTF-16 code units as text segments (`objects.md`) |
 | u32 *n*, segments | Text: the date format of date variables (below) |
 | u32 | Type code |
-| 20 bytes | Settings, mostly not identified (below) |
+| u32 *a*, u32 *b*, u32 *c* | Settings (below) |
+| u32 *n*, segments | `TextBefore` |
+| u32 *n*, segments | `TextAfter` |
+
+The "20 bytes" of the definitions of the earlier pairs are this layout
+with empty texts. The running header and chapter number definitions of
+the trustworthy pairs of the corpus of 2026-10 parse to the end of their
+chunk with it (their settings are all reproduced, below).
 
 **Type codes** (each code with its `VariableType` in every pair):
 
@@ -57,6 +64,20 @@ cross-reference variables start with U+001B, which IDML writes as
 settings is a paragraph style UID. It differs between files, but in all
 135 pairs it is the style that IDML writes as
 `AppliedParagraphStyle="ParagraphStyle/$ID/NormalParagraphStyle"`.
+
+## Settings
+
+- `TextBefore` and `TextAfter` are the two texts; IDML writes U+3000 as
+  `^(`. With them the converter reproduces every `TextBefore` and
+  `TextAfter` of the running header and chapter number settings of the
+  trustworthy pairs (1,287 and 1,227 elements), among them chapter
+  numbers with text before or after the number.
+- Running header (0xCAAA): *b* is the paragraph style; *c* is
+  `SearchStrategy`, 0 `FirstOnPage`, 1 `LastOnPage`; *a* is `ChangeCase`,
+  0 or 0xCAC9 `None`, 0xCAD0 `Sentencecase`. 1,287 of 1,287 values each
+  in the trustworthy pairs.
+- Chapter number (0xCAA9): *a* is `Format`, 0 `Current`; 0x4C15
+  `Arabic` (one definition, in a trustworthy pair).
 
 ## Settings with one value in the corpus
 
@@ -116,6 +137,18 @@ The INDD does not store it: the four pairs' modification date text
 (`October 31, 2023 4:06 PM`) does not occur in the INDD files, either as
 single bytes or as UTF-16. The file name instances (4 of 4) show the
 INDD file name without its extension, as their settings
-(`IncludePath="false"`, `IncludeExtension="false"`) say. The converter
-writes `ResultText` only for file name variables with those settings,
-and leaves it out (it is optional in the schema) for all others.
+(`IncludePath="false"`, `IncludeExtension="false"`) say.
+
+In the corpus of 2026-10 two more kinds of instance show their text:
+
+- A running header on a master page shows `TextBefore`, `<`, the
+  variable's name, `>` and `TextAfter`.
+- A chapter number in the `Current` format shows `TextBefore`, the
+  document's chapter number (`ChapterNumberPreference`) and
+  `TextAfter`.
+
+The converter writes `ResultText` for these and for the file name
+variables above, and leaves it out (it is optional in the schema) for
+all others: page numbers, dates and cross-reference page numbers depend
+on the layout or the export time. Over the trustworthy pairs it
+reproduces 80 of the 280 `ResultText` values, with 1 different.

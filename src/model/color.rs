@@ -169,19 +169,27 @@ impl Tint {
     /// IDML `Name`: the base colour's name and the tint value, with the
     /// black swatch written as `[Black]`.
     pub fn idml_name(&self, base: &Color) -> String {
-        let name = if base.color_override == 2 {
-            format!("[{}]", base.name)
+        if base.color_override == 2 {
+            self.named(&format!("[{}]", base.name))
         } else {
-            base.name.clone()
-        };
-        format!("{name} {}%", crate::idml::num(self.value))
+            self.named(&base.name)
+        }
+    }
+
+    /// The name of this tint of a colour written `base`.
+    pub fn named(&self, base: &str) -> String {
+        format!("{base} {}%", crate::idml::num(self.value))
     }
 
     pub fn reference(&self, base: &Color) -> String {
+        Self::reference_of(&self.idml_name(base))
+    }
+
+    /// The `Tint/…` reference of a tint named `name`.
+    pub fn reference_of(name: &str) -> String {
         format!(
             "Tint/{}",
-            self.idml_name(base)
-                .replace('%', "%25")
+            name.replace('%', "%25")
                 .replace(':', "%3a")
                 .replace('\r', "%0d")
         )

@@ -102,7 +102,11 @@ value of every file without it.
 Without one of the three highlight chunks, IDML has `false` in all but 4
 or 5 files, which have no highlight chunk at all and every highlight on
 in IDML (or are one collection with other values); no stored value
-separates them, so the converter writes these three only from the chunk.
+separates them. The converter writes `false` without the chunk, as for
+the flags above: 1,247, 1,246 and 1,246 of 1,251 values in the
+trustworthy pairs of the corpus after 2026-10 (`HighlightHjViolations`,
+`HighlightCustomSpacing`, `HighlightSubstitutedGlyphs`), where it had
+56, 52 and 52 from the chunk alone. The exceptions are those files.
 `HighlightKeeps` and `HighlightSubstitutedFonts` have no chunk; they are
 left to the value files, which do not have them because they vary.
 
@@ -160,9 +164,10 @@ f64 at 10 `BaselineStart`, f64 at 18 the view threshold as a fraction
 
 Chunk 0x545 (16 files): f64 at 8 `HorizontalGridlineDivision`, u32 at
 16 `HorizontalGridSubdivision`, f64 at 20 `VerticalGridlineDivision`,
-u32 at 28 `VerticalGridSubdivision`; 16 of 16. Of the 638 files without
-it, 627 have 72 and 8 for both directions, which the converter writes;
-11 have other values stored elsewhere.
+u32 at 28 `VerticalGridSubdivision`; 16 of 16. Without the chunk the
+values follow the edition (values of the exporting edition, below):
+20 mm (`56.69291338582678`) and 10 after a last session with code
+0x0101, else 72 and 8.
 
 ## Watermark (`WatermarkPreference` in designmap.xml)
 
@@ -171,7 +176,8 @@ style, each a u32 length in code units followed by text segments, then
 u32 point size and u32 UID of an interface colour (`objects.md`,
 interface colours), written as `WatermarkFontColor`. Family, style and
 size match 621 of 621. The 33 files without the chunk are left with the
-observed values only.
+observed values only. Without the chunk the font follows the language
+of the assignment name (values of the exporting edition, below).
 
 ## Text defaults (`TextDefault`)
 
@@ -268,9 +274,20 @@ trustworthy pairs.
 Chunk 0x550: f64 `Left`, `Top`, `Right`, `Bottom` at 0, 8, 16, 24 (528
 of 528 files). The 126 files without it have 36 for all four.
 
-Chunk 0x555: u32 `ColumnCount` at 0, f64 `ColumnGutter` at 4 (119 of
-119). Without it, `ColumnCount` is 1 (535 of 535) and `ColumnGutter` 12
-(526 of 535; 9 files have another gutter stored elsewhere).
+Chunk 0x555 (24 bytes): u32 `ColumnCount` at 0, f64 `ColumnGutter` at 4
+(119 of 119), u16 at 12 the column direction: 0 `Horizontal`, 1
+`Vertical`. Without it, `ColumnCount` is 1 (535 of 535) and
+`ColumnGutter` follows the edition (values of the exporting edition,
+below).
+
+**Column direction.** `DocumentPreference` and `MarginPreference`
+`ColumnDirection` take the u16 at 12; without the chunk, they equal the
+`StoryOrientation` of the story settings (chunk 0x280, byte 116). With
+both rules the converter reproduces 1,249 of 1,251 values of each in
+the trustworthy pairs of the corpus after 2026-10 (75 of them
+`Vertical`). The 2 others have no chunk, horizontal
+story orientation and horizontal master pages, but `Vertical` in IDML;
+no field was found for them.
 
 ## Anchored objects (`AnchoredObjectSetting`)
 
@@ -309,10 +326,13 @@ the chunk, for each attribute. The u16 at 0 is 0 in all 197, also in
 documents with vertical stories; the orientation is in chunk 0x280
 (above). Without the chunk, IDML has `OpticalMarginAlignment="false"`
 and `FrameType="TextFrameType"` (1,263 of 1,263), but
-`OpticalMarginSize` is 12 in 1,207 files and 9.2126 (13 Q) in 56. No
-stored value was found that separates the 56 (all have a session of a
-Japanese edition in the save history, but so do 326 files with 12), so
-the converter leaves the size out without the chunk.
+`OpticalMarginSize` is 12 in 1,207 files and 9.2126 (13 Q) in 56. The
+text size unit separates them: without the chunk IDML has
+`OpticalMarginSize="9.2125984251969"` (13 Q, written with these digits)
+when `ViewPreference` `TextSizeMeasurementUnits` is `Q` (chunk 0x1202,
+above), and `12` otherwise. The converter writes the size by this rule:
+1,251 of 1,251 values in the trustworthy pairs of the corpus after
+2026-10 (1,079 of them without the chunk).
 
 ## Text wrap of new page items (`TextWrapPreference`)
 
@@ -475,7 +495,7 @@ IDML ends the base64 text with a line feed when its last line is full
 | | u16 at D+30 | `BitmapResolution` |
 | | u8 at D+42 | `FontDownloading`: 0 `None`, 1 `Complete`, 2 `Subset` |
 | | u8 at D+46 | `DownloadPPDFonts` |
-| String | | `MarkType` (enumeration): built-in empty `Default`, built-in `kJMarksWithCircle` `JMarkWithCircle` |
+| String | | `MarkType` (enumeration): built-in empty `Default`, built-in `kJMarksWithCircle` `JMarkWithCircle` after a last session with code 0x0101, else `Default` (values of the exporting edition, below) |
 | E (72 bytes) | u8 at E+0 | `MarkLineWeight`: 1 `P25pt`, 2 `P50pt`, 4 `P07mm`, 5 `P10mm` |
 | | f64 at E+4 | `MarkOffset` |
 | | u8 at E+12, 14, 16, 18, 20 | `CropMarks`, `PageInformationMarks`, `ColorBars`, `RegistrationMarks`, `BleedMarks` |
@@ -523,7 +543,8 @@ Evidence: each attribute above was compared over the 489 trustworthy
 pairs for both elements; every one matches in all 489, except
 `PreserveColorNumbers` (487, the two `CompositeGray` documents) and
 `MarkType` (488: one DOM 16.1 document stores `kJMarksWithCircle` and
-its IDML has `Default`). Over all 654 pairs, the only further misses are
+its IDML has `Default`; in the corpus of 2026-10 every document with
+code 0x0100 that stores it has `Default`, 140 and 175 of each element). Over all 654 pairs, the only further misses are
 `PPDFile` of two stale booklet pairs (a built-in path written without
 `$ID/`). The paper rectangles are written as IDML writes them: with the
 digits of the shortest form that reads back, the last rounded half to
@@ -749,6 +770,13 @@ The version boundaries are those of the INDD header: no IDML of an
 earlier version has these attributes, every IDML from that version on
 has them.
 
+`EPubExportPreference` `ViewDocumentAfterExport="true"` is in the IDML
+of DOM 8 and 9 only, with the chunk or without it: 107 of the 108
+distinct corpus IDML files of those versions (the other, a DOM 8 file,
+has `false`); one DOM 7 file has it too, and no file of DOM
+10 or later. The chunks read above do not hold it. The converter writes
+`true` for DOM 8 and 9: 97 of 97 values in the trustworthy pairs.
+
 ## Adjust layout (`AdjustLayoutPreference` in designmap.xml)
 
 From DOM 14. Chunk 0x7020 of the preferences object (26 bytes, 83
@@ -775,9 +803,13 @@ the one that saved it last; the counts give them. Over the corpus of
 |---|---|---|
 | `BaselineFrameGridColor` (preference and object styles) where chunk 0x2834 names no colour | `Charcoal` when the last session's language code is 0x0101, else `LightBlue` | 1,112 of 1,209 (1,318 of 1,416); the byte-168 rule matched 892. 96 exceptions are two collections of one Korean publisher (code 0x0101, IDML `LightBlue`) |
 | `DocumentPreference` `ColumnGuideColor` without chunk 0x555 | `Lavender` for code 0x0101, else `Violet` | 822 of 845 (965 of 989); 22 exceptions in the same collections |
+| `GridPreference` gridline divisions and subdivisions without chunk 0x545 | code 0x0101: `56.69291338582678` (20 mm) and `10`; else `72` and `8` | with the documents that have the chunk, 1,152 of 1,251 for each of the four values (915 with 72 and 8 for every document); 96 of the 99 exceptions are the same two collections, 3 are other documents (one with code 0x0101 and 72, one with another code and 20 mm, one with 28.35) |
+| `MarginPreference` `ColumnGutter` without chunk 0x555 | code 0x0101: `14.173228346456694` (5 mm); else `12` | with the documents that have the chunk, 1,223 of 1,251 (1,021 with 12 for every document); 22 of the 28 exceptions are the two collections, 6 others have 17, 20 or 5 mm with another code |
+| `PrintPreference` and `PrintBookletPrintPreference` `MarkType` stored as `kJMarksWithCircle` | `JMarkWithCircle` for code 0x0101, else `Default` | 1,154 and 1,131 of 1,251 (1,014 and 956 with the stored name alone); the exceptions are 96 documents of the two collections with `Default` in each element, one more for `PrintPreference`, and the booklet settings of 24 documents without chunk 0xAF2 (below) |
+| `WatermarkPreference` `WatermarkFontFamily`, `WatermarkFontStyle` without chunk 0x16344 | by the assignment name: English `Minion Pro` `Regular`, Korean `Adobe Myungjo Std` `M`, traditional Chinese (`未指定的 InCopy 內容`) `Adobe Ming Std` `L`, Japanese `Kozuka Mincho Pro` `R`; other languages none | 1,251 of 1,251 each (57 without the chunk) |
 | `PublishExportPreference` `ImageExportResolution`, `PublishPdf` | by the last session's version: 11.0 `Ppi72` and no `PublishPdf`; 11.1 `Ppi96` and no `PublishPdf`; 11.2 and later `Ppi96` and `PublishPdf="false"` | 1,021 of 1,023 trustworthy pairs from 11.0 (the two exceptions have an IDML of another release than the last session); by the header version 5 more fail, among them 3 files of header 11.4 last saved by 11.0 |
 | `AdjustLayoutPreference` `EnableAdjustLayout` without chunk 0x7020 | `true` when the last session's version string starts with 14.0.0 or 14.0.1, else `false` | 634 of 634 files from version 14 without the chunk (547 trustworthy) |
-| `IndexOptions` `Title` and `BetweenEntriesSeparator` without chunk 0x13010 | by the assignment name: Japanese `索引` and `、`; Chinese `索引` and `; `; Korean `색인` and `; `; English, French, German, Dutch `Index` and `; `; Italian `Indice` and `; `; other languages `; ` and no title; English with a last session of code 0x0101 `; ` and no title | title 1,096 of 1,155 written (59 English documents exported by a Korean or Italian edition), 30 left out; separator 1,183 of 1,185 |
+| `IndexOptions` `Title` and `BetweenEntriesSeparator` without chunk 0x13010 | the title by the saving edition (`objects.md`, saving edition); without a black name, and for the separator, by the assignment name: Japanese `索引` and `、`; Chinese `索引` and `; `; Korean `색인` and `; `; English, French, German, Dutch `Index` and `; `; Italian `Indice` and `; `; other languages `; ` and no title; English with a last session of code 0x0101 `; ` and no title | title 1,250 of 1,251 (by the assignment name 1,096 of 1,155 written, 59 English documents saved by a Korean or Italian edition, 30 left out); separator 1,183 of 1,185 |
 | `LayoutAdjustmentPreference` `SnapZone` without chunk 0x7006 | `0.70866141732283` (0.25 mm) when the horizontal ruler unit is millimetres or centimetres or the assignment name is not English, else `2` | 1,172 of 1,183 (1,358 of 1,377); the exceptions are English documents in picas, points, inches or pixels |
 | `DOMVersion` of every part | by the last session's version (`idml-values.md`, DOM version) | 1,164 of 1,251 |
 | `KeyboardShortcut` of a style with a digit key | by the platform of the last session (`objects.md`, styles) | 3,154 of 3,154 character and 6,927 of 6,928 paragraph styles |

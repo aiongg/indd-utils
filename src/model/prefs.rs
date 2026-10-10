@@ -1191,6 +1191,10 @@ impl Reader<'_> {
             return Ok(Prefs::default());
         };
         let get = |id: u32| self.chunk(uid, id);
+        // The code of the last session of the save history (document UID
+        // 1): 0x0101 for a Japanese or other CJK edition. Values without a
+        // chunk follow it (preferences.md, values of the exporting edition).
+        let cjk = self.last_session(1).map(|(code, _)| code == 0x0101);
         let mut set = |element: &'static str, name: &'static str, value: String| {
             values.push(PrefValue {
                 element,
@@ -1351,7 +1355,9 @@ impl Reader<'_> {
                 set(element, name, v);
             }
         }
-        // Flags whose documents without the chunk do not have one value.
+        // The highlight flags are `false` without their chunk, except in
+        // a few documents that no stored value separates (preferences.md,
+        // flags in their own chunks).
         for (id, element, name) in [
             (
                 id::HIGHLIGHT_HJ_VIOLATIONS,
@@ -1368,6 +1374,13 @@ impl Reader<'_> {
                 "TextPreference",
                 "HighlightSubstitutedGlyphs",
             ),
+        ] {
+            if let Some(v) = flag(id, false)? {
+                set(element, name, v);
+            }
+        }
+        // Flags whose documents without the chunk do not have one value.
+        for (id, element, name) in [
             (
                 id::SNAP_TO_LAYOUT_GRID,
                 "CjkGridPreference",
@@ -1440,6 +1453,21 @@ impl Reader<'_> {
             None => {
                 set("StoryPreference", "OpticalMarginAlignment", "false".into());
                 set("StoryPreference", "FrameType", "TextFrameType".into());
+                // 13 Q where text sizes are in Q, 12 pt otherwise, as
+                // IDML writes them (preferences.md, story settings).
+                let q = get(id::VIEW)?
+                    .filter(|d| d.len() == 56)
+                    .and_then(|d| self.enc().u32_at(&d, 12))
+                    .map(|u| unit(u) == Some("Q"));
+                match q {
+                    Some(true) => set(
+                        "StoryPreference",
+                        "OpticalMarginSize",
+                        "9.2125984251969".into(),
+                    ),
+                    Some(false) => set("StoryPreference", "OpticalMarginSize", "12".into()),
+                    None => {}
+                }
             }
         }
         // Text wrap of new page items: u32 mode, four f64 offsets (left,
@@ -1631,11 +1659,37 @@ impl Reader<'_> {
         let columns = match get(id::COLUMNS)? {
             Some(d) if d.len() >= 12 => Some((self.cursor(&d).u32()?, self.cursor(&d[4..]).f64()?)),
             Some(_) => None,
-            None => Some((1, 12.0)),
+            // 5 mm after a CJK session, 12 pt otherwise.
+            None => Some((
+                1,
+                if cjk == Some(true) {
+                    14.173228346456694
+                } else {
+                    12.0
+                },
+            )),
         };
         if let Some((count, gutter)) = columns {
             set("MarginPreference", "ColumnCount", count.to_string());
             set("MarginPreference", "ColumnGutter", num(gutter));
+        }
+        // Column direction: u16 at 12 of the column chunk; without it,
+        // the story orientation of new frames (preferences.md, columns).
+        let direction = match get(id::COLUMNS)? {
+            Some(d) if d.len() >= 14 => self.enc().u16_at(&d, 12).map(u32::from),
+            Some(_) => None,
+            None => get(id::TEXT)?
+                .and_then(|d| d.get(116).copied())
+                .map(u32::from),
+        };
+        let direction = match direction {
+            Some(0) => Some("Horizontal"),
+            Some(1) => Some("Vertical"),
+            _ => None,
+        };
+        if let Some(dir) = direction {
+            set("DocumentPreference", "ColumnDirection", dir.into());
+            set("MarginPreference", "ColumnDirection", dir.into());
         }
         let anchor = get(id::ANCHOR)?;
 
@@ -1809,6 +1863,19 @@ impl Reader<'_> {
                 if print_prefs(self.enc(), &d, element, &mut v, &mut p, &mut r).is_ok() {
                     for pv in v {
                         set(pv.element, pv.name, pv.value);
+                    }
+                    // Stored Japanese marks are `Default` unless the last
+                    // session was a CJK edition's (preferences.md, print
+                    // settings).
+                    if cjk == Some(false) {
+                        for (_, name, value) in &mut p {
+                            if *name == "MarkType"
+                                && let PrefProp::Text(_, v) = value
+                                && v == "JMarkWithCircle"
+                            {
+                                *v = "Default".into();
+                            }
+                        }
                     }
                     props.extend(p);
                     print_records.extend(r);
@@ -2119,6 +2186,15 @@ impl Reader<'_> {
         // and Publish Online export).
         if major >= 8 {
             let v = (major, version.minor);
+            // Every IDML of DOM 8 and 9 has it (preferences.md, EPUB,
+            // HTML and Publish Online export).
+            if major <= 9 {
+                set(
+                    "EPubExportPreference",
+                    "ViewDocumentAfterExport",
+                    "true".into(),
+                );
+            }
             match get(id::EPUB)? {
                 Some(d) => match epub_export(self.enc(), &d) {
                     Some(e) => {
@@ -2304,6 +2380,8 @@ impl Reader<'_> {
                 (f(8)?, u(16)?, f(20)?, u(28)?)
             }
             Some(_) => (f64::NAN, 0, f64::NAN, 0),
+            // 20 mm and 10 after a CJK session, 72 pt and 8 otherwise.
+            None if cjk == Some(true) => (56.69291338582678, 10, 56.69291338582678, 10),
             None => (72.0, 8, 72.0, 8),
         };
         if !h.is_nan() {

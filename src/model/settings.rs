@@ -374,7 +374,7 @@ impl<'a> Reader<'a> {
     /// name, include flag and header variant of each group, in stored
     /// order. Empty when the chunk does not parse to its end. See
     /// `docs/format/objects.md`, index sort options.
-    pub(super) fn index_groups(&self) -> Vec<(String, bool, u16)> {
+    pub(super) fn index_groups(&self) -> Vec<(String, bool, Option<String>)> {
         let Some(&(uid, _)) = self
             .db
             .classes()
@@ -612,10 +612,13 @@ fn counted_string(c: &mut crate::object::Cursor) -> Result<String, Error> {
 }
 
 /// The groups of chunk 0x1307E (`objects.md`, index sort options): for
-/// each, a flagged name, u8 include, u8, u16 header variant, u16 and its
-/// header variants with their sections. Returns name, include and
-/// variant of each group.
-fn index_groups(c: &mut crate::object::Cursor) -> Result<Vec<(String, bool, u16)>, Error> {
+/// each, a flagged name, u8 include, u8, u16 header variant (an index into
+/// the variant list), u16 and its header variants with their sections.
+/// Returns name, include and the name of the chosen variant (the first
+/// string of its record) of each group.
+fn index_groups(
+    c: &mut crate::object::Cursor,
+) -> Result<Vec<(String, bool, Option<String>)>, Error> {
     let count = c.u32()?;
     let mut out = Vec::new();
     for _ in 0..count {
@@ -625,11 +628,15 @@ fn index_groups(c: &mut crate::object::Cursor) -> Result<Vec<(String, bool, u16)
         c.u8()?;
         let variant = c.u16()?;
         c.u16()?;
-        for _ in 0..c.u32()? {
-            for _ in 0..2 {
-                c.u8()?;
-                c.string()?;
+        let mut chosen = None;
+        for i in 0..c.u32()? {
+            c.u8()?;
+            let variant_name = c.string()?;
+            if i == u32::from(variant) {
+                chosen = Some(variant_name);
             }
+            c.u8()?;
+            c.string()?;
             counted_string(c)?;
             c.skip(2)?;
             for _ in 0..c.u32()? {
@@ -640,7 +647,7 @@ fn index_groups(c: &mut crate::object::Cursor) -> Result<Vec<(String, bool, u16)
                 c.u16()?;
             }
         }
-        out.push((name, include, variant));
+        out.push((name, include, chosen));
     }
     if c.remaining() != 0 {
         return Err(Error::Corrupt(format!("{} bytes left", c.remaining())));

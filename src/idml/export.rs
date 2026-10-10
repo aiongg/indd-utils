@@ -60,16 +60,25 @@ fn text(n: &Name) -> String {
     n.idml()
 }
 
-/// The `ObjectExportOption` of a page item (`style` false) or an object
-/// style, or `None` for versions whose IDML has none: page items before
+/// Whose `ObjectExportOption` is written.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Owner {
+    Item,
+    Group,
+    Style,
+}
+
+/// The `ObjectExportOption` of a page item, a group or an object style, or `None` for versions whose IDML has none: page items before
 /// 8, object styles before 9. `options` are the item's values from chunk
 /// 0x1E206; without them the values of an item without the chunk apply.
 /// Codes not identified leave their attribute out.
 pub(super) fn object_export_option(
     version: Version,
     options: Option<&ExportOptions>,
-    style: bool,
+    size_type: Option<u32>,
+    owner: Owner,
 ) -> Option<Node> {
+    let style = owner == Owner::Style;
     let v = (version.major, version.minor);
     if v < (8, 0) || style && v < (9, 0) {
         return None;
@@ -125,7 +134,17 @@ pub(super) fn object_export_option(
     } else if v >= (10, 1) {
         for (name, value) in [
             ("EpubType", "$ID/"),
-            ("SizeType", "DefaultSize"),
+            (
+                "SizeType",
+                // Chunk 0x1E22B; without it the default (objects.md,
+                // export options).
+                match size_type {
+                    Some(2) => "FixedSize",
+                    Some(3) => "RelativeToTextFlow",
+                    Some(4) => "RelativeToTextSize",
+                    _ => "DefaultSize",
+                },
+            ),
             ("CustomSize", "$ID/"),
             ("PreserveAppearanceFromLayout", "PreserveAppearanceDefault"),
         ] {
@@ -140,7 +159,9 @@ pub(super) fn object_export_option(
         add("EpubAriaLabelSourceType", "AutomaticARIALabel".into());
     }
     if v >= (21, 4) {
-        if !style {
+        // Groups and styles have no generated alternative text
+        // (idml-values.md, export options).
+        if owner == Owner::Item {
             add("AIGeneratedAltText", "false".into());
             add("AltTextGenerationError", "false".into());
         }
@@ -197,22 +218,22 @@ mod tests {
 
     #[test]
     fn writes_attributes_by_version() {
-        assert!(object_export_option(version(7, 5), None, false).is_none());
-        assert!(object_export_option(version(8, 0), None, true).is_none());
-        let n = object_export_option(version(9, 2), None, true).unwrap();
+        assert!(object_export_option(version(7, 5), None, None, Owner::Item).is_none());
+        assert!(object_export_option(version(8, 0), None, None, Owner::Style).is_none());
+        let n = object_export_option(version(9, 2), None, None, Owner::Style).unwrap();
         assert!(names(&n).contains(&"CustomImageConversion"));
         assert_eq!(names(&n).last(), Some(&"UseOriginalImage"));
-        let n = object_export_option(version(10, 0), None, false).unwrap();
+        let n = object_export_option(version(10, 0), None, None, Owner::Item).unwrap();
         assert!(names(&n).contains(&"CustomWidthType"));
         assert!(!names(&n).contains(&"SizeType"));
-        let n = object_export_option(version(10, 1), None, false).unwrap();
+        let n = object_export_option(version(10, 1), None, None, Owner::Item).unwrap();
         assert!(names(&n).contains(&"SizeType"));
         assert!(!names(&n).contains(&"CustomImageConversion"));
         assert!(!names(&n).contains(&"EpubAriaRole"));
-        let n = object_export_option(version(21, 4), None, true).unwrap();
+        let n = object_export_option(version(21, 4), None, None, Owner::Style).unwrap();
         assert!(names(&n).contains(&"AltTextCropSyncRect"));
         assert!(!names(&n).contains(&"AIGeneratedAltText"));
-        let n = object_export_option(version(21, 4), None, false).unwrap();
+        let n = object_export_option(version(21, 4), None, None, Owner::Item).unwrap();
         assert!(names(&n).contains(&"AIGeneratedAltText"));
         assert_eq!(n.attr("CustomAltText"), Some("$ID/"));
         assert_eq!(n.attr("AltTextSourceType"), Some("SourceXMLStructure"));
@@ -230,13 +251,13 @@ mod tests {
             tag_type: 1,
             ..ExportOptions::default()
         };
-        let n = object_export_option(version(20, 5), Some(&o), false).unwrap();
+        let n = object_export_option(version(20, 5), Some(&o), None, Owner::Item).unwrap();
         assert_eq!(n.attr("AltTextSourceType"), Some("SourceDecorativeImage"));
         assert_eq!(n.attr("ActualTextSourceType"), Some("SourceXMPAltText"));
         assert_eq!(n.attr("CustomAltText"), Some("A tree"));
         assert_eq!(n.attr("ApplyTagType"), Some("TagArtifact"));
         let o = ExportOptions { alt_source: 3, ..o };
-        let n = object_export_option(version(20, 5), Some(&o), false).unwrap();
+        let n = object_export_option(version(20, 5), Some(&o), None, Owner::Item).unwrap();
         assert_eq!(n.attr("AltTextSourceType"), None);
     }
 }

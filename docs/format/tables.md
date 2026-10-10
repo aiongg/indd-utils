@@ -226,7 +226,7 @@ files), where every attribute of the table now matches on every cell.
 | 0xB63E | `FillTint` | f64 | 142 (2) |
 | 0xB639 | `OverprintFill` | u16, 0 = false | 153 (1); 6 cell styles |
 | 0xB677 | `VerticalJustification` | 0 `TopAlign`, 1 `CenterAlign`, 2 `BottomAlign`, 3 `JustifyAlign` | 5,361 (21); 383 cells with 0 (1 file); 3 in 1 cell style |
-| 0xB676 | `FirstBaselineOffset` | 0 `LeadingOffset`, 1 `AscentOffset` | 4,445 (3); 2 cell styles |
+| 0xB676 | `FirstBaselineOffset` | 0 `LeadingOffset`, 1 `AscentOffset`, 3 `EmboxHeight` | 4,445 (3); 2 cell styles; code 3: 2,143 cells of the corpus of 2026-10 (`attributes.md`, more codes) |
 | 0xB6E1 | `WritingDirection` | 1 = true | 4,445 (3) |
 | 0xB675 | `RotationAngle` | f64 | 1 (270) |
 | 0xB6DE | `ClipContentToCell` | 0 = false | 664 (5, one value) |

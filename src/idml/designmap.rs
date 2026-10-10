@@ -7,25 +7,20 @@
 
 use super::*;
 
-/// IDML `HeaderType` of an index group by its name and header variant.
-/// See `docs/format/objects.md`, index sort options.
-pub(super) fn index_header_type(group: &str, variant: u16) -> Option<&'static str> {
-    Some(match (group, variant) {
-        ("kIndexGroup_Alphabet", 0) => "BasicLatin",
-        ("kIndexGroup_Alphabet", 3) => "Spanish",
-        ("kIndexGroup_Alphabet", 5) => "Czech",
-        ("kWRIndexGroup_CyrillicAlphabet", 2) => "Russian",
-        ("kIndexGroup_Kana", 0) => "HiraganaAll",
-        ("kIndexGroup_Chinese", 0) => "ChinesePinyin",
-        ("kIndexGroup_Korean", 0) => "KoreanConsonant",
-        (
-            "kIndexGroup_Symbol"
-            | "kIndexGroup_Numeric"
-            | "kWRIndexGroup_GreekAlphabet"
-            | "kWRIndexGroup_ArabicAlphabet"
-            | "kWRIndexGroup_HebrewAlphabet",
-            0,
-        ) => "Nothing",
+/// IDML `HeaderType` of an index group by the name of its header variant;
+/// a variant named like its group has none (objects.md, index sort
+/// options).
+pub(super) fn index_header_type(group: &str, variant: &str) -> Option<&'static str> {
+    Some(match variant {
+        "IDX_Basic" => "BasicLatin",
+        "IDX_Spanish" => "Spanish",
+        "IDX_Czech" => "Czech",
+        "IDX_Russian" => "Russian",
+        "IDX_AllHira" => "HiraganaAll",
+        "IDX_ChinesePinyin" => "ChinesePinyin",
+        "IDX_ChineseStroke" => "ChineseStrokeCount",
+        "IDX_KoreanConsonant" => "KoreanConsonant",
+        v if v == group => "Nothing",
         _ => return None,
     })
 }
@@ -140,6 +135,25 @@ impl Writer<'_> {
                     ("EnableAutoAdjustMargins", "false"),
                 ]
             }
+            // Without chunk 0x16344 the font follows the language of the
+            // assignment name (preferences.md, watermark).
+            "WatermarkPreference" => {
+                let font = match self.doc.assignment_name.as_deref() {
+                    Some("未指定的 InCopy 內容") => Some(("Adobe Ming Std", "L")),
+                    _ => match self.edition() {
+                        Some(Edition::English) => Some(("Minion Pro", "Regular")),
+                        Some(Edition::Korean) => Some(("Adobe Myungjo Std", "M")),
+                        Some(Edition::Japanese) => Some(("Kozuka Mincho Pro", "R")),
+                        _ => None,
+                    },
+                };
+                font.map_or_else(Vec::new, |(family, style)| {
+                    vec![
+                        ("WatermarkFontFamily", family),
+                        ("WatermarkFontStyle", style),
+                    ]
+                })
+            }
             _ => Vec::new(),
         }
     }
@@ -177,12 +191,31 @@ impl Writer<'_> {
         }
         // `false` in every corpus IDML (docs/format/idml-values.md).
         x.attr("AccurateLABSpots", "false");
-        if !doc.label.is_empty() {
-            x.start("Properties").start("Label");
-            for (k, v) in &doc.label {
-                x.empty("KeyValuePair", &[("Key", k.clone()), ("Value", v.clone())]);
+        // The MathML settings every IDML of DOM 20 has, and of 20.4
+        // (idml-values.md, document attributes).
+        let mathml = self.dom_version() >= (20, 0);
+        if mathml {
+            x.attr("AppliedMathMLRgbColor", "0 0 0")
+                .attr("TintValue", "100");
+        }
+        if self.dom_version() >= (20, 4) {
+            x.attr("PreferMathMLInEpubExport", "false");
+        }
+        if !doc.label.is_empty() || mathml {
+            x.start("Properties");
+            if !doc.label.is_empty() {
+                x.start("Label");
+                for (k, v) in &doc.label {
+                    x.empty("KeyValuePair", &[("Key", k.clone()), ("Value", v.clone())]);
+                }
+                x.end();
             }
-            x.end();
+            if mathml {
+                x.start("AppliedMathMLSwatch")
+                    .attr("type", "enumeration")
+                    .text("Nothing")
+                    .end();
+            }
             x.end();
         }
         self.languages(&mut x);
@@ -247,12 +280,19 @@ impl Writer<'_> {
         let singleton = |x: &mut Xml, tag: &str| {
             // Every IDML from 7.5 has the tagged PDF settings, none of 7.0
             // (preferences.md, tagged PDF).
+            // Every IDML from DOM 10.1 has the fixed-layout HTML export
+            // settings, none of 10.0 (idml-values.md, document elements).
             let present = values::present(&format!("Document/{tag}"), major).or_else(|| {
-                (tag == "TaggedPDFPreference" && (major, doc.version.minor) >= (7, 5)).then(|| {
-                    Node {
+                let since = match tag {
+                    "TaggedPDFPreference" => (major, doc.version.minor) >= (7, 5),
+                    "HTMLFXLExportPreference" => self.dom_version() >= (10, 1),
+                    _ => false,
+                };
+                since.then(|| {
+                    values::element(&format!("Document/{tag}"), major).unwrap_or_else(|| Node {
                         tag: tag.to_string(),
                         ..Node::default()
-                    }
+                    })
                 })
             });
             if let Some(n) = present {
@@ -380,6 +420,10 @@ impl Writer<'_> {
                 x.attr("AlternateLayoutLength", layout_lengths[k].to_string())
                     .attr("AlternateLayout", name);
             }
+            // The pagination values of DOM 8 (idml-values.md, sections).
+            if let Some(n) = values::element("Section", doc.version.major) {
+                x.attrs_missing(n.attrs.iter());
+            }
             // IDML gives a start number only to sections that restart
             // numbering.
             if !section.continue_numbering {
@@ -396,11 +440,17 @@ impl Writer<'_> {
             }
             x.end();
         }
-        // Document users. A user with flag 2 is the placeholder for an
-        // unknown user, which IDML names `$ID/Unknown User Name`; the
-        // colours are left out (docs/format/objects.md, document users).
+        // Document users. IDML names `$ID/Unknown User Name` a user whose
+        // name is the saving edition's name for an unknown user; without
+        // the edition, a user with flag 2. The colours are left out
+        // (docs/format/objects.md, document users and saving edition).
+        let unknown = self.saving_edition().map(Edition::unknown_user);
         for (i, (flag, name)) in doc.users.iter().enumerate() {
-            let name = if *flag == 2 {
+            let placeholder = match unknown {
+                Some(names) => names.contains(&name.as_str()),
+                None => *flag == 2,
+            };
+            let name = if placeholder {
                 "$ID/Unknown User Name"
             } else {
                 name.as_str()
@@ -462,7 +512,7 @@ impl Writer<'_> {
                 .attr("Name", builtin_key(name))
                 .attr("Include", include.to_string())
                 .attr("Priority", i.to_string());
-            if let Some(h) = index_header_type(name, *variant) {
+            if let Some(h) = variant.as_deref().and_then(|v| index_header_type(name, v)) {
                 x.attr("HeaderType", h);
             }
             x.end();
@@ -568,8 +618,83 @@ impl Writer<'_> {
             }
             x.attrs_missing(self.observed("TOCStyle").iter());
             x.attrs_missing(values::when_written("TOCStyle", major).iter());
+            let observed = self.observed("TOCStyleEntry");
+            for (i, e) in t.entries.iter().enumerate() {
+                self.toc_entry(x, t.uid, i, e, &observed);
+            }
             x.end();
         }
+    }
+
+    /// An entry of a table of contents style (`objects.md`, table of
+    /// contents styles).
+    fn toc_entry(
+        &self,
+        x: &mut Xml,
+        toc: u32,
+        i: usize,
+        e: &crate::model::TocEntry,
+        observed: &[(String, String)],
+    ) {
+        let name = e.name.replace('\u{E00B}', ":");
+        let name = if e.builtin {
+            format!("$ID/{name}")
+        } else {
+            name
+        };
+        let position = match e.page_number_position {
+            0 => Some("AfterEntry"),
+            1 => Some("BeforeEntry"),
+            2 => Some("None"),
+            _ => None,
+        };
+        x.start("TOCStyleEntry")
+            .attr("Self", format!("u{toc:x}TOCStyleEntry{i:x}"))
+            .attr("Name", name)
+            .attr("Level", e.level.to_string());
+        if let Some(p) = position {
+            x.attr("PageNumberPosition", p);
+        }
+        x.attr("Separator", toc_separator(&e.separator));
+        x.attrs_missing(observed.iter());
+        let style = |uid: u32, paragraph: bool, same: &str| -> Option<(&'static str, String)> {
+            if uid == 0 {
+                return Some(("string", same.to_string()));
+            }
+            self.doc.styles.get(&uid)?;
+            let r = self.style_ref(Some(uid), paragraph);
+            Some(match r.split_once('/') {
+                Some((_, root @ ("$ID/[No paragraph style]" | "$ID/[No character style]"))) => {
+                    ("string", root.to_string())
+                }
+                _ => ("object", r),
+            })
+        };
+        let props: Vec<_> = [
+            (
+                "FormatStyle",
+                style(e.format_style, true, "$ID/kSameStyleWithBracket"),
+            ),
+            (
+                "PageNumberStyle",
+                style(e.page_number_style, false, "$ID/[Same Style]"),
+            ),
+            (
+                "SeparatorStyle",
+                style(e.separator_style, false, "$ID/[Same Style]"),
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(k, v)| v.map(|v| (k, v)))
+        .collect();
+        if !props.is_empty() {
+            x.start("Properties");
+            for (k, (ty, v)) in props {
+                x.start(k).attr("type", ty).text(&v).end();
+            }
+            x.end();
+        }
+        x.end();
     }
 
     /// The document's languages, in UID order. See
@@ -633,10 +758,9 @@ impl Writer<'_> {
 
     /// Colour groups and their swatches. See `docs/format/objects.md`.
     pub(super) fn color_groups(&self, x: &mut Xml) {
-        let v = self.doc.version;
         for (i, g) in self.doc.color_groups.iter().enumerate() {
-            // Named by UID before 11.3 (objects.md, colour groups).
-            let id = if (v.major, v.minor) < (11, 3) {
+            // Named by UID before DOM 11.3 (objects.md, colour groups).
+            let id = if self.dom_version() < (11, 3) {
                 uref(Some(g.uid))
             } else {
                 format!("ColorGroup/{}", self_name(&g.name))
@@ -707,12 +831,41 @@ impl Writer<'_> {
                 .push(("EndnoteMarkerStyle".into(), self.style_ref(None, false)));
             n.attrs
                 .push(("EndnoteTextStyle".into(), self.style_ref(None, true)));
+            // The title and the marker position follow the saving edition
+            // where the black name shows it (objects.md, saving edition).
+            let saved = self.saving_edition();
+            let title = saved.and_then(|e| {
+                Some(match e {
+                    Edition::English => "Endnotes",
+                    Edition::Korean => "미주",
+                    Edition::Japanese => match self.dom_version().0 {
+                        ..=13 => "文末脚注",
+                        19.. => "後注",
+                        _ => return None,
+                    },
+                    Edition::German => "Endnoten",
+                    Edition::French => "Notes de fin",
+                    Edition::Italian => "Note di chiusura",
+                    Edition::Dutch => "Eindnoten",
+                    _ => return None,
+                })
+            });
+            if let Some(t) = title {
+                n.attrs.insert(0, ("EndnoteTitle".into(), t.into()));
+            }
             if let Some(japanese) = self.japanese_session() {
-                let (separator, position) = if japanese {
+                let (separator, mut position) = if japanese {
                     ("\u{3000}", "RubyMarker")
                 } else {
                     ("\t", "SuperscriptMarker")
                 };
+                if let Some(e) = saved.filter(|e| *e != Edition::Other) {
+                    position = if e == Edition::Japanese {
+                        "RubyMarker"
+                    } else {
+                        "SuperscriptMarker"
+                    };
+                }
                 n.attrs
                     .push(("EndnoteSeparatorText".into(), separator.into()));
                 n.children.push(Node {
@@ -1050,10 +1203,21 @@ impl Writer<'_> {
     /// those samples have in IDML.
     pub(super) fn variable_preference(&self, x: &mut Xml, v: &TextVariable) {
         let same = v.as_in_samples;
-        let text = |x: &mut Xml, name: &str| {
-            if same {
+        // The text before and after the value, from the settings
+        // (text-variables.md, settings).
+        let text = |x: &mut Xml, name: &str| match &v.settings {
+            Some(st) => {
+                let t = if name == "TextBefore" {
+                    &st.before
+                } else {
+                    &st.after
+                };
+                x.attr(name, t.replace('\u{3000}', "^("));
+            }
+            None if same => {
                 x.attr(name, "");
             }
+            None => {}
         };
         match v.kind {
             0xCAA1 | 0xCAAB | 0xCAAC => {
@@ -1068,11 +1232,45 @@ impl Writer<'_> {
                 text(x, "TextBefore");
                 text(x, "TextAfter");
                 x.attr("AppliedParagraphStyle", self.style_ref(v.style, true));
-                if same {
-                    x.attr("SearchStrategy", "FirstOnPage")
-                        .attr("ChangeCase", "None")
-                        .attr("DeleteEndPunctuation", "false");
+                if let Some(st) = &v.settings {
+                    match st.c {
+                        0 => {
+                            x.attr("SearchStrategy", "FirstOnPage");
+                        }
+                        1 => {
+                            x.attr("SearchStrategy", "LastOnPage");
+                        }
+                        _ => {}
+                    }
+                    match st.a {
+                        0 | 0xCAC9 => {
+                            x.attr("ChangeCase", "None");
+                        }
+                        0xCAD0 => {
+                            x.attr("ChangeCase", "Sentencecase");
+                        }
+                        _ => {}
+                    }
                 }
+                if same {
+                    x.attr("DeleteEndPunctuation", "false");
+                }
+                x.end();
+            }
+            // Chapter numbers: the format code is the first u32
+            // (text-variables.md, settings).
+            0xCAA9 if v.settings.is_some() => {
+                let format = match v.settings.as_ref().map(|st| st.a) {
+                    Some(0) => Some("Current"),
+                    Some(0x4C15) => Some("Arabic"),
+                    _ => None,
+                };
+                x.start("ChapterNumberVariablePreference");
+                text(x, "TextBefore");
+                if let Some(f) = format {
+                    x.attr("Format", f);
+                }
+                text(x, "TextAfter");
                 x.end();
             }
             _ if !same => {}
@@ -1107,16 +1305,7 @@ impl Writer<'_> {
                     ],
                 );
             }
-            0xCAA9 => {
-                x.empty(
-                    "ChapterNumberVariablePreference",
-                    &[
-                        ("TextBefore", String::new()),
-                        ("Format", "Current".into()),
-                        ("TextAfter", String::new()),
-                    ],
-                );
-            }
+
             0xCAC0 => {
                 x.empty(
                     "CaptionMetadataVariablePreference",
@@ -1131,21 +1320,56 @@ impl Writer<'_> {
         }
     }
 
+    /// Whether a text frame of a master spread shows story `story`.
+    fn on_master(&self, story: u32) -> bool {
+        fn has(items: &[crate::model::PageItem], story: u32) -> bool {
+            items.iter().any(|i| {
+                matches!(i.kind, ItemKind::TextFrame { story: Some(s), .. } if s == story)
+                    || has(&i.children, story)
+            })
+        }
+        self.doc.master_spreads.iter().any(|s| has(&s.items, story))
+    }
+
     /// A text variable instance in place of its U+0018.
-    pub(super) fn variable_instance(&self, x: &mut Xml, v: &Instance) {
+    pub(super) fn variable_instance(&self, x: &mut Xml, v: &Instance, story: u32) {
         let name = variable_name(&v.name);
         x.start("TextVariableInstance")
             .attr("Self", uref(Some(v.uid)))
             .attr("Name", &name);
         // The displayed text is not stored. A file name variable with the
-        // sample settings shows the document's name without extension.
+        // sample settings shows the document's name without extension; a
+        // running header on a master page shows the variable's name, and a
+        // chapter number in the current format the document's number,
+        // each between the text before and after (text-variables.md,
+        // result text).
         let def = self.doc.text_variables.iter().find(|d| d.name == v.name);
-        if let Some(d) = def
-            && d.kind == 0xCAA6
-            && d.as_in_samples
-        {
-            let stem = self.name.strip_suffix(".indd").unwrap_or(&self.name);
-            x.attr("ResultText", stem);
+        let around = |d: &TextVariable, t: &str| {
+            d.settings
+                .as_ref()
+                .map(|s| format!("{}{t}{}", s.before, s.after))
+        };
+        let result = match def {
+            Some(d) if d.kind == 0xCAA6 && d.as_in_samples => Some(
+                self.name
+                    .strip_suffix(".indd")
+                    .unwrap_or(&self.name)
+                    .to_string(),
+            ),
+            Some(d) if d.kind == 0xCAAA && self.on_master(story) => {
+                around(d, &format!("<{}>", d.name))
+            }
+            Some(d) if d.kind == 0xCAA9 && d.settings.as_ref().is_some_and(|s| s.a == 0) => self
+                .doc
+                .prefs
+                .values
+                .iter()
+                .find(|p| p.element == "ChapterNumberPreference" && p.name == "ChapterNumber")
+                .and_then(|p| around(d, &p.value)),
+            _ => None,
+        };
+        if let Some(r) = result {
+            x.attr("ResultText", r);
         }
         x.attr("AssociatedTextVariable", format!("dTextVariablen{name}"));
         x.end();
@@ -1233,4 +1457,22 @@ fn custom_mojikumi(x: &mut Xml, m: &crate::model::cjk::MojikumiSettings) {
     }
     x.end();
     x.end();
+}
+
+/// A TOC entry separator as IDML writes it: `$ID/`, then the text with
+/// tab, U+0008, line feed, em space and em dash as `^t`, `^y`, `^n`, `^m`
+/// and `^_` (`objects.md`, table of contents styles).
+fn toc_separator(s: &str) -> String {
+    let mut out = String::from("$ID/");
+    for ch in s.chars() {
+        match ch {
+            '\t' => out.push_str("^t"),
+            '\u{8}' => out.push_str("^y"),
+            '\n' => out.push_str("^n"),
+            '\u{2003}' => out.push_str("^m"),
+            '\u{2014}' => out.push_str("^_"),
+            c => out.push(c),
+        }
+    }
+    out
 }

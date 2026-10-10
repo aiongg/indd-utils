@@ -38,8 +38,8 @@ pub struct Document {
     /// The numbering lists, the default list first.
     pub numbering_lists: Vec<NumberingList>,
     /// Index sort groups (preferences chunk 0x1307E), in order: name,
-    /// include flag and header variant.
-    pub index_groups: Vec<(String, bool, u16)>,
+    /// include flag and the name of the header variant.
+    pub index_groups: Vec<(String, bool, Option<String>)>,
     /// The index (class 0x13004) and its topics.
     pub index: Option<super::index::Index>,
     /// The constant shade the document lists (the class 0x5533 object of
@@ -62,6 +62,8 @@ pub struct Document {
     pub stories: Vec<Story>,
     pub styles: BTreeMap<u32, Style>,
     pub toc_styles: Vec<TocStyle>,
+    /// Custom stroke styles, in UID order.
+    pub stroke_styles: Vec<StrokeStyle>,
     pub colors: Vec<Color>,
     /// Mixed inks and mixed ink groups, in UID order.
     pub mixed_inks: Vec<MixedInk>,
@@ -113,6 +115,62 @@ pub struct Document {
     /// The dates of the XMP packet that have a UTC offset; link times are
     /// written with their offsets (`objects.md`, link times).
     pub xmp_dates: Vec<super::xmp::XmpDate>,
+    /// The black swatch's name in the XMP packet: the language of the
+    /// edition that saved the document (`objects.md`, saving edition).
+    pub black_name: Option<String>,
+}
+
+/// The stories of the text frames anchored in `story`, in text order
+/// (nested items included).
+fn anchored_stories(story: &Story) -> Vec<u32> {
+    fn walk(items: &[PageItem], out: &mut Vec<u32>) {
+        for i in items {
+            if let ItemKind::TextFrame { story: Some(s), .. } = i.kind {
+                out.push(s);
+            }
+            walk(&i.children, out);
+        }
+    }
+    let mut out = Vec::new();
+    for items in story.anchors.values() {
+        walk(items, &mut out);
+    }
+    out
+}
+
+impl Document {
+    /// Read the dates and the black name of the XMP packet. IDML names a
+    /// tint of black with the black name (`objects.md`, saving edition).
+    pub fn read_xmp(&mut self, packet: &[u8]) {
+        self.xmp_dates = super::xmp::dates(packet);
+        let Some(black) = self.colors.iter().find(|c| c.reference() == "Color/Black") else {
+            return;
+        };
+        let values = black.idml_values();
+        let others: Vec<&str> = self
+            .colors
+            .iter()
+            .filter(|c| c.uid != black.uid)
+            .map(|c| c.name.as_str())
+            .collect();
+        let colorants = super::xmp::colorants(packet);
+        self.black_name =
+            super::xmp::black_name(&colorants, (black.space_name(), &values), &others);
+        let (Some(name), uid, bracket) = (&self.black_name, black.uid, black.color_override == 2)
+        else {
+            return;
+        };
+        if !bracket {
+            return;
+        }
+        for (t, reference, idml) in &mut self.tints {
+            if t.base == uid {
+                *idml = t.named(&format!("[{name}]"));
+                *reference = Tint::reference_of(idml);
+                self.swatches.insert(t.uid, reference.clone());
+            }
+        }
+    }
 }
 
 /// An XML tag: its name and colour (red, green, blue).
@@ -175,6 +233,30 @@ impl<'a> Reader<'a> {
             .transpose()?;
         let (spreads, master_spreads) = self.document_spreads()?;
         let mut stories = self.document_stories()?;
+        let xml_story = self.xml_story()?;
+        // Stories of text frames anchored in the XML backing story are not
+        // in the document's list; IDML writes them after the listed ones
+        // (objects.md, stories).
+        if let Some(x) = &xml_story {
+            let mut known: std::collections::HashSet<u32> = stories.iter().map(|s| s.uid).collect();
+            known.insert(x.uid);
+            let mut next = anchored_stories(x);
+            next.reverse();
+            while let Some(uid) = next.pop() {
+                if !known.insert(uid) || !matches!(self.class(uid), Some(class::STORY)) {
+                    continue;
+                }
+                match self.story(uid) {
+                    Ok(s) => {
+                        let mut more = anchored_stories(&s);
+                        more.reverse();
+                        next.extend(more);
+                        stories.push(s);
+                    }
+                    Err(e) => self.warn(format!("story {uid} left out: {e}")),
+                }
+            }
+        }
         let mut objects = self.class_objects()?;
         // Cell spans depend on insets that cells inherit from styles.
         let table_styles = table::TableStyles::new(&objects.cell_styles, &objects.table_styles);
@@ -183,7 +265,6 @@ impl<'a> Reader<'a> {
                 t.resolve_spans(&table_styles);
             }
         }
-        let xml_story = self.xml_story()?;
         for story in &mut stories {
             story.orientation = self.story_orientation(story.uid);
         }
@@ -195,7 +276,8 @@ impl<'a> Reader<'a> {
         prune_style_groups(&mut objects.style_groups, |m| self.warn(m));
         let preferences = self.document_preferences()?;
         let prefs = self.prefs(version)?;
-        let toc_styles = self.toc_styles();
+        let toc_styles = self.toc_styles(version);
+        let stroke_styles = self.stroke_styles();
         let named_grids = self.named_grids();
         let index_groups = self.index_groups();
         let index = self.index().unwrap_or_else(|e| {
@@ -293,6 +375,7 @@ impl<'a> Reader<'a> {
             languages: objects.languages,
             language_list: objects.language_list,
             toc_styles,
+            stroke_styles,
             named_grids,
             index_groups,
             index,
@@ -331,6 +414,7 @@ impl<'a> Reader<'a> {
             xml_tags: objects.xml_tags,
             xml,
             xmp_dates: Vec::new(),
+            black_name: None,
             // Last, so that it holds every warning of the model.
             warnings: self.warnings.borrow().clone(),
         })

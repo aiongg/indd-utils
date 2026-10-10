@@ -76,15 +76,21 @@ struct Writer<'a> {
         std::cell::RefCell<std::collections::HashMap<u32, std::rc::Rc<applied::StyleValues>>>,
     /// The `Self` of the index topic of each page reference UID.
     topics: std::collections::HashMap<u32, String>,
+    /// The anchored object settings of the anchored items being written,
+    /// innermost last: items inside them carry the settings too.
+    anchors: std::cell::RefCell<Vec<crate::model::AnchorSettings>>,
 }
 
 /// Attributes observed on an element path (`values::element_attrs`).
 type Observed = std::rc::Rc<Vec<(String, String)>>;
 
 impl Writer<'_> {
-    /// Whether the last session in the save history was one of a
-    /// Japanese or Chinese edition (code 0x0101); `None` when the history
-    /// cannot be read. Values that follow the exporting InDesign's
+    /// The `DOMVersion` written, as (major, minor).
+    pub(super) fn dom_version(&self) -> (u32, u32) {
+        let mut parts = self.dom.split('.').map(|p| p.parse().unwrap_or(0));
+        (parts.next().unwrap_or(0), parts.next().unwrap_or(0))
+    }
+
     /// Whether the document's version, or the application version of its
     /// last session, is at least `v`. IDML follows the exporting
     /// application, which can be later than the version in the header
@@ -110,6 +116,28 @@ impl Writer<'_> {
         })
     }
 
+    /// The edition that saved the document, by the black name of the XMP
+    /// packet (`docs/format/objects.md`, saving edition).
+    pub(super) fn saving_edition(&self) -> Option<Edition> {
+        Some(match self.doc.black_name.as_deref()? {
+            "Black" => Edition::English,
+            "검정" => Edition::Korean,
+            "黒" => Edition::Japanese,
+            "黑色" => Edition::Chinese,
+            "Schwarz" => Edition::German,
+            "Noir" => Edition::French,
+            "Nero" => Edition::Italian,
+            "Zwart" => Edition::Dutch,
+            "Černá" => Edition::Czech,
+            "Preto" => Edition::Portuguese,
+            "Черный" => Edition::Russian,
+            _ => Edition::Other,
+        })
+    }
+
+    /// Whether the last session in the save history was one of a
+    /// Japanese or Chinese edition (code 0x0101); `None` when the history
+    /// cannot be read. Values that follow the exporting InDesign's
     /// language depend on it (`docs/format/objects.md`, save history).
     pub(super) fn japanese_session(&self) -> Option<bool> {
         self.doc.last_session_code.map(|c| c == 0x0101)
@@ -215,7 +243,31 @@ pub(super) enum Edition {
     Korean,
     Japanese,
     Chinese,
+    Czech,
+    Portuguese,
+    Russian,
     Other,
+}
+
+impl Edition {
+    /// The name this edition gives an unknown document user; Chinese
+    /// documents show two (`objects.md`, saving edition).
+    pub(super) fn unknown_user(self) -> &'static [&'static str] {
+        match self {
+            Edition::English => &["Unknown User Name"],
+            Edition::Korean => &["알 수 없는 사용자 이름"],
+            Edition::Japanese => &["不明なユーザー名"],
+            Edition::Chinese => &["不明的使用者名稱", "未知用户名"],
+            Edition::German => &["Unbekannter Benutzername"],
+            Edition::French => &["Nom d'utilisateur inconnu"],
+            Edition::Italian => &["Nome ut. sconosciuto"],
+            Edition::Dutch => &["Onbekende gebruikersnaam"],
+            Edition::Czech => &["Neznámé jméno uživatele"],
+            Edition::Portuguese => &["Nome de usuário desconhecido"],
+            Edition::Russian => &["Неизвестное имя пользователя"],
+            Edition::Other => &[],
+        }
+    }
 }
 
 /// The `DOMVersion` of the application that saved the document last, by
@@ -251,6 +303,7 @@ pub fn write(doc: &Document, name: &str, out: impl std::io::Write) -> std::io::R
         page_layouts: alternate_layouts(doc).1,
         page_sections: page_sections(doc),
         topics: designmap::topic_refs(doc),
+        anchors: Default::default(),
     };
     let mut files: BTreeMap<String, String> = BTreeMap::new();
     files.insert(
@@ -331,6 +384,7 @@ impl<'a> Writer<'a> {
             page_layouts: Vec::new(),
             page_sections: Vec::new(),
             topics: Default::default(),
+            anchors: Default::default(),
         }
     }
 }

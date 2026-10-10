@@ -88,6 +88,8 @@ const STYLE_COMPARED: &[&str] = &[
     "StrokeType",
     "StrokeAlignment",
     "StrokeTint",
+    "StrokeDashAndGap",
+    "StrokeCornerAdjustment",
     "GapColor",
     "GapTint",
     "EndCap",
@@ -334,9 +336,11 @@ impl Writer<'_> {
             attrs.push(("MinimumWidthForAutoSizing", num(width)));
             attrs.push(("UseNoLineBreaksForAutoSizing", no_breaks.to_string()));
         }
-        if let Some(v) = p.ignore_wrap {
-            attrs.push(("IgnoreWrap", v.to_string()));
-        }
+        // Without the chunk, `false` (objects.md, text frame preferences).
+        attrs.push(("IgnoreWrap", p.ignore_wrap.unwrap_or(false).to_string()));
+        // 0 on every frame of the samples; IDML writes it by the baseline
+        // category rule below (objects.md, text frame preferences).
+        attrs.push(("MinimumFirstBaselineOffset", "0".into()));
         // Values every IDML of the version has where it writes them; they
         // also say from which version the column rule and footnote
         // settings exist (idml-values.md). Footnote values from 13.1.
@@ -388,13 +392,24 @@ impl Writer<'_> {
             |id: u32| style.is_none_or(|s| !s.enabled.as_ref().is_some_and(|on| on.contains(&id)));
         let footnote_options = self.frame_footnote_options(p, style, off(0xADCA));
         let baseline = self.frame_baseline_grid(p, style, off(0xADC8));
+        // Before DOM 11 the insets follow the rule of the general
+        // attributes: written where they differ from the style's, in any
+        // order, or the style turns the category off (objects.md, text
+        // frame preferences).
+        let sorted = |mut v: [f64; 4]| {
+            v.sort_by(f64::total_cmp);
+            v
+        };
+        let insets = major >= 11
+            || off(0x1B93E)
+            || style.is_some_and(|s| sorted(s.insets.unwrap_or([0.0; 4])) != sorted(p.inset));
         // Before DOM 11 IDML gives a frame without values no element.
-        if !attrs.is_empty() || major >= 11 {
+        if !attrs.is_empty() || insets {
             x.start("TextFramePreference");
             for (k, val) in attrs {
                 x.attr(k, val);
             }
-            if major >= 11 {
+            if insets {
                 let [top, left, bottom, right] = p.inset;
                 let item = |v: f64| Node {
                     tag: "ListItem".into(),
@@ -531,10 +546,20 @@ impl Writer<'_> {
             return;
         };
         x.start("TextWrapPreference");
-        if wrap.is_none_or(|w| w.flags == 1) {
-            x.attr("Inverse", "false")
-                .attr("ApplyToMasterPageOnly", "false")
-                .attr("TextWrapSide", "BothSides");
+        // `Inverse` is false on every item of the samples
+        // (objects.md, text wrap).
+        x.attr("Inverse", "false");
+        match wrap {
+            None => {
+                x.attr("ApplyToMasterPageOnly", "false")
+                    .attr("TextWrapSide", "BothSides");
+            }
+            Some(w) => {
+                x.attr("ApplyToMasterPageOnly", (w.master_flag == 0).to_string());
+                if let Some(side) = text_wrap_side(w.side) {
+                    x.attr("TextWrapSide", side);
+                }
+            }
         }
         x.attr("TextWrapMode", mode);
         x.start("Properties")
@@ -682,7 +707,19 @@ impl Writer<'_> {
         } else {
             self.item_attr_values(&item.attrs)
         };
+        // The stroke type in effect decides the dash attributes.
+        let stroke_type = (tag != "Group")
+            .then(|| {
+                self.values_in_effect(item)
+                    .into_iter()
+                    .find(|(n, ..)| *n == "StrokeType")
+                    .map(|(_, v, _)| v)
+            })
+            .flatten();
         for (name, v) in own {
+            if !dash_written(name, stroke_type.as_deref()) {
+                continue;
+            }
             // Fill, stroke and corner values equal to the object style's
             // are left out (attributes.md, page item attributes).
             let same = STYLE_COMPARED.contains(&name)
@@ -710,7 +747,9 @@ impl Writer<'_> {
             rest.values.retain(|(id, _)| item.attrs.get(*id).is_none());
             for (name, v) in self.item_attr_values(&rest) {
                 // IDML writes no corner attributes for EPS text.
-                if tag == "EPSText" && name.contains("Corner") {
+                if tag == "EPSText" && name.contains("Corner")
+                    || !dash_written(name, stroke_type.as_deref())
+                {
                     continue;
                 }
                 let write = match &applied {
@@ -721,6 +760,29 @@ impl Writer<'_> {
                 };
                 if STYLE_COMPARED.contains(&name) && write {
                     x.attr(name, v);
+                }
+            }
+        }
+        // A group stores none of these values; IDML gives it the value
+        // all its children have in effect (attributes.md, groups).
+        if tag == "Group" {
+            let shared = self.shared_values(item);
+            for name in STYLE_COMPARED {
+                let Some((v, full)) = shared
+                    .iter()
+                    .find(|(n, ..)| n == name)
+                    .map(|(_, v, f)| (v, *f))
+                else {
+                    continue;
+                };
+                let write = forced(name)
+                    || full
+                    || applied
+                        .as_ref()
+                        .and_then(|a| a.item(name))
+                        .is_none_or(|s| !applied::same_value(s, v));
+                if write {
+                    x.attr(name, v.clone());
                 }
             }
         }
@@ -743,6 +805,13 @@ impl Writer<'_> {
             x.attr("ItemLayer", uref(Some(layer)));
         }
         x.attr("ItemTransform", matrix(&item.transform));
+        // From 21.4; -1 without the chunk (objects.md, page item settings).
+        if self.saved_by((21, 4)) {
+            x.attr(
+                "BeforeGroupingLayerPosition",
+                item.props.grouping_layer_position.unwrap_or(-1).to_string(),
+            );
+        }
         self.item_settings(x, item, nested);
         if let ItemKind::Form(f) = &item.kind {
             Self::form_attrs(x, f);
@@ -820,8 +889,16 @@ impl Writer<'_> {
         // EPS text and form fields have no export options (objects.md,
         // EPS text and form fields).
         if !matches!(item.kind, ItemKind::EpsText(_) | ItemKind::Form(_))
-            && let Some(n) =
-                export::object_export_option(self.doc.version, item.export.as_ref(), false)
+            && let Some(n) = export::object_export_option(
+                self.doc.version,
+                item.export.as_ref(),
+                item.props.export_size_type,
+                if tag == "Group" {
+                    export::Owner::Group
+                } else {
+                    export::Owner::Item
+                },
+            )
         {
             n.write(x);
         }
@@ -830,7 +907,17 @@ impl Writer<'_> {
         // them where the style turns the category off (objects.md,
         // anchored object settings).
         let unknown_style = form && item.object_style.is_none();
-        if let Some(d) = item.anchor.as_ref().filter(|_| !unknown_style) {
+        // An item inside an anchored item has the anchor's settings
+        // (objects.md, anchored object settings).
+        let inherited = (nested && item.anchor.is_none())
+            .then(|| self.anchors.borrow().last().cloned())
+            .flatten();
+        if let Some(d) = item
+            .anchor
+            .as_ref()
+            .or(inherited.as_ref())
+            .filter(|_| !unknown_style)
+        {
             let style = item
                 .object_style
                 .and_then(|u| self.doc.object_styles.get(&u));
@@ -883,8 +970,14 @@ impl Writer<'_> {
                 item.uid
             ));
         }
+        if let Some(a) = &item.anchor {
+            self.anchors.borrow_mut().push(a.clone());
+        }
         for child in &item.children {
             self.page_item(x, child, true, &item.transform.then(outer));
+        }
+        if item.anchor.is_some() {
+            self.anchors.borrow_mut().pop();
         }
         if let ItemKind::Form(f) = &item.kind {
             self.form_states(x, item, f, &item.transform.then(outer));
@@ -893,6 +986,122 @@ impl Writer<'_> {
             self.placed_graphic(x, g, &item.transform.then(outer));
         }
         x.end();
+    }
+
+    /// The fill, stroke and corner values (`STYLE_COMPARED`) a page item
+    /// has in effect, with the stored-100 tint flag: its own value, else
+    /// the document's base list value where IDML writes it, else its
+    /// object style's. A group has the value all its children share; a
+    /// form field has none (attributes.md, groups).
+    fn values_in_effect(&self, item: &PageItem) -> Vec<(&'static str, String, bool)> {
+        match item.kind {
+            ItemKind::Group => return self.shared_values(item),
+            ItemKind::Form(_) => return Vec::new(),
+            _ => {}
+        }
+        let applied = item.object_style.and_then(|u| self.style_values(u));
+        let on = match (&applied, item.object_style) {
+            (Some(a), Some(u))
+                if !self
+                    .doc
+                    .object_styles
+                    .get(&u)
+                    .is_some_and(Self::is_root_object_style) =>
+            {
+                a.enabled.as_deref()
+            }
+            _ => None,
+        };
+        let own = self.item_attr_values(&item.attrs);
+        let base = match &self.doc.prefs.item_base {
+            Some(b) if applied.is_some() || item.object_style.is_none() => {
+                let mut rest = b.clone();
+                rest.values.retain(|(id, _)| item.attrs.get(*id).is_none());
+                self.item_attr_values(&rest)
+            }
+            _ => Vec::new(),
+        };
+        let mut out: Vec<(&'static str, String, bool)> = Vec::new();
+        for &name in STYLE_COMPARED {
+            if matches!(item.kind, ItemKind::EpsText(_)) && name.contains("Corner") {
+                continue;
+            }
+            // StrokeType comes before the dash attributes in the list.
+            let stroke = out
+                .iter()
+                .find(|(n, ..)| *n == "StrokeType")
+                .map(|(_, v, _)| v.as_str());
+            if !dash_written(name, stroke) {
+                continue;
+            }
+            let style = applied.as_ref().and_then(|a| a.item(name));
+            if let Some((_, v)) = own.iter().find(|(n, _)| *n == name) {
+                let id = match name {
+                    "StrokeTint" => Some(0x6E66),
+                    "GapTint" => Some(0x6E8A),
+                    _ => None,
+                };
+                let full =
+                    id.is_some_and(|id| item.attrs.get(id).and_then(Value::as_f64) == Some(100.0));
+                out.push((name, v.clone(), full));
+                continue;
+            }
+            if let Some((_, b)) = base.iter().find(|(n, _)| *n == name) {
+                let forced = on.is_some_and(|on| category_off(name, on));
+                let written = applied.is_none()
+                    || style.is_some_and(|s| forced || !applied::same_value(s, b));
+                if written {
+                    out.push((name, b.clone(), false));
+                    continue;
+                }
+            }
+            if let Some(s) = style {
+                out.push((name, s.to_string(), false));
+            }
+        }
+        out
+    }
+
+    /// The values of `values_in_effect` that all children of `group`
+    /// have. EPS text has no corner values and is left out for those.
+    fn shared_values(&self, group: &PageItem) -> Vec<(&'static str, String, bool)> {
+        let children: Vec<_> = group
+            .children
+            .iter()
+            .map(|c| {
+                (
+                    matches!(c.kind, ItemKind::EpsText(_)),
+                    self.values_in_effect(c),
+                )
+            })
+            .collect();
+        let mut out = Vec::new();
+        for &name in STYLE_COMPARED {
+            let mut shared: Option<(String, bool)> = None;
+            let mut all = true;
+            let mut any = false;
+            for (eps, values) in &children {
+                if *eps && name.contains("Corner") {
+                    continue;
+                }
+                any = true;
+                match values.iter().find(|(n, ..)| *n == name) {
+                    Some((_, v, full)) => match &mut shared {
+                        None => shared = Some((v.clone(), *full)),
+                        Some((s, f)) if applied::same_value(s, v) => *f &= *full,
+                        Some(_) => all = false,
+                    },
+                    None => all = false,
+                }
+            }
+            if all
+                && any
+                && let Some((v, full)) = shared
+            {
+                out.push((name, v, full));
+            }
+        }
+        out
     }
 
     /// The attributes of a form field that its attribute list holds
@@ -1521,12 +1730,14 @@ mod tests {
         let wrap = TextWrap {
             mode: wrap_mode::BOUNDING_BOX,
             offsets: [1.0, 2.0, 3.0, 4.0],
-            flags: 1,
+            master_flag: 0,
+            side: 5,
         };
         let mut x = Xml::new();
         Writer::text_wrap_preference(&mut x, Some(&wrap), None);
         let out = x.finish();
         assert!(out.contains("TextWrapMode=\"BoundingBoxTextWrap\""));
+        assert!(out.contains("ApplyToMasterPageOnly=\"true\" TextWrapSide=\"LargestArea\""));
         assert!(out.contains("<TextWrapOffset Top=\"2\" Left=\"1\" Bottom=\"4\" Right=\"3\" />"));
     }
 

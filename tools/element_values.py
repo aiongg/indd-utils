@@ -79,7 +79,7 @@ ELEMENTS = [
     "Polygon/InCopyExportOption", "Image/ClippingPathSettings",
     "PDF/ClippingPathSettings", "EPS/ClippingPathSettings", "Ink",
     "Button", "CheckBox", "RadioButton", "TextBox", "ComboBox", "SignatureField",
-    "MultiStateObject",
+    "MultiStateObject", "Section",
 ]
 # The top-level elements of Resources/Preferences.xml, as paths
 # "Preferences/<tag>". tools/root_values.py collects them from the IDML
@@ -115,6 +115,7 @@ LISTS = ["TrapPreset"]
 # MIN_KEYED_FILES files.
 KEYED = {
     "Language": ("Name", ["SingleQuotes", "DoubleQuotes"]),
+    "Color": ("Model", ["SpotInkAliasSpotColorReference"]),
     "PastedSmoothShade": ("ContentsType", [
         "ContentsVersion", "SpotColorList", "ContentsEncoding", "ContentsMatrix",
         "Name", "ColorEditable", "ColorRemovable", "Visible", "SwatchCreatorID"]),

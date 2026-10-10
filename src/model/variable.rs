@@ -40,6 +40,20 @@ pub struct TextVariable {
     /// The fields not identified hold the values every corpus sample of
     /// this type has, so the IDML settings are those of the samples.
     pub as_in_samples: bool,
+    /// The settings after the type code, where they parse to the end of
+    /// the chunk.
+    pub settings: Option<Settings>,
+}
+
+/// The settings of a definition (`text-variables.md`, settings): three
+/// u32, then the text before and after the value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Settings {
+    pub a: u32,
+    pub b: u32,
+    pub c: u32,
+    pub before: String,
+    pub after: String,
 }
 
 impl TextVariable {
@@ -69,6 +83,25 @@ fn parse(enc: Encoding, uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
     let name = counted(&mut c)?;
     let text = counted(&mut c)?;
     let kind = c.u32()?;
+    let settings = {
+        let mut s = c.clone();
+        (|| -> Result<Settings, Error> {
+            let (a, b, c3) = (s.u32()?, s.u32()?, s.u32()?);
+            let before = counted(&mut s)?;
+            let after = counted(&mut s)?;
+            if s.remaining() != 0 {
+                return Err(Error::Corrupt("text variable settings".into()));
+            }
+            Ok(Settings {
+                a,
+                b,
+                c: c3,
+                before,
+                after,
+            })
+        })()
+        .ok()
+    };
     let rest = c.bytes(c.remaining())?;
     let zero = |r: &[u8]| r.iter().all(|&b| b == 0);
     let mut style = None;
@@ -93,6 +126,7 @@ fn parse(enc: Encoding, uid: u32, data: &[u8]) -> Result<TextVariable, Error> {
         text,
         style: style.filter(|&s| s != 0),
         as_in_samples,
+        settings,
     })
 }
 

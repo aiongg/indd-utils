@@ -98,9 +98,14 @@ has its stored name as `UserName` (1,724 of 1,724). Flag 2 marks the
 placeholder for an unknown user, stored with a name such as
 `Unknown User Name` or the same words in the language of the computer
 that saved it; IDML writes `$ID/Unknown User Name` for 495 of the 586
-such users, and the stored name for the other 91. The schema requires
-`UserName`, so the converter writes `$ID/Unknown User Name` for every
-flag 2 user. The colour UID names an interface colour, but the IDML
+such users, and the stored name for the other 91. The rule is the
+saving edition's name for an unknown user (saving edition, below):
+IDML writes `$ID/Unknown User Name` for every user, of either flag,
+whose stored name is that edition's, and the stored name for every
+other user, also a flag 2 user named in another language (for example
+`Unknown User Name` in a document last saved by a Korean edition).
+Without a black name the converter writes `$ID/Unknown User Name` for
+every flag 2 user (the schema requires `UserName`). The colour UID names an interface colour, but the IDML
 `UserColor` does not follow from it (users stored with 0.6, 0.4, 0 are
 `BrickRed` in 4 files and `Gold` in 1), so it is left out of the
 conversion and of the measurement (`measurement.md`).
@@ -189,12 +194,76 @@ So that IDML was exported in a session the INDD does not record, by an
 application of another language.
 
 The converter uses the code where it decides the value: the flattener
-resolutions, the index separator, the index title `索引` for 0x0101,
-and the endnote separator and marker position. It writes no index
-title for other codes (the code does not tell the Latin-script
-languages apart), no endnote title without the chunk, and no
-assignment `Name`: names that are not `$ID/UnassignedInCopy` occur
-with every code.
+resolutions, the index separator and the endnote separator. The index
+title, the endnote title and marker position and the unknown user
+follow the saving edition (below). It writes no assignment `Name`:
+names that are not `$ID/UnassignedInCopy` occur with every code.
+
+**Saving edition (the XMP black name).** The XMP packet of the INDD
+lists the document's colours in `xmpTPg:Colorants`, each with
+`xmpG:swatchName`, `xmpG:mode`, `xmpG:type` and its values (`cyan` to
+`black` in percent, `red`, `green`, `blue` 0 to 255). Tints have an
+`xmpG:tint` and keep the stored name of their base colour. The black
+swatch is listed with the name the InDesign that saved the document
+gives it: `Black`, `검정`, `黒`, `黑色`, `Schwarz`, `Noir`, `Nero`,
+`Zwart`, `Černá`, `Preto`, `Черный`. The converter takes as the black
+name the `swatchName` of the one colorant that is not a tint, is a
+process colour, has the mode and values of the document's black colour
+(`Color/Black`, as IDML writes its values) and whose name no other
+colour of the document has. Over the 1,251 trustworthy pairs of the
+corpus after 2026-10 there is exactly one such colorant in each: 502
+`검정`, 431 `Black`, 126 `黒`, 93 `黑色`, 45 `Schwarz`, 44 `Noir`, 4
+`Nero`, 3 `Zwart` and one each of `Černá`, `Preto` and `Черный`.
+
+This is a rule over stored data: the packet records the edition of the
+last save, and IDML follows the edition that exported it. Where a
+document was exported by another installation than the one that saved
+it last, the IDML has the other edition's values; the exceptions below
+are such documents.
+
+IDML writes these values in the language of that edition:
+
+| Black name | Tint of black | Unknown user | Endnote title (no chunk 0x2261E) | Index title (no chunk 0x13010) |
+|---|---|---|---|---|
+| `Black` | `[Black] 40%` | `Unknown User Name` | `Endnotes` | `Index` |
+| `검정` | `[검정] 40%` | `알 수 없는 사용자 이름` | `미주` | `색인` |
+| `黒` | | `不明なユーザー名` | `文末脚注` (DOM 13), `後注` (DOM 19, 20) | `索引` |
+| `黑色` | `[黑色] 40%` | `不明的使用者名稱`, `未知用户名` | | `索引` |
+| `Schwarz` | `[Schwarz] 40%` | `Unbekannter Benutzername` | `Endnoten` | `Index` |
+| `Noir` | `[Noir] 40%` | `Nom d'utilisateur inconnu` | `Notes de fin` | `Index` |
+| `Nero` | | `Nome ut. sconosciuto` | `Note di chiusura` | `Indice` |
+| `Zwart` | | `Onbekende gebruikersnaam` | `Eindnoten` | `Index` |
+| `Černá` | | `Neznámé jméno uživatele` | | `Rejstřík` |
+| `Preto` | | `Nome de usuário desconhecido` | | `Índice` |
+| `Черный` | | `Неизвестное имя пользователя` | | `Указатель` |
+
+An empty cell has no sample. The endnote marker is `RubyMarker` for
+`黒` and `SuperscriptMarker` for every other black name.
+
+With these rules the converter reproduces, over the trustworthy pairs:
+
+| Value | Reproduced | Before (assignment name and code rules) |
+|---|---|---|
+| `Tint` elements and their names (tints of black) | 204 of 204 tints, no extra tint | 171, and 409 extra values in 27 documents |
+| `DocumentUser` `UserName` | 3,208 of 3,212 | 3,000 |
+| `EndnoteOption` `EndnoteTitle` | 917 of 918 | 692 (no title without the chunk) |
+| `EndnoteOption` `EndnoteMarkerPositioning` | 916 of 918 | 876 |
+| `IndexOptions` `Title` | 1,250 of 1,251 | 1,162 |
+
+The remaining differences are the 16.1 document above (exported by
+another edition: three users, its endnote title and its index title),
+one 20.0 document whose black name is `Black` but whose IDML writes the
+German name of the unknown user as `$ID/Unknown User Name` (two users),
+and DOM 7 documents whose IDML lists one user more than the INDD. In 8
+stale pairs the rule loses 1 to 3 values each: their IDML was exported
+by another edition than the one that saved the INDD later (for example
+a Dutch endnote title in a document whose last save has `Black`).
+
+Not explained by the black name: `BaselineFrameGridColor`,
+`ColumnGuideColor`, the grid and gutter defaults and the print marks of
+the Korean documents with code 0x0101 whose IDML has the values of a
+Roman edition (`preferences.md`, values of the exporting edition), the
+language quotes and the trimmed language lists.
 
 ## Spreads (0x501) and master spreads (0x1401)
 
@@ -258,9 +327,11 @@ child. Chunk 0x10833 (52 bytes) is in 20 spreads of 5 trustworthy
 documents, always with the same bytes: f64 0.5 at offset 8, f64 400 at
 offsets 20 and 28, 2 at 36 and 800 at 44. Their IDML has
 `LineArtAndTextResolution` and `GradientAndMeshResolution` 400 and
-`RasterVectorBalance` 50. The converter writes the f64 at 20 and 28 as
-the two resolutions; which is which is not known, as they are equal in
-every sample. Without the chunk, the IDML has 400 and 400 when the
+`RasterVectorBalance` 50. In the corpus of 2026-10, 182 spreads of 20
+trustworthy documents store 150 at 20 and 300 at 28, and their IDML has
+`LineArtAndTextResolution="300"` and `GradientAndMeshResolution="150"`
+(182 of 182): the f64 at 28 is `LineArtAndTextResolution` and the f64 at
+20 `GradientAndMeshResolution`. Without the chunk, the IDML has 400 and 400 when the
 last session of the save history (document, above) has code 0x0101,
 and 300 and 150 otherwise: 7,481 of the 7,490 spreads of all 803 pairs
 match, the other 9 being the spreads of the pair exported in a
@@ -507,27 +578,37 @@ Every chunk of the 654 pairs parses to its end with this layout. The
 variants and sections have the same fields as the list that IDML writes
 under `IndexHeaderSetting` (`preferences.md`), which the converter takes
 from chunk 0x1300E. The converter uses the name, include byte and header
-variant of each group.
+variant of each group, and the internal name of the variant that the
+header variant indexes in the group's variant list.
 
 IDML writes an `IndexingSortOption` per group, in the stored order:
 `Self` `dIndexingSortOptionn` and the name, `Name` `$ID/` and the name,
-`Include`, `Priority` (the position, from 0) and `HeaderType`:
+`Include`, `Priority` (the position, from 0) and `HeaderType`, which
+follows the internal name of the chosen variant:
 
-| Group | Variant | `HeaderType` |
-|---|---|---|
-| `kIndexGroup_Alphabet` | 0, 3, 5 | `BasicLatin`, `Spanish`, `Czech` |
-| `kWRIndexGroup_CyrillicAlphabet` | 2 | `Russian` |
-| `kIndexGroup_Kana` | 0 | `HiraganaAll` |
-| `kIndexGroup_Chinese` | 0 | `ChinesePinyin` |
-| `kIndexGroup_Korean` | 0 | `KoreanConsonant` |
-| Symbol, numeric, Greek, Arabic and Hebrew groups | 0 | `Nothing` |
+| Variant name | `HeaderType` |
+|---|---|
+| `IDX_Basic` | `BasicLatin` |
+| `IDX_Spanish` | `Spanish` |
+| `IDX_Czech` | `Czech` |
+| `IDX_Russian` | `Russian` |
+| `IDX_AllHira` | `HiraganaAll` |
+| `IDX_ChinesePinyin` | `ChinesePinyin` |
+| `IDX_ChineseStroke` | `ChineseStrokeCount` |
+| `IDX_KoreanConsonant` | `KoreanConsonant` |
+| the group's own name (symbol, numeric, Greek, Arabic and Hebrew groups) | `Nothing` |
 
-The converter leaves `HeaderType` out for other combinations. Evidence:
-the 495 trustworthy pairs have 11 different lists (8 or 10 groups, in
-different orders, with different groups included); the converted groups
-match the IDML in all 4,934 groups on every attribute. Over all 654
-pairs the Alphabet variant is 0 in 652 files, 3 and 5 in one each, and
-the Cyrillic variant is 2 in all.
+The converter leaves `HeaderType` out for other names. Evidence: the
+495 trustworthy pairs before 2026-10 have 11 different lists (8 or 10
+groups, in different orders, with different groups included). Over the
+1,251 trustworthy pairs of the corpus after 2026-10 the converter
+reproduces all 12,472 `HeaderType` values. The variant index decides
+where the list order differs: the Chinese group has variant 0 in every
+file, but in 83 documents its list starts with `IDX_ChineseStroke`, and
+their IDML has `ChineseStrokeCount` (83 of 83); a table by group and
+variant number, used before, gave `ChinesePinyin` there. Over all 654
+pairs before 2026-10 the Alphabet variant is 0 in 652 files, 3 and 5 in
+one each, and the Cyrillic variant is 2 in all.
 
 ## Numbering lists (0x1A483)
 
@@ -635,9 +716,48 @@ whose IDML style has the same name (1,304 trustworthy; 15 with
 `IncludeBookDocuments="true"`, one with `CreateBookmarks="false"`, in a
 stale pair). The flagged string after the title is the path of a book
 file in some of these styles, but it does not decide
-`IncludeBookDocuments`. The entries (`TOCStyleEntry`, 130 in all corpus
-IDML files) are not decoded: the converter writes the styles without
-them.
+`IncludeBookDocuments`. 
+
+**Entries.** After the u16 fields (two before version 9, three before
+13, four from 13) the chunk holds a u16 entry count and the entries:
+
+| Field | IDML |
+|---|---|
+| flag byte, in-object string | `Name`: the paragraph style's name, with `$ID/` first for flag 1; the group separator U+E00B is written `:` |
+| flag byte, in-object string | a document path; not in IDML |
+| u32 | `FormatStyle`: paragraph style UID |
+| u32 | `Level` |
+| u16 | `PageNumberPosition`: 0 `AfterEntry`, 1 `BeforeEntry`, 2 `None` |
+| u32 | `PageNumberStyle`: character style UID |
+| u32 *n*, segments | `Separator` |
+| u32 | `SeparatorStyle`: character style UID |
+| u16 | 0 in every entry |
+| u32 *n*, segments | `; `, `;` or `、`; not in IDML |
+| u16 | 1 in every entry |
+
+IDML writes each entry as a `TOCStyleEntry` child of its `TOCStyle`:
+`Self` is `u`, the TOC style's UID in hexadecimal, `TOCStyleEntry` and
+the entry's index (0 to 5 in the samples, so whether the index is
+hexadecimal is not shown), then
+`Name`, `Level`, `PageNumberPosition`, `Separator`,
+`SortAlphabet="false"` (every entry), and `Properties` with
+`FormatStyle`, `PageNumberStyle` and `SeparatorStyle`: a user style as
+`type="object"` and its `Self`; the root style as `type="string"`
+`$ID/[No paragraph style]` or `$ID/[No character style]`; UID 0 as
+`type="string"`, `$ID/kSameStyleWithBracket` for `FormatStyle` and
+`$ID/[Same Style]` for the other two. `Separator` is `$ID/` and the text,
+with tab written `^t`, U+0008 `^y`, line feed `^n`, U+2003 `^m` and
+U+2014 `^_`.
+
+Evidence: every TOC style with entries in the trustworthy pairs
+(versions 8.0 to 21.3) parses to the end of the chunk with this layout,
+and the converter reproduces all 255 `TOCStyleEntry` elements with all
+their values: `Name`, `Level`, `PageNumberPosition`, `Separator`,
+`SortAlphabet` and the three style properties, 255 of 255 each.
+`SortAlphabet` is `false` in all; neither constant u16 can be shown to
+hold it. A chunk whose entries do not parse to its end keeps its style
+and loses its entries, with a warning.
+
 Two TOC styles of the corpus pairs have another value at the
 `SetStoryDirection` field: 0x40 with no `SetStoryDirection` in the IDML
 (version 15.0) and 0xF6FC with `Horizontal` (a stale pair of version
@@ -932,6 +1052,7 @@ IDML value is the default in the table.
 | 0x21D53 | same | `LastUpdatedInterfaceChangeCount` | empty |
 | 0x1424 | u32 master page item, UID list | `OverriddenPageItemProps`: the list in decimal; empty if the master item is 0 | empty |
 | 0x22228 | u8 flags | `HorizontalLayoutConstraints` (bits 4–6), `VerticalLayoutConstraints` (bits 0–2): per bit `FixedDimension` if set, else `FlexibleDimension` | as 0x22 |
+| 0x324 | i32 at 4 | `BeforeGroupingLayerPosition`, after `ItemTransform`, from 21.4 (also on placed graphics) | `-1` |
 
 | Attribute | IDML | Without the attribute |
 |---|---|---|
@@ -986,6 +1107,15 @@ FlexibleDimension FixedDimension` both ways) in 643 and 0x02
 set the converter leaves both attributes out. In 14,918 items with
 chunk 0x1424 the master item is 0; in 197 of them the list still holds
 IDs, and IDML writes the attribute empty.
+
+**Layer position before grouping.** From 21.4 every page item and
+placed graphic in IDML has `BeforeGroupingLayerPosition`; no IDML before
+21.4 has it (13 distinct corpus IDML files from 21.4, none of the 1,673
+earlier ones). Its value is the i32 at 4 of chunk 0x324, or −1 without the
+chunk. The converter writes it for files saved by 21.4 or later: 1,793 of 1,793
+values over the trustworthy pairs (1,308 polygons, 241 text frames, 131
+rectangles, 53 groups, 38 images, 16 EPS, 3 graphic lines and 3 SVG).
+`BeforeGroupingLayerReference` (50 values) is not decoded.
 
 **Stroke weight without an attribute.** An item whose attribute list has
 no stroke weight (attribute 0x6E65) takes it from the document's base
@@ -1048,6 +1178,19 @@ files. The converter leaves out an attribute whose code is not in the
 table. Which other attributes `ObjectExportOption` has depends on the
 version (`idml-values.md`, export options of page items).
 
+**Export size (chunk 0x1E22B).** A list of keys and values: u32 count;
+per entry a u32 length and the key in text segments, a flag byte, two
+bytes, a u16 value count and the values, each a u8 length, a u8 and that
+many bytes of text. The keys are `UseOrigImage`, `CustomSizeType`,
+`CustomSizeValue` and `CustomContentConversion`. `CustomSizeType` is IDML
+`SizeType`: `1` `DefaultSize`, `2` `FixedSize`, `3` `RelativeToTextFlow`,
+`4` `RelativeToTextSize`; an item without the chunk has `DefaultSize`.
+
+**Groups** have no `AIGeneratedAltText` and `AltTextGenerationError` in
+their `ObjectExportOption`: none of the 53 groups of the 7 trustworthy
+documents from 21.4 has them. The converter leaves them out on groups,
+which removes 106 extra values.
+
 ## Text wrap
 
 Page items (class 0x6201 and groups, 0x401) and placed graphics have
@@ -1058,7 +1201,8 @@ chunk 0x3703 (44 bytes):
 | 0 | u32 wrap mode: 0 `None`, 1 `JumpObjectTextWrap`, 3 `BoundingBoxTextWrap`, 6 `Contour` |
 | 4 | u32 UID of the wrap path object (class 0x3702), or 0 |
 | 8 | Four f64 offsets: left, top, right, bottom (IDML `TextWrapOffset`) |
-| 40 | u32, not fully identified; 1 in all but one element of the pairs |
+| 40 | u16 master page flag: 1 `ApplyToMasterPageOnly="false"`, 0 `true` |
+| 42 | u16 `TextWrapSide`: 0 `BothSides`, 1 `LeftSide`, 2 `RightSide`, 3 `SideTowardsSpine`, 4 `SideAwayFromSpine`, 5 `LargestArea` |
 
 The wrap path object holds the contour as path geometry (chunk 0x162B,
 as for page items) and names the item in chunk 0x3709.
@@ -1079,8 +1223,25 @@ the pairs whose IDML is from an older version:
 | Mode 3 | `TextWrapMode="BoundingBoxTextWrap"` | 1 of 1 (an image) | none |
 | Mode 6 | `TextWrapMode="Contour"` | 3 of 3 (one file) | 1 of 1 (an image) |
 | Offsets as left, top, right, bottom | `TextWrapOffset` | 2,631 of 2,631 | 616 of 616 |
-| u32 at 40 = 1 | `Inverse="false"`, `ApplyToMasterPageOnly="false"`, `TextWrapSide="BothSides"` | 2,630 of 2,630 | 616 of 616 |
+| u32 at 40 = 1 (little-endian) | `Inverse="false"`, `ApplyToMasterPageOnly="false"`, `TextWrapSide="BothSides"` | 2,630 of 2,630 | 616 of 616 |
 | 0x373D type 5 | `ContourType="SameAsClipping"` | 224 of 225 (1 has no `ContourOption`) | 75 of 75 |
+
+**Master page flag and side.** The 4 bytes at 40 are two u16 in the
+file's byte order. The big-endian pair shows it: its 261 page items
+store `00 01 00 00` (251, IDML `ApplyToMasterPageOnly="false"`) or
+`00 00 00 00` (10, `true`), all with `TextWrapSide="BothSides"`. In
+little-endian files the u32 1 is therefore the u16 1 at 40 and the u16 0
+at 42. With this layout the converter reproduces, over the 1,251
+trustworthy pairs of the corpus after 2026-10, all 256,651
+`ApplyToMasterPageOnly` and `TextWrapSide` values of page items, form
+fields and placed graphics, where the u32 reading had left 6,322 of
+each out (items storing 0 at 40 or a side code). Side codes 1 to 5
+occur on few items (14, 4, 9, 1 and 32 in the trustworthy pairs).
+Items without the chunk have `false` and `BothSides`.
+
+`Inverse` is `false` on every item of the corpus IDML files (256,651 of
+256,651 in the trustworthy pairs); no INDD field is known for it, and
+the converter writes `false`.
 
 **Order of the offsets.** Most offsets in the pairs are 0, so the order
 rests on a few elements:
@@ -1725,8 +1886,15 @@ itself:
 
 | Class | Chunk | Contents |
 |---|---|---|
-| Image (0x1702) | 0x8C23 | u32 raw data object (0 = none) |
+| Image (0x1702), EPS (0x6601) | 0x8C23 | u32 raw data object (0 = none) |
 | PDF (0x2501) | 0x2521 | u32 raw data object (0 = none) |
+
+EPS graphics (class 0x6601) without a link name their raw data object in
+chunk 0x8C23 too: over the trustworthy pairs of the corpus after
+2026-10 the converter reproduces 497 of the 515 EPS `Contents` (483
+were missing before; 18 differ and are not examined). Linked graphics
+can have the chunk as well; their IDML has no `Contents`, and the
+converter does not use it for them.
 
 Evidence from the corpus pairs: the raw data object equals the IDML
 `Contents` for 124 of 124 PDFs and 2 of 2 images without a link. One
@@ -1769,6 +1937,17 @@ length, u32 data object UID) pairs. Each data object has chunk 0x262:
 Each record starts with a u32 run length in UTF-16 code units. Text
 records continue with text segments. Style records continue with the
 style UID.
+
+**Stories outside the document's list.** The document's story list does
+not name the stories of text frames anchored in the XML backing story.
+IDML writes them like the others and lists them at the end of
+`StoryList`: one trustworthy document (in two pairs) has 9 such stories,
+whose frames are anchored in its backing story; its IDML has all 9
+after the listed stories. The converter adds the stories of the text
+frames anchored in the backing story, and of frames anchored in those
+stories, after the listed ones, in text order. The order IDML gives
+them is not that order (it starts with a later one), so `StoryList`
+stays different there.
 
 **Story settings.** Three chunks of the story object (trustworthy
 pairs, 18,610 stories):
@@ -2017,6 +2196,18 @@ every value, it also writes `LockPosition="false"` and
 `AnchorSpaceAbove="0"`, the values of every such element in the corpus
 (`idml-values.md`).
 
+**Items inside an anchored item.** The children of an anchored group
+(and the items inside them) have an `AnchoredObjectSetting` too. IDML
+applies the rule above to each of them with the anchor's chunk 0x2800
+values and the child's own object style: every value where the child's
+style turns the category off, else the values that differ from that
+style. With this rule the converter writes 584 more `AnchoredObjectSetting`
+elements over the trustworthy pairs of the corpus after 2026-10 (344 on
+text frames, 114 ovals, 61 rectangles, 30 polygons, 22 graphic lines, 7
+groups, 6 text boxes), with every value equal and no extra value; 6,503
+values of these elements were missing before, and 388 in 2 or 3
+documents per element still are (not examined).
+
 **Positions count characters.** A text record's run length counts
 UTF-16 code units, but every other position counts characters, a
 surrogate pair being one: the lengths in a strand's chunk 0x261 (also
@@ -2232,12 +2423,21 @@ counts are matches of 337 unless stated.
 | 0x50F28 | u16 story direction | `StoryPreference/StoryDirection` |
 | 0x3776, 0x3777 | Text wrap, as chunks 0x3703 and 0x373D of page items | `TextWrapPreference` |
 | 0x1B92E | u32 count, IDs of the categories the style turns on | `Enable…` attributes (below) |
-| 0x1B946 | u32 paragraph style, 0 = none | `AppliedParagraphStyle` (`n` for none) |
+| 0x1B946 | u32 paragraph style, 0 = none | `AppliedParagraphStyle` (`n` for none, and for a style without the chunk: 5,556 of 5,556 values of the trustworthy pairs of the corpus after 2026-10, 173 of them without the chunk) |
+| 0x1E244 | 78 bytes: six f64 at 30 | `FlexLayoutAttributeOption` `FlexPaddingTop`, `FlexPaddingRight`, `FlexPaddingBottom`, `FlexPaddingLeft`, `FlexGapRow`, `FlexGapColumn`; without the chunk 12, 12, 12, 12, 20, 20 (below) |
 | 0xCD32 | u16 0 for none, or u16 1 and the UID of a named grid | `AppliedNamedGrid` (named grids, above) |
 | 0x1B94D | u16, 1 = true | `ApplyNextParagraphStyle` (below) |
 | 0x2800 | Anchored object settings, as in the preferences | `AnchoredObjectSetting` (below) |
 | 0x1B907 | u32 based-on style, flag byte and name, u32 shortcut key | `BasedOn`, `Name`, `KeyboardShortcut` (below) |
 | 0x1E234 | 52 bytes: u16 flags at 8, 10, 12 and 14, f64 at 16, 24, 32 and 40 | `TransformAttributeOption`: `TransformAttrX`, `TransformAttrY`, `TransformAttrHeight` and `TransformAttrWidth`, each written when its flag is 1 (below) |
+
+**Flex layout spacing.** In chunk 0x1E244 the six f64 at 30 are the
+four paddings and the two gaps. A style without the chunk (`[None]`
+included) has 12 for each padding and 20 for each gap. With this the
+converter reproduces all 226 values of each of the six attributes in the
+trustworthy pairs (none was written before). The four paddings are
+equal in every sample, as are the two gaps, so the order inside each
+group follows the IDML attribute order and is not proven.
 
 **Settings found in the corpus after 2026-10.** Object styles other
 than `[None]`, matched by `Self` with their IDML style over the 1,251
@@ -2627,8 +2827,9 @@ each (5 frames with 108 pt minimums, 4 without line breaks),
 `UseFixedColumnWidth` 747 of 747 (9 true), `TextColumnMaxWidth` 23,043
 of 23,043 (one frame with 210.24; the 30-byte chunks of DOM 7 files have
 no such field and their IDML no such attribute), `IgnoreWrap` 643 of the
-817 frames that have it (74 true; 174 frames without the chunk have
-`false` in IDML and are left without it), column rule width and colour
+817 frames that have it (74 true; frames without the chunk have `false`,
+which the converter writes: 1,871 of 1,871 values in the corpus after
+2026-10), column rule width and colour
 7,277 and 7,323 of 7,277 and 7,323, footnote spacings 4,351 of 4,351
 each. Without chunk 0x22646 the IDML has width 1 and `Color/Black`
 (2,816 frames); without chunk 0x22608, 12 and 6 (1,430 frames). The
@@ -2638,8 +2839,22 @@ which IDML has them (`idml-values.md`).
 `InsetSpacing`: 16,560 of 18,091 frames. IDML gives 870 frames a single
 number instead of a list (the first f64 of chunk 0x3723 in most of
 them); what decides this was not found, and the converter writes the
-list for every frame from DOM 11 on. DOM 7 to 10 files give most frames
-no `InsetSpacing` at all, and the converter writes none for them.
+list. From DOM 11 every frame has `InsetSpacing`. Before DOM 11 it
+follows the rule of the general category below: IDML writes it where
+the frame's insets differ from its object style's (chunk 0x1B924 at 34,
+compared as a set of four values, since the order of the style's
+fields is not shown) or the style turns the category off. Over the
+trustworthy pairs of the corpus after 2026-10 the converter reproduces
+40,619 of 42,335 `InsetSpacing` values; 1,645 differ (most are the
+single-number form, which the list does not match) and 71 are missing,
+where it had 39,762 with 1,057 missing before applying the rule to DOM
+7 to 10.
+
+`MinimumFirstBaselineOffset` is 0 on every frame and object style of the
+corpus IDML files, so its field cannot be found. IDML writes it on a
+frame exactly where the baseline category rule below writes the
+baseline attributes; the converter writes `0` under that rule: 1,753 of
+1,753 values, none extra.
 
 **Values written on frames.** IDML writes an attribute of a frame's
 `TextFramePreference` when its category is off in the frame's object
@@ -3115,10 +3330,14 @@ others `false` (77 of 77 pairs; the DOM 7 pair has no chunk 0x1F61 and
 no groups). The root group is named `[Root Color Group]` with no `$ID/`,
 though its flag byte is 0.
 
-Before InDesign 11.3 (INDD header version), `Self` is the group's UID
-(`u<hex>`) instead: in 58 of the 59 trustworthy pairs of versions 10.0
-to 11.2 that have groups (one 11.0 file uses names), and names in 358 of
-358 pairs from 11.3 on.
+Before DOM 11.3, `Self` is the group's UID (`u<hex>`) instead: in 58 of
+the 59 trustworthy pairs of versions 10.0 to 11.2 that have groups (one
+11.0 file uses names), and names in 358 of 358 pairs from 11.3 on. The
+DOM version decides, not the header: header 11.4 files whose last
+session was 11.0 (DOM 11.0) use the UID. With the DOM version the
+converter writes (`idml-values.md`, DOM version), the extra `ColorGroup`
+elements of the trustworthy pairs fall from 15 values in 5 documents to
+6 in 2 (not examined), and 3 more groups are reproduced.
 
 Each swatch of the list is a `ColorGroupSwatch` with
 `Self="u<group UID>ColorGroupSwatch<index in hex>"` and `SwatchItemRef`

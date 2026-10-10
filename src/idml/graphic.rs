@@ -270,6 +270,13 @@ impl Writer<'_> {
             x.attr("AppliedObjectStyle", style);
         }
         x.attr("ItemTransform", matrix(&g.transform));
+        // From 21.4; -1 without the chunk (objects.md, page item settings).
+        if self.saved_by((21, 4)) {
+            x.attr(
+                "BeforeGroupingLayerPosition",
+                g.props.grouping_layer_position.unwrap_or(-1).to_string(),
+            );
+        }
         // IDML has no `AllowOverrides` on placed graphics.
         let props = crate::model::ItemProps {
             allow_overrides: None,
