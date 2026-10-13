@@ -1,7 +1,7 @@
 # indd-utils
 
 Rust reader for INDD files (Adobe InDesign's native format) and converter
-to IDML. Crate and command: `indd`. Repo: `aiongg/indd-utils` (public).
+to IDML. Crate and command: `indd`. Repo: `storytold/indd-utils` (public).
 Licence: MIT OR Apache-2.0.
 
 ## Clean-room rules (read `CLEANROOM.md`)
@@ -62,19 +62,6 @@ InDesign 18–21, little-endian. Some IDMLs show a different save than their
 INDD; compare.py marks those pairs stale and reports trustworthy pairs
 separately (rule and evidence: `docs/measurement.md`).
 
-## Disk space
-
-The disk is shared with other projects. At the end of each batch, run
-`df -h /` and `du -sh ~/.cache/indd-* ~/.cache/render-compare-*`, and
-`trash-put` this project's files that no finished or planned work needs:
-task scratch folders (`~/.cache/indd-<task>`), `render-compare-*` runs
-other than the latest, `~/.cache/indd-tmp/` contents, and folders of
-`~/.cache/indd-check/out/` for binaries no revision in `revs.tsv` still
-uses. Keep `indd-check` (current binary), `indd-diff`, `indd-schemas`,
-the `*-fetch` downloads, and every path the latest
-`.thoughts/handoff-*.md` refers to. Never touch other projects' files.
-The owner empties the trash.
-
 ## Commands
 
 - `python3 -I tools/check.py LABEL [--base REV]`: the check for a finished
@@ -133,8 +120,7 @@ The owner empties the trash.
   DesignCraft and compare both with the PDF (R) page by page. A vs B
   measures the converter, R vs A the renderer (`docs/measurement.md`,
   "Render comparison"). DesignCraft is not in this repo: build
-  `designcraft-cli` from the `~/aiongg/craft-apps/designcraft` checkout
-  (branch `next`). Run after `cargo build --release`; output in
+  `designcraft-cli` from `storytold/designcraft`. Run after `cargo build --release`; output in
   `target/render-compare/`.
 - `indd audit <file>`: what the converter does not read in one document
   (classes, chunks, attribute IDs, unknown codes, strand kinds) and its
