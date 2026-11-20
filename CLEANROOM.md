@@ -6,20 +6,7 @@ documents.
 
 ## Rules
 
-- **No Adobe software.** Contributors who analyse the format have not
-  installed InDesign or accepted Adobe's terms of use.
-- **Only files made by others, for other purposes.** Sample documents come
-  from published templates, test suites and archives. We do not ask anyone
-  to create documents for this project.
-- **No Adobe binaries, and no code under incompatible licences.** We do not
-  read, decompile or use InDesign binaries, the InDesign SDK, or code from
-  other INDD readers whose licence is incompatible with this project's.
-- **Published source under compatible licences may be used**, with
-  attribution. The list is in "Permitted references" below.
-- **The IDML side follows Adobe's published IDML specification.**
-- **No sample files are committed.** The open-licensed test fixtures
-  are downloaded from their sources (`tests/fixtures/README.md`). Other
-  samples stay in the git-ignored `corpus/` directory.
+The shared rules in [`AGENTS.md`](AGENTS.md) and `standards/clean-room.md` apply. The references this project may use are listed under "Permitted references" below.
 
 ## Method
 

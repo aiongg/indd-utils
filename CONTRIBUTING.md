@@ -1,38 +1,9 @@
 # Contributing
 
-This project learns the INDD format only from sample files, under the
-clean-room rules in [`CLEANROOM.md`](CLEANROOM.md). Read that file first.
-[`ARCHITECTURE.md`](ARCHITECTURE.md) explains where the code for each
+The shared rules in [`AGENTS.md`](AGENTS.md) apply to every contribution.
+[`CLEANROOM.md`](CLEANROOM.md) records how the INDD format was learned from
+sample files. [`ARCHITECTURE.md`](ARCHITECTURE.md) explains where the code for each
 step lives.
-
-## Clean-room rules
-
-Every contributor follows these rules. A change that breaks one is not
-accepted.
-
-- **No Adobe software.** Do not install or run InDesign, and do not use
-  the InDesign SDK, its documentation or its binaries.
-- **No knowledge from elsewhere.** Do not use what you know or remember
-  of InDesign internals (class names, IDs, persistence details). Use only
-  what the samples show and the references `CLEANROOM.md` permits.
-- **No made-to-order samples.** Do not create INDD files for this project
-  or ask anyone to make them.
-- **Every fact has evidence.** A fact about the INDD format goes in
-  `docs/format/` with what supports it: which files, how many, what was
-  compared. Code relies only on documented facts.
-- **No sample files in the repository.** Never commit INDD, IDML, PDF,
-  images or archives, whatever their licence. Open-licensed test fixtures
-  are downloaded by `tools/fetch_fixtures.py`; other samples stay in the
-  git-ignored `corpus/`.
-- **No golden files from samples.** Tests compare with the reference IDML
-  at run time; they do not store output derived from third-party files.
-- **Do not name the corpus sources** in committed files. The local
-  `corpus/SOURCES.md` records where the samples came from.
-- **Privately held samples stay private.** Leave them out of committed
-  numbers (`--exclude own/` in the tools) and never describe their
-  content.
-- **Treat sample files as untrusted.** Run Python tools with `-I`, keep
-  downloads in their own directory, and keep scratch scripts out of it.
 
 ## Setting up
 
@@ -55,8 +26,8 @@ accepted.
 
 ## Checks
 
-There is no hosted CI. Run the checks on your own machine once your change
-is complete, before you push it:
+There is no hosted CI. Run the checks for the code you changed on your own
+machine, and say in the PR what ran:
 
 ```sh
 cargo fmt
@@ -73,10 +44,7 @@ After a change to the IDML writer, also validate every output:
 `python3 -I tools/compare.py --all --exclude own/ --schemas <dir> --jing <dir>`
 (about 5 minutes on the full corpus).
 
-| Kind of change | Required result |
-|---|---|
-| Refactoring | `diff_outputs.py`: 0 differing outputs, 0 changed failures and warnings |
-| Behaviour change | `compare.py`: no new conversion or schema validation failures; value coverage does not fall; the diff of `diff_outputs.py` is explained in the commit message |
+A refactoring should leave `diff_outputs.py` with 0 differing outputs. A behaviour change should add no conversion or schema validation failures and not lower value coverage.
 
 To see how a change affects rendering, compare renders of the documents
 that come with an InDesign PDF. This needs poppler-utils (`pdfinfo`,
@@ -173,13 +141,15 @@ from the generated value files, not from a literal in the writer:
    `when_written`, `list`, `keyed`) where the writer writes the element.
 4. Record the evidence in `docs/format/idml-values.md`.
 
-## Commits
+## Tools
 
-- Use conventional commit messages: `feat:`, `fix:`, `refactor:`,
-  `test:`, `docs:`, `chore:`.
-- One change per commit. A refactoring commit changes no output.
-- For a behaviour change, say in the body what changed in the output and
-  why, with the numbers from `compare.py`.
-- Stage only the files you changed; never commit `corpus/`, fixture
-  files, schemas, Jing, or tool output.
-- Do not add hosted CI workflows.
+- `python3 -I tools/check.py LABEL [--base REV]` runs the build, tests, clippy, the measurement with schema validation, the output diff against REV (default `origin/main`), the README numbers, the render comparison and the privacy checks, and freezes the results to `~/.cache/indd-frozen-LABEL/`. It reuses earlier conversions and renders (`~/.cache/indd-check/`). Local settings are in `.thoughts/tools/check.json`; details in `docs/measurement.md`, "Check runs".
+- `tools/check_wasm.sh [file.indd...]` builds the library for `wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`), checks that a conversion imports no host function and compares its output with the native output. It needs Node.js.
+- `python3 -I tools/readme_numbers.py --schemas <dir> --jing <dir>` rewrites the README's "Current numbers" table (between `<!-- numbers:start -->` and `<!-- numbers:end -->`) from `target/compare/summary.json`; `--check` only reports whether the README is current.
+- `python3 -I tools/diff_outputs.py [OLD [NEW]]` builds two revisions (default `HEAD` and the working tree) under `~/.cache/indd-diff/`, converts every corpus file with both and reports differing outputs, failures and warnings; the full list is `~/.cache/indd-diff/diff.tsv`.
+- `python3 -I tools/render_compare.py --designcraft PATH [--jobs N] [--file SUBSTR]` renders the reference IDML and the converter's IDML with `designcraft-cli` (from `storytold/designcraft`) and compares both with the same-save PDF; output in `target/render-compare/`.
+- `python3 -I tools/compare.py [--detail TAG --show N] [--all] [--exclude PREFIX] [--schemas <dir> --jing <dir>]` converts every corpus pair and compares with the reference IDML; it writes `pairs.tsv`, `gaps*.tsv`, `values*.tsv`, `extras*.tsv` and `summary.json` to `target/compare/`. `--stale N` lists stale pairs, `--trusted` limits the tables to trustworthy pairs, `--warnings N` lists warning kinds.
+- `tools/validate.sh a.idml [b.idml...] <schemas> <jing>` validates packages against the IDML RelaxNG schemas (`VALIDATE_JOBS` runs them in parallel). Keep the schemas and Jing outside the repository.
+- `indd audit <file>` and `python3 -I tools/audit_corpus.py --exclude own/` list what the converter does not read; `tools/root_values.py [--write]` regenerates `src/idml/root_values.xml`.
+- `INDD_HOSTILE_SCALE=40 cargo test --lib hostile` runs a larger hostile-input sweep.
+- `cargo run -q -- info <file>`, `indd convert in.indd out.idml`, `indd objects <file>`, `indd dump <file> <uid>...`, `indd uids <file>` and `indd xmp <file>` inspect and convert one file.
