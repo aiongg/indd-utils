@@ -185,9 +185,9 @@ in nearly every sample, so that their INDD fields cannot be located.
 
 ## Development
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md): the clean-room rules, the checks
-  to run, and how to add an attribute, element or constant value end to
-  end. Read [`CLEANROOM.md`](CLEANROOM.md) first.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): the checks to run, the tools, and
+  how to add an attribute, element or constant value end to end. Read
+  [`CLEANROOM.md`](CLEANROOM.md) first.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): layers, data flow, module map,
   and how the generated value files work.
 - `python3 -I tools/fetch_fixtures.py` downloads the test fixtures.
