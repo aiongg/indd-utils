@@ -69,13 +69,14 @@ indd-utils is a Rust reader for INDD files (InDesign's native format) and conver
 - `src/header.rs`, `src/container.rs`: decoded layers (`docs/format/`); `src/model/`: the document model (`reader`, `document`, one module per area); `src/idml/`: the IDML writer; `src/audit.rs`: what a conversion reads (`indd audit`); `src/hostile.rs`: hostile-input tests.
 - `docs/format/`: each format fact with its evidence. `docs/measurement.md`: how `tools/compare.py` and the audit measure the converter.
 - `tests/fixtures.rs` and `tests/fixtures/manifest.json`: smoke tests on open-licensed samples, fetched by `tools/fetch_fixtures.py` into git-ignored `tests/fixtures/files/`; `tests/corpus.rs`: tests over the local `corpus/`. Both skip when their files are absent.
-- `corpus/` is git-ignored: third-party INDD/INDT files, many with a sibling IDML, and private samples in `corpus/own/`; `corpus/inventory.tsv` and `corpus/SOURCES.md` are local.
+- `corpus/` is git-ignored: third-party INDD/INDT files, many with a sibling IDML, and private samples in `corpus/own/`; `corpus/inventory.tsv` and `corpus/SOURCES.md` are local. Committed files name only the open-licensed sources (the manifests under Attribution below); `corpus/SOURCES.md` records the rest locally, and nothing committed describes the samples in `corpus/own/`.
 
 ### Checks
 `cargo fmt`, `cargo clippy --all-targets` and `cargo test` for what you changed. The wider checks are `python3 -I tools/check.py LABEL [--base REV]`, `tools/check_wasm.sh`, `python3 -I tools/diff_outputs.py` and `python3 -I tools/compare.py --exclude own/`; commands in `CONTRIBUTING.md`. There is no hosted CI.
 
 ### Paths and conventions
 - `unsafe`: none (`#![forbid(unsafe_code)]`).
+- The library's conversion path does not use `std::fs`, clocks or threads, so it runs on `wasm32-unknown-unknown`; `tools/check_wasm.sh` checks that a conversion there imports no host function.
 - Attribution: open-licensed fixtures and corpus sources are listed with URL, hash and licence in `tests/fixtures/manifest.json`, `tests/fixtures/README.md` and `tools/corpus-manifest.json`; third-party notices in `third_party/`.
 - Committed numbers exclude the private samples (`--exclude own/`).
 - Python tools run with `-I`. Local settings for `tools/check.py` are in `.thoughts/tools/check.json`.
